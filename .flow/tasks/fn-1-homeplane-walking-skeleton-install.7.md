@@ -1,7 +1,7 @@
 ---
 satisfies: [R8, R9, R10]
 ---
-# fn-1-homeplane-walking-skeleton-install.7 End-to-end proof automation: six-step Drive write, revocation, status/healthz truth
+# fn-1-homeplane-walking-skeleton-install.7 End-to-end proof automation: six-step Calendar proof, Drive read, revocation, status/healthz truth
 
 ## Description
 Deterministic, scripted e2e proof of the walking skeleton on a real machine + real server. Operator docs + final acceptance gate are .14. (Network-capture and token-sweep verification are deferred hardening per spec Boundaries.)
@@ -23,7 +23,7 @@ Deterministic, scripted e2e proof of the walking skeleton on a real machine + re
 
 ## Acceptance
 - [ ] Scripted e2e passes from BOTH harnesses on one machine; rerunnable; evidence file emitted
-- [ ] Audit shows all six steps per harness incl. reads, correct action classes + artifact ids, metadata-only verified
+- [ ] Audit shows all six Calendar steps per harness incl. reads, the Drive read, and the Drive write denial — correct action classes + artifact ids, metadata-only verified
 - [ ] Revocation asymmetry demonstrated and audited (both paths); revoked state visible in agent status; repeat-revoke idempotent
 - [ ] Status/healthz truth-table (demo-path modes) passes with the machine/server split honored
 - [ ] `go build ./... && go test ./...` green

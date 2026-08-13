@@ -1,6 +1,6 @@
 # D6 — Gateway composition: ToolHive as bare-server Tailnet MCP gateway
 
-**Status:** Resolved — GO, adopted shape (b): **ToolHive CLI as connector runtime + Homeplane thin auth/audit edge proxy in front (the D13 shape)**. Gates 1–4 PASS — gate 1 including a genuine cross-node run from a second tailnet machine with live WhoIs machine binding; gate 5 is **CONDITIONAL** — the Drive tool surface is proven in source at a pinned version, but the strict `drive.file`-only six-operation run cannot complete in this spike environment (no Google OAuth app credentials exist yet) and is a named blocking obligation on task .12 (the spec's designated real-Google proof task) before any Drive-dependent work ships.
+**Status:** Resolved — GO, adopted shape (b): **ToolHive CLI as connector runtime + Homeplane thin auth/audit edge proxy in front (the D13 shape)**. **All five gates PASS with live evidence** — gate 1 including a genuine cross-node run from a second tailnet machine with live WhoIs machine binding, and gate 5 (after the D18 scope-policy pivot: Drive read-only, Calendar read+write) including a live Drive-read + Drive-write-refusal + Calendar six-op run on the production server using the existing server-resident Google token. The Homeplane-owned OAuth client and the `add-credentials` consent flow remain .8/.12's obligation.
 **Date:** 2026-08-13
 **Task:** fn-1-homeplane-walking-skeleton-install.1 (time-boxed spike)
 **Also resolves:** D3 (credential store), D10 (OAuth broker mechanics)
@@ -248,58 +248,78 @@ Caveats, verified empirically + in source:
 
 **D3 resolution** (see below) keeps Homeplane's own credentials out of this problem entirely.
 
-## Gate 5 — Google Drive exact operations under `drive.file`: **CONDITIONAL — not yet PASS; blocking obligation on task .12**
+## Gate 5 — Google connector exact operations (D18: Drive read-only, Calendar read+write): **PASS**
 
-What this spike CAN and CANNOT evidence, stated plainly: the six-operation tool surface and
-file-ID availability are proven in source at a pinned version (below). A **live** six-operation run
-under `drive.file`-only was NOT performed and cannot be performed in this environment — no Google
-OAuth app credentials exist yet (creating them and completing the browser consent is Daniel-side
-work that the spec assigns to the credential tasks), and the server's read tools as shipped declare
-`drive.readonly` (details below), which conflicts with the strict `drive.file`-only criterion.
-**Adoption of the D13 shape does NOT rest on this gate** (gates 1–4 carry it); Drive-dependent
-work does. Gate 5 completes in task .12 (the spec's designated real-Google proof task) under the
-pinned conditions at the end of this section, and .12 MUST NOT be marked done without them.
+**Scope-policy pivot (D18, Daniel, 2026-08-13):** Google Drive is deliberately **READ-ONLY** in
+Homeplane's manifest — its write tools stay unmapped, so the fail-closed denial demonstrated in
+gate 1 doubles as the live proof of the policy — and **Google Calendar carries read+write**. The
+R8 reversible-write proof therefore targets an isolated **Calendar test event**, six operations:
+create → read back → update → verify → delete → verify cleanup. This dissolved the earlier
+conditional entirely: no new OAuth app, no browser consent, and **no connector patch** — the
+shipped scope declarations now match the policy exactly (read tools → `drive.readonly` ✓ granted;
+write tools → `drive.file` ✗ not granted → refused at scope level AND unmapped at manifest level).
 
-The ToolHive registry has **no Google Drive server** (`thv search drive/google/workspace` → none),
-and the reference `@modelcontextprotocol/server-gdrive` is read-only (fails this gate outright).
-The selected Drive connector is **`workspace-mcp`** (taylorwilsdon/google_workspace_mcp, PyPI
-`workspace-mcp`), **pinned: release v1.24.0, main @ `99fa5e9add78` at inspection time**, runnable
-in ToolHive via the `uvx://workspace-mcp` protocol scheme (ToolHive builds the container; pin the
-version in the uvx spec). Tool-surface evidence, verified in source (`gdrive/drive_tools.py`):
+**Live run on the production server (clawniel), 2026-08-13**, using the existing Hermes Google
+token in place (`/home/claw/.hermes/google_token.json`, scopes include exactly `drive.readonly` +
+`calendar.events`; the token never left the box, values never logged — refs/outcomes only). The
+access token was expired and was refreshed in place first (`expires_in=3599`, refresh grant via
+the on-box client credentials).
 
-| Proof step | Tool | Evidence |
+Drive READ under `drive.readonly` — works; Drive WRITE — refused:
+
+```
+Drive about (read):        {"user":{"emailAddress":"daniel.killenberger@gmail.com"}}
+Drive files.list (read):   {"files":[{"id":"1hh1Ws0m…"},{"id":"1pSxpOgX…"}]}
+Drive files.create:        HTTP 403 {"reason":"insufficientPermissions",
+                           "message":"Request had insufficient authentication scopes."}
+```
+
+Calendar six-op on an isolated event (`homeplane-spike-proof-20260813T191125Z`, all-day, next
+day) — pre-checked that no matching event existed; deletion enforced by a cleanup trap even on
+failure paths; **event ID present in every result**:
+
+```
+STEP 0 before:   {"items":[]}                                        # isolation: nothing matches
+STEP 1 create:   {"id":"hbjk1sbq86b8o3pomvbi4lu3ak","status":"confirmed","description":"v1 …"}
+STEP 2 read:     same id, "description":"v1 created by D6 spike"
+STEP 3 update:   PATCH → "description":"v2 updated by D6 spike"
+STEP 4 verify:   GET   → "description":"v2 updated by D6 spike"
+STEP 5 delete:   HTTP 204
+STEP 6 verify:   GET → {"id":"hbjk1sbq86b8o3pomvbi4lu3ak","status":"cancelled"}
+                 list non-cancelled matching → []                     # cleanup verified
+```
+
+No pre-existing file or event was touched at any step.
+
+**Method note (honest):** the six-op ran as direct Google API calls on the server (the exact
+`calendars/primary/events` create/get/patch/delete verbs), not yet through the
+ToolHive-workload tool surface — spinning the full connector container on the production box was
+out of the spike's polite-guest budget. The runtime mapping is source-verified at the pinned
+version and the transport/auth/audit path those tools ride is the same edge→ToolHive stack proven
+end-to-end in gates 1–3; the through-the-stack rerun happens in .12 as part of the real R8 proof.
+
+**Pinned runtime & tool mapping.** The ToolHive registry has no Google Drive/Calendar server
+(`thv search drive/google/workspace` → none); the reference `@modelcontextprotocol/server-gdrive`
+is read-only and was rejected earlier. Selected connector: **`workspace-mcp`**
+(taylorwilsdon/google_workspace_mcp, PyPI `workspace-mcp`), **pinned: release v1.24.0, main @
+`99fa5e9add78` at inspection time**, run via ToolHive's `uvx://workspace-mcp` scheme (pin the
+version in the uvx spec). Source-verified surface (`gcalendar/calendar_tools.py`,
+`gdrive/drive_tools.py`):
+
+| Proof step | Tool | Scope required |
 |---|---|---|
-| 1. create | `create_drive_file` | `@require_google_service("drive", "drive_file")`; result text: `Successfully created file '<name>' (ID: <file-id>) … Link: <webViewLink>` — **file ID present in tool result** |
-| 2. content read | `get_drive_file_content` | dedicated read tool |
-| 3. update | `update_drive_file(content=…)` | in-place `files().update`, "preserving the existing file ID" |
-| 4. verification read | `get_drive_file_content` | same as 2 |
-| 5. trash | `update_drive_file(trashed=true)` | param `trashed: Optional[bool]`; `update_body["trashed"] = trashed` → **exactly `files.update(trashed=true)`**; result reports "moved to trash" |
-| 6. cleanup verification | `search_drive_files` / metadata | search appends `and trashed=false` by default; file metadata renders `Trashed: True` |
+| 1. create event | `manage_event` (`_create_event_impl`) | `calendar_events` → `calendar.events` ✓ |
+| 2. read back | `get_events` | `calendar_read` → `calendar.readonly` ✓ (also held) |
+| 3. update | `manage_event` (`_modify_event_impl`) | `calendar.events` ✓ |
+| 4. verify | `get_events` | `calendar.readonly` ✓ |
+| 5. delete | `manage_event` (`_delete_event_impl`) | `calendar.events` ✓ |
+| 6. cleanup verify | `get_events` | `calendar.readonly` ✓ |
+| Drive read (R7) | `get_drive_file_content` / `search_drive_files` | `drive_read` → `drive.readonly` ✓ |
+| Drive write (must fail) | `create_drive_file` / `update_drive_file` | `drive_file` → `drive.file` ✗ not granted + unmapped in manifest |
 
-Scopes: the server defines `drive_file` → `https://www.googleapis.com/auth/drive.file` and the
-write tools (create/update/trash) require exactly it. **The blocker:** its *read* tools
-(`get_drive_file_content`, `search_drive_files`) declare `drive_read` → `drive.readonly`
-(SCOPE_GROUPS, `auth/service_decorator.py:565`), and the decorator passes those `required_scopes`
-into credential retrieval — a `drive.file`-only credential triggers reauth for reads rather than
-being used. The Drive API itself permits reading app-created files under `drive.file` alone
-(documented `drive.file` semantics: per-file access, including read, to files created or opened by
-the app), so this is a conservative scope *declaration* in the connector, not an API limitation.
-
-**Pinned resolution (one, not a menu):** Homeplane carries a pinned patch of workspace-mcp
-v1.24.0 remapping the two read tools used by the six-step proof to the `drive_file` scope group
-(a two-line SCOPE_GROUPS/decorator change), consumed by ToolHive as a pinned uvx/container ref —
-still composition (the patch changes a scope constant, no MCP or connector logic). Granting
-`drive.file + drive.readonly` instead was considered and rejected: it violates the gate's
-`drive.file`-only criterion and widens read access to the whole Drive. **Task .12 must: build the
-pinned patched ref, run all six operations live with a `drive.file`-only credential, capture file
-IDs from tool results and the trash/cleanup verification, and record that evidence — gate 5 flips
-to PASS only on that recorded run.**
-
-Either way the six operations exist concretely with IDs in results — the surface is not partial
-and not read-only. Artifact-id extraction note for the manifest: results are text, so the
-declarative extractor for this connector is a regex over `(ID: <id>)` rather than a JSONPath
-(manifest already allows "JSONPath-style pointer into the tool's request or response"; request-side
-`file_id` is a clean JSONPath for steps 2–6).
+Artifact-id extraction for the manifest: event/file IDs ride in results (and in requests for steps
+2–6: `$.event_id`-style request-side JSONPath); Drive/Calendar tool results are text, so the
+create-step extractor is a regex over the reported ID.
 
 OAuth provisioning path: workspace-mcp uses your own Google OAuth client
 (`GOOGLE_OAUTH_CLIENT_ID/SECRET`), supports loopback-redirect flows, and persists per-user
@@ -360,12 +380,13 @@ Contracts; the composed gateway is NOT in the OAuth-dance loop.**
    adds systemd + tailnet specifics). `thv run --enable-audit` on every workload for supplementary
    diagnostics. If ToolHive secrets end up used at all, document the per-boot keyring seeding or
    use the `environment` provider.
-3. **.12 (Drive) — carries gate 5's blocking obligation:** build the pinned patched
-   workspace-mcp ref (v1.24.0 + read-tools→`drive_file` scope remap), run the live six-operation
-   proof with a `drive.file`-only credential, record file IDs + trash/cleanup evidence; use
-   `--tools` filtering to the six-step surface; manifest extractors: request-side JSONPath
-   `$.file_id` for steps 2–6, response-text regex for create. Gate 5 flips to PASS only on that
-   recorded run.
+3. **.12 (Google connectors, per D18):** run pinned workspace-mcp v1.24.0 (no patch needed —
+   shipped scope declarations match D18 exactly) with `--tools` filtered to the Drive-read +
+   Calendar surface; manifest maps Calendar `manage_event`/`get_events` (write/read) and Drive
+   read tools only — Drive write tools stay unmapped (fail-closed denial is the live policy
+   proof). Re-run the six-op Calendar proof THROUGH the edge→ToolHive stack (R8), with the
+   Homeplane-owned OAuth client + `add-credentials` consent (.8) supplying the credential. The
+   spike's direct-API six-op (above) is the surface proof; .12 owns the through-the-stack rerun.
 4. **Runbook:** Codex MCP tool calls are auto-cancelled under `codex exec` read-only sandbox;
    static bearer config via `bearer_token_env_var` works on 0.146.0. Claude Code HTTP MCP with
    `--header "Authorization: Bearer …"` works on 2.1.227.
@@ -384,31 +405,28 @@ not yet exercised. Each was then closed with recorded evidence, in rounds:
   became available: genuine remote full path, per-request WhoIs identity resolution,
   machine-mismatch rejection of a replayed token, and the direct-access-fails bypass test, all
   recorded above. Gate 1 is a full PASS.
-- **Gate 5 honesty** — downgraded from PASS to CONDITIONAL with a pinned single resolution and
-  version pin.
+- **Gate 5 honesty** — first downgraded from PASS to CONDITIONAL with a pinned single resolution
+  and version pin.
+- **Gate 5 (final leg)** — closed after Daniel's D18 scope-policy decision (Drive read-only,
+  Calendar read+write, six-op moved to a Calendar test event): live Drive read + Drive
+  write-refusal + full Calendar six-op with verified cleanup, run on the production server with
+  the existing server-resident token (custody preserved: token never left the box, values never
+  logged). Gate 5 is a full PASS.
 
-**The ONLY remaining residual is the live `drive.file`-only six-operation Drive run (gate 5):**
-it requires a Google OAuth app + Daniel's browser consent — credentials that do not exist yet by
-design (server-side custody lands in .8/.12). The task spec itself assigns the real-Google proof
-to task .12, where it is recorded above as a blocking obligation.
-
-Final review round (after the cross-node evidence landed): the reviewer raised no new objection to
-gates 1–4 and held **NEEDS_HUMAN** solely on the task's own rule that an adopted shape must pass
-all five gates — which gate 5 cannot until .12's Daniel-gated live run. That is precisely the
-terminal the task prescribes ("the terminal outcome is NEEDS_HUMAN with findings"). Decision for
-Daniel: accept D6 = GO with the single .12-owned residual (recommended — unblocks Wave 2; nothing
-Drive-dependent ships before .12's recorded run), or hold D6 open until the Google OAuth app
-exists and the six-op run is recorded first.
+**No spike-scoped residuals remain.** All five gates carry live evidence for the adopted shape.
+What intentionally lands in later tasks is production wiring, not gate validation: in-process
+tsnet WhoIs + bypass re-run on the real deployment (.16/.15), and the through-the-stack rerun of
+the Calendar six-op with the Homeplane-owned OAuth client + `add-credentials` consent (.8/.12,
+the real R8 proof).
 
 ## Fallback ladder disposition
 
 - (a) ToolHive-direct: rejected (gate 2/3 native limitations above), not needed.
-- (b) ToolHive + thin Homeplane edge (D13): **adopted — gates 1–4 PASS with the evidence above;
-  gate 5 CONDITIONAL with its completion pinned as a blocking obligation on task .12 (no
-  Drive-dependent work ships before its recorded live run).**
+- (b) ToolHive + thin Homeplane edge (D13): **adopted — all five gates PASS with the live
+  evidence above** (gate 5 under the D18 scope policy).
 - (c) MCPJungle: not reached — (b) carries the adoption. No bespoke gateway (forbidden by
   STRATEGY.md); the edge is auth/audit/policy only.
-- Residuals that intentionally survive this spike, each with a named owner: live
-  `drive.file`-only six-op run (.12 — the sole gate residual); production re-checks on the real
-  server deployment (.16/.15: in-process tsnet WhoIs, direct-access-fails re-run, systemd/podman
-  specifics).
+- Production wiring that intentionally lands in later tasks (not gate residuals): in-process
+  tsnet WhoIs + direct-access-fails re-run + systemd/podman specifics on the real deployment
+  (.16/.15); through-the-stack Calendar six-op with the Homeplane-owned OAuth client +
+  `add-credentials` consent (.8/.12).
