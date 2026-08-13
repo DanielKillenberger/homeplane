@@ -133,7 +133,7 @@ func (p *fakeProvider) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 func (p *fakeProvider) handleToken(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
-	status, body, gate := p.tokenStatus, p.tokenBody, p.tokenGate
+	gate := p.tokenGate
 	p.mu.Unlock()
 	if gate != nil {
 		select {
@@ -142,6 +142,17 @@ func (p *fakeProvider) handleToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// The failure switches are read AFTER the gate, not before it. The gate
+	// exists so a test can change how this provider behaves while an exchange is
+	// parked in flight ("hold, close the consent window, break the provider,
+	// release") — and a snapshot taken before the wait silently ignores exactly
+	// that change. Whether the old ordering worked depended on whether the
+	// exchange's request had reached this handler yet, which is what made
+	// TestARelayedFlowIsNotExpiredByTheConsentWindow flaky: the broken-provider
+	// case would sometimes answer with the pre-mutation success.
+	p.mu.Lock()
+	status, body := p.tokenStatus, p.tokenBody
+	p.mu.Unlock()
 	if status != 0 {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
