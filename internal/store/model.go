@@ -3,9 +3,17 @@
 // encrypted-secret store (D3: Homeplane-owned SQLite, provider secrets
 // encrypted at rest with age before they ever reach this layer).
 //
-// Custody rule enforced here: this package never sees plaintext credentials.
-// Machine and grant credentials arrive already hashed; provider secrets arrive
-// already age-encrypted. Audit rows are metadata only — see AuditEvent.
+// Two rules are enforced structurally rather than by convention:
+//
+//   - Custody: this package never sees plaintext credentials. Machine and grant
+//     credentials arrive already hashed; provider secrets arrive already
+//     age-encrypted. Audit rows are metadata only — see AuditEvent.
+//   - Audit atomicity: every lifecycle mutation (enrolment, grant issuance and
+//     supersession, revocation, secret replacement) takes an audit callback and
+//     writes those events in the SAME transaction as the mutation. There is no
+//     API through which a grant can be revoked without the record of it, and a
+//     failed audit write rolls the mutation back rather than being logged and
+//     shrugged off.
 package store
 
 import (
@@ -152,6 +160,7 @@ var allowedDetailKeys = map[string]bool{
 	"requested_capabilities": true,
 	"superseded_grant_id":    true,
 	"superseded_by_grant_id": true,
+	"target_machine_id":      true,
 	"bound_machine_id":       true,
 	"secret_ref":             true,
 	"secret_generation":      true,

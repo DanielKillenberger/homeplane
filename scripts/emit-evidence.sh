@@ -7,6 +7,12 @@
 # than trusting a prose claim that "tests pass". It records the commands, their
 # exit codes, every passing test name, and timestamps.
 #
+# Run it from a CLEAN worktree at the implementation commit: the artifact
+# attests to a reproducible commit, so `working_tree_dirty: true` means the
+# evidence describes a state nobody else can check out. The evidence directory
+# itself is excluded from that check — this script is what changes it — so the
+# normal flow is: commit the implementation, run this, commit the artifact.
+#
 # Usage: scripts/emit-evidence.sh <task-id>
 # Requires: go, git, python3.
 set -euo pipefail
@@ -54,7 +60,7 @@ TASK_ID="$TASK_ID" \
 STARTED_AT="$STARTED_AT" \
 FINISHED_AT="$FINISHED_AT" \
 COMMIT="$(git rev-parse HEAD)" \
-DIRTY="$(if [[ -n "$(git status --porcelain)" ]]; then echo true; else echo false; fi)" \
+DIRTY="$(if [[ -n "$(git status --porcelain -- . ":(exclude)$OUT_DIR")" ]]; then echo true; else echo false; fi)" \
 GO_VERSION="$(go version)" \
 GOOS="$(go env GOOS)" \
 GOARCH="$(go env GOARCH)" \
@@ -124,7 +130,14 @@ with open(out_file, "w", encoding="utf-8") as fh:
     fh.write("\n")
 
 print(f"wrote {out_file}: {artifact['result']} "
-      f"({passed}/{len(assertions)} assertions, {len(gates)} gates)")
+      f"({passed}/{len(assertions)} assertions, {len(gates)} gates) "
+      f"at {artifact['commit'][:8]}"
+      f"{' [DIRTY WORKTREE]' if artifact['working_tree_dirty'] else ''}")
+
+if artifact["working_tree_dirty"]:
+    print("warning: the worktree was dirty; this artifact does not attest to a "
+          "reproducible commit. Commit the implementation and re-run.",
+          file=sys.stderr)
 PY
 
 exit "$FAILED"

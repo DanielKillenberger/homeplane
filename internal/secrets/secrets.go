@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"filippo.io/age"
@@ -31,22 +32,59 @@ type Keyring struct {
 // GenerateKeyFile writes a fresh age identity to path with 0600 permissions,
 // refusing to clobber an existing file (regenerating a key would orphan every
 // secret already encrypted under the old one).
+//
+// The write is atomic: the identity is written, fsynced, and closed in a
+// temporary 0600 file alongside the target, and only then linked into place.
+// The failure this avoids is nasty and silent — a disk-full or interrupted
+// first run leaving a truncated key at the final path, which every later run
+// then refuses to replace, locking the operator out of a store they cannot yet
+// have populated.
 func GenerateKeyFile(path string) (*Keyring, error) {
 	id, err := age.GenerateX25519Identity()
 	if err != nil {
 		return nil, fmt.Errorf("secrets: generate identity: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return nil, fmt.Errorf("secrets: create key file: %w", err)
-	}
-	defer f.Close()
 	contents := "# Homeplane provider-secret key (age X25519). Keep 0600, back up offline.\n" +
 		"# public key: " + id.Recipient().String() + "\n" +
 		id.String() + "\n"
-	if _, err := io.WriteString(f, contents); err != nil {
+
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".age-key-*.tmp")
+	if err != nil {
+		return nil, fmt.Errorf("secrets: create temporary key file: %w", err)
+	}
+	tmpName := tmp.Name()
+	// From here on, every failure path removes the temporary file.
+	cleanup := func() { _ = os.Remove(tmpName) }
+
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return nil, fmt.Errorf("secrets: chmod temporary key file: %w", err)
+	}
+	if _, err := io.WriteString(tmp, contents); err != nil {
+		_ = tmp.Close()
+		cleanup()
 		return nil, fmt.Errorf("secrets: write key file: %w", err)
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return nil, fmt.Errorf("secrets: sync key file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("secrets: close key file: %w", err)
+	}
+
+	// Link rather than rename: rename would silently overwrite an existing key,
+	// destroying access to every secret already sealed under it. Link fails if
+	// the target exists, which is exactly the behavior wanted.
+	if err := os.Link(tmpName, path); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("secrets: publish key file: %w", err)
+	}
+	cleanup()
 	return &Keyring{identity: id}, nil
 }
 

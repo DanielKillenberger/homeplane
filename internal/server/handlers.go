@@ -76,35 +76,39 @@ func (s *Server) handleEnrol(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, rotated, err := s.store.Enrol(r.Context(), observed, name, osName, hash)
+	// The enrolment and its audit record commit together: a machine credential
+	// that exists with no record of having been issued is exactly the state an
+	// audit log exists to make impossible.
+	m, rotated, err := s.store.Enrol(r.Context(), observed, name, osName, hash,
+		func(m store.Machine, rotated bool) []store.AuditEvent {
+			event := store.EventEnrolment
+			if rotated {
+				event = store.EventCredentialRotation
+			}
+			// AuthMachineID is populated here even though no bearer credential
+			// was presented, and that is not a misattribution: for enrolment the
+			// authenticating factor IS the tailnet node identity (D12), and the
+			// machine record is by construction the one that node owns. Observed
+			// and authenticated identity are the same fact on this endpoint.
+			return []store.AuditEvent{{
+				Event:            event,
+				ActorKind:        store.ActorMachine,
+				ObservedNodeID:   observed.NodeID,
+				ObservedNodeName: observed.NodeName,
+				AuthMachineID:    m.ID,
+				Outcome:          store.OutcomeAllowed,
+				Detail: map[string]string{
+					"machine_name":       m.Name,
+					"os":                 m.OS,
+					"credential_version": strconv.FormatInt(m.CredentialVersion, 10),
+				},
+			}}
+		})
 	if err != nil {
 		s.log.Error("enrol", "error", err)
 		s.writeError(w, http.StatusInternalServerError, codeInternal, "enrolment failed")
 		return
 	}
-
-	event := store.EventEnrolment
-	if rotated {
-		event = store.EventCredentialRotation
-	}
-	// AuthMachineID is populated here even though no bearer credential was
-	// presented, and that is not a misattribution: for enrolment the
-	// authenticating factor IS the tailnet node identity (D12), and the machine
-	// record is by construction the one that node owns. Observed and
-	// authenticated identity are the same fact on this endpoint alone.
-	s.audit(r.Context(), store.AuditEvent{
-		Event:            event,
-		ActorKind:        store.ActorMachine,
-		ObservedNodeID:   observed.NodeID,
-		ObservedNodeName: observed.NodeName,
-		AuthMachineID:    m.ID,
-		Outcome:          store.OutcomeAllowed,
-		Detail: map[string]string{
-			"machine_name":       m.Name,
-			"os":                 m.OS,
-			"credential_version": strconv.FormatInt(m.CredentialVersion, 10),
-		},
-	})
 
 	status := http.StatusCreated
 	if rotated {
@@ -185,41 +189,44 @@ func (s *Server) handleIssueGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	g, superseded, err := s.store.IssueGrant(r.Context(), c.Machine.ID, harness, capabilities, hash)
+	// Issuance, supersession, and their audit rows commit as one unit.
+	g, superseded, err := s.store.IssueGrant(r.Context(), c.Machine.ID, harness, capabilities, hash,
+		func(g store.Grant, superseded *store.Grant) []store.AuditEvent {
+			events := make([]store.AuditEvent, 0, 2)
+			if superseded != nil {
+				// Supersession is a system-caused revocation, not an operator or
+				// machine action: the machine asked for a grant, the SERVER
+				// decided the old one dies. ActorSystem keeps that honest.
+				events = append(events, store.AuditEvent{
+					Event:            store.EventGrantSuperseded,
+					ActorKind:        store.ActorSystem,
+					ObservedNodeID:   c.Observed.NodeID,
+					ObservedNodeName: c.Observed.NodeName,
+					AuthMachineID:    c.Machine.ID,
+					Harness:          harness,
+					GrantID:          superseded.ID,
+					Outcome:          store.OutcomeAllowed,
+					Reason:           "superseded",
+					Detail:           map[string]string{"superseded_by_grant_id": g.ID},
+				})
+			}
+			return append(events, store.AuditEvent{
+				Event:            store.EventGrantIssued,
+				ActorKind:        store.ActorMachine,
+				ObservedNodeID:   c.Observed.NodeID,
+				ObservedNodeName: c.Observed.NodeName,
+				AuthMachineID:    c.Machine.ID,
+				Harness:          harness,
+				GrantID:          g.ID,
+				Outcome:          store.OutcomeAllowed,
+				Detail:           map[string]string{"capabilities": truncate(strings.Join(capabilities, ","), store.MaxDetailValueLen)},
+			})
+		})
 	if err != nil {
 		s.log.Error("issue grant", "error", err)
 		s.writeError(w, http.StatusInternalServerError, codeInternal, "grant issuance failed")
 		return
 	}
-
-	if superseded != nil {
-		// Supersession is a system-caused revocation, not an operator or
-		// machine action: the machine asked for a grant, the SERVER decided the
-		// old one dies. Recording it as ActorSystem keeps that honest.
-		s.audit(r.Context(), store.AuditEvent{
-			Event:            store.EventGrantSuperseded,
-			ActorKind:        store.ActorSystem,
-			ObservedNodeID:   c.Observed.NodeID,
-			ObservedNodeName: c.Observed.NodeName,
-			AuthMachineID:    c.Machine.ID,
-			Harness:          harness,
-			GrantID:          superseded.ID,
-			Outcome:          store.OutcomeAllowed,
-			Reason:           "superseded",
-			Detail:           map[string]string{"superseded_by_grant_id": g.ID},
-		})
-	}
-	s.audit(r.Context(), store.AuditEvent{
-		Event:            store.EventGrantIssued,
-		ActorKind:        store.ActorMachine,
-		ObservedNodeID:   c.Observed.NodeID,
-		ObservedNodeName: c.Observed.NodeName,
-		AuthMachineID:    c.Machine.ID,
-		Harness:          harness,
-		GrantID:          g.ID,
-		Outcome:          store.OutcomeAllowed,
-		Detail:           map[string]string{"capabilities": truncate(strings.Join(capabilities, ","), store.MaxDetailValueLen)},
-	})
 
 	resp := issueGrantResponse{
 		GrantID:      g.ID,
@@ -343,27 +350,28 @@ func (s *Server) handleRevokeGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revoked, changed, err := s.store.RevokeGrant(r.Context(), id, "revoked_by_machine")
+	// Only a real state transition is audited (the callback is not invoked on a
+	// repeat call): logging a second revocation would put a fictional event in
+	// an append-only record. The transition and its record commit together, so
+	// a token cannot stop working without the log saying why.
+	revoked, changed, err := s.store.RevokeGrant(r.Context(), id, "revoked_by_machine",
+		func(g store.Grant) []store.AuditEvent {
+			return []store.AuditEvent{{
+				Event:            store.EventGrantRevoked,
+				ActorKind:        store.ActorMachine,
+				ObservedNodeID:   c.Observed.NodeID,
+				ObservedNodeName: c.Observed.NodeName,
+				AuthMachineID:    c.Machine.ID,
+				Harness:          g.Harness,
+				GrantID:          g.ID,
+				Outcome:          store.OutcomeAllowed,
+				Reason:           "revoked_by_machine",
+			}}
+		})
 	if err != nil {
 		s.log.Error("revoke grant", "error", err)
 		s.writeError(w, http.StatusInternalServerError, codeInternal, "revocation failed")
 		return
-	}
-	// Only a real state transition is audited; a repeat call changes nothing,
-	// and logging it as another revocation would put a fictional event in an
-	// append-only record.
-	if changed {
-		s.audit(r.Context(), store.AuditEvent{
-			Event:            store.EventGrantRevoked,
-			ActorKind:        store.ActorMachine,
-			ObservedNodeID:   c.Observed.NodeID,
-			ObservedNodeName: c.Observed.NodeName,
-			AuthMachineID:    c.Machine.ID,
-			Harness:          revoked.Harness,
-			GrantID:          revoked.ID,
-			Outcome:          store.OutcomeAllowed,
-			Reason:           "revoked_by_machine",
-		})
 	}
 
 	resp := revokeGrantResponse{GrantID: revoked.ID, State: string(revoked.State), Revoked: changed}

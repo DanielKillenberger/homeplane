@@ -95,6 +95,24 @@ const dsnPragmas = "_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=bu
 // package: never start a second query while iterating an open *sql.Rows on the
 // same store, or the two will deadlock on the lone connection.
 func Open(path string) (*SQLite, error) {
+	// Create the database file with 0600 BEFORE SQLite opens it. SQLite derives
+	// the mode of its `-wal` and `-shm` sidecars from the main database file at
+	// creation time, so chmodding only after the fact leaves sidecars at the
+	// umask default (typically 0644) — and those sidecars hold live machine,
+	// grant, audit, and encrypted-secret pages.
+	if path != "" && !strings.HasPrefix(path, ":memory:") && !strings.Contains(path, "mode=memory") {
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+		if err != nil {
+			return nil, fmt.Errorf("store: create database file: %w", err)
+		}
+		if err := f.Close(); err != nil {
+			return nil, fmt.Errorf("store: create database file: %w", err)
+		}
+		if err := os.Chmod(path, 0o600); err != nil {
+			return nil, fmt.Errorf("store: chmod database: %w", err)
+		}
+	}
+
 	dsn := path
 	if strings.ContainsRune(dsn, '?') {
 		dsn += "&" + dsnPragmas
@@ -112,12 +130,16 @@ func Open(path string) (*SQLite, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: apply schema: %w", err)
 	}
-	// Best-effort tightening of the on-disk file; non-file DSNs (":memory:")
-	// have nothing to chmod.
-	if _, statErr := os.Stat(path); statErr == nil {
-		if err := os.Chmod(path, 0o600); err != nil {
+	// Tighten the sidecars too: an existing database opened from an earlier,
+	// looser installation would otherwise keep world-readable WAL/SHM files.
+	for _, sidecar := range []string{path, path + "-wal", path + "-shm"} {
+		info, statErr := os.Stat(sidecar)
+		if statErr != nil || info.Mode().Perm() == 0o600 {
+			continue
+		}
+		if err := os.Chmod(sidecar, 0o600); err != nil {
 			_ = db.Close()
-			return nil, fmt.Errorf("store: chmod database: %w", err)
+			return nil, fmt.Errorf("store: chmod %s: %w", sidecar, err)
 		}
 	}
 	return s, nil
@@ -155,7 +177,15 @@ func (s *SQLite) Ping(ctx context.Context) error {
 // If no machine exists for NodeID a new record is inserted (rotated=false).
 // If one exists its name, os, node_name, and credential_hash are updated and
 // credential_version is bumped (rotated=true). Never inserts a duplicate.
-func (s *SQLite) Enrol(ctx context.Context, id Identity, name, osName, credentialHash string) (Machine, bool, error) {
+//
+// audit builds the events to record for this mutation; they are written INSIDE
+// the same transaction (see the package's audit-atomicity rule). It must not be
+// nil — a lifecycle mutation with nothing to record is not a case this control
+// plane has.
+func (s *SQLite) Enrol(ctx context.Context, id Identity, name, osName, credentialHash string, audit func(m Machine, rotated bool) []AuditEvent) (Machine, bool, error) {
+	if audit == nil {
+		return Machine{}, false, errAuditCallbackRequired
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Machine{}, false, fmt.Errorf("store: enrol begin: %w", err)
@@ -196,6 +226,9 @@ func (s *SQLite) Enrol(ctx context.Context, id Identity, name, osName, credentia
 		if err != nil {
 			return Machine{}, false, fmt.Errorf("store: enrol insert: %w", err)
 		}
+		if err := appendAuditTx(ctx, tx, audit(m, false)); err != nil {
+			return Machine{}, false, err
+		}
 		if err := tx.Commit(); err != nil {
 			return Machine{}, false, fmt.Errorf("store: enrol commit: %w", err)
 		}
@@ -215,6 +248,9 @@ func (s *SQLite) Enrol(ctx context.Context, id Identity, name, osName, credentia
 		m.Name, m.OS, m.NodeName, m.CredentialHash, m.CredentialVersion, nowStr, m.ID)
 	if err != nil {
 		return Machine{}, false, fmt.Errorf("store: enrol update: %w", err)
+	}
+	if err := appendAuditTx(ctx, tx, audit(m, true)); err != nil {
+		return Machine{}, false, err
 	}
 	if err := tx.Commit(); err != nil {
 		return Machine{}, false, fmt.Errorf("store: enrol commit: %w", err)
@@ -270,7 +306,13 @@ func (s *SQLite) MachineByCredentialHash(ctx context.Context, credentialHash str
 // reason "superseded", then inserts a new active grant. Both steps run in one
 // transaction. Capabilities are stored as a JSON array. Returns the new grant
 // and the superseded grant (nil if none).
-func (s *SQLite) IssueGrant(ctx context.Context, machineID, harness string, capabilities []string, tokenHash string) (Grant, *Grant, error) {
+//
+// audit builds the events for this issuance (and any supersession); they are
+// written inside the same transaction and must not be nil.
+func (s *SQLite) IssueGrant(ctx context.Context, machineID, harness string, capabilities []string, tokenHash string, audit func(g Grant, superseded *Grant) []AuditEvent) (Grant, *Grant, error) {
+	if audit == nil {
+		return Grant{}, nil, errAuditCallbackRequired
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Grant{}, nil, fmt.Errorf("store: issue grant begin: %w", err)
@@ -334,6 +376,9 @@ func (s *SQLite) IssueGrant(ctx context.Context, machineID, harness string, capa
 	if err != nil {
 		return Grant{}, nil, fmt.Errorf("store: issue grant insert: %w", err)
 	}
+	if err := appendAuditTx(ctx, tx, audit(g, superseded)); err != nil {
+		return Grant{}, nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Grant{}, nil, fmt.Errorf("store: issue grant commit: %w", err)
 	}
@@ -357,7 +402,14 @@ func (s *SQLite) GrantByID(ctx context.Context, id string) (Grant, error) {
 // only if the grant is currently active. Returns the grant after the call and
 // changed=false when it was already revoked (idempotent). Returns ErrNotFound
 // when the grant does not exist.
-func (s *SQLite) RevokeGrant(ctx context.Context, id, reason string) (Grant, bool, error) {
+//
+// audit builds the events for an actual state transition; it is not called
+// when the grant was already revoked (nothing happened, so nothing is
+// recorded). It must not be nil.
+func (s *SQLite) RevokeGrant(ctx context.Context, id, reason string, audit func(g Grant) []AuditEvent) (Grant, bool, error) {
+	if audit == nil {
+		return Grant{}, false, errAuditCallbackRequired
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Grant{}, false, fmt.Errorf("store: revoke grant begin: %w", err)
@@ -389,6 +441,9 @@ func (s *SQLite) RevokeGrant(ctx context.Context, id, reason string) (Grant, boo
 	g.State = GrantRevoked
 	g.RevokedAt = &now
 	g.RevokedReason = reason
+	if err := appendAuditTx(ctx, tx, audit(g)); err != nil {
+		return Grant{}, false, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Grant{}, false, fmt.Errorf("store: revoke grant commit: %w", err)
 	}
@@ -433,9 +488,35 @@ func (s *SQLite) ActiveGrantByTokenHash(ctx context.Context, tokenHash string) (
 	return g, nil
 }
 
-// AppendAudit validates e.Detail, fills e.TS with UTC now when zero, and
-// appends the event. Detail is stored as a JSON object (NULL when empty).
+// errAuditCallbackRequired guards the audit-atomicity rule: no lifecycle
+// mutation may be committed without the events that record it.
+var errAuditCallbackRequired = errors.New("store: an audit callback is required for lifecycle mutations")
+
+// execer is satisfied by both *sql.DB and *sql.Tx.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// AppendAudit records a standalone event — one with no accompanying mutation,
+// such as a rejected call. Events that DO accompany a mutation are written by
+// that mutation's transaction instead, so the two can never diverge.
 func (s *SQLite) AppendAudit(ctx context.Context, e AuditEvent) error {
+	return appendAudit(ctx, s.db, e)
+}
+
+// appendAuditTx writes a mutation's audit events inside its transaction. Any
+// failure aborts the mutation: an unrecorded revocation is worse than a failed
+// one, because the operator would have no way to learn it happened.
+func appendAuditTx(ctx context.Context, tx *sql.Tx, events []AuditEvent) error {
+	for _, e := range events {
+		if err := appendAudit(ctx, tx, e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func appendAudit(ctx context.Context, db execer, e AuditEvent) error {
 	if err := ValidateDetail(e.Detail); err != nil {
 		return err
 	}
@@ -454,7 +535,7 @@ func (s *SQLite) AppendAudit(ctx context.Context, e AuditEvent) error {
 		detailArg = string(b)
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := db.ExecContext(ctx, `
 		INSERT INTO audit_events (
 			ts, event, actor_kind,
 			observed_node_id, observed_node_name,
@@ -474,25 +555,30 @@ func (s *SQLite) AppendAudit(ctx context.Context, e AuditEvent) error {
 	return nil
 }
 
-// QueryAudit returns audit events matching q. When q.Since is non-zero only
-// events with ts >= Since are returned. Results are ordered by id ASC and
-// limited to q.Limit when Limit > 0. Returns an empty (non-nil) slice when none.
+// QueryAudit returns audit events matching q, always in append order.
+//
+// A limit selects the NEWEST q.Limit events, not the oldest. An incident view
+// that silently stopped at the first 200 rows ever written would hide exactly
+// the recent denials and revocations an operator opens the log to find.
 func (s *SQLite) QueryAudit(ctx context.Context, q AuditQuery) ([]AuditEvent, error) {
-	query := `
-		SELECT id, ts, event, actor_kind,
+	const columns = `id, ts, event, actor_kind,
 			observed_node_id, observed_node_name,
 			auth_machine_id, harness, grant_id,
 			action_class, tool, artifact_id,
-			outcome, reason, token_fingerprint, detail
-		FROM audit_events`
+			outcome, reason, token_fingerprint, detail`
+
+	where := ""
 	args := make([]any, 0, 2)
 	if !q.Since.IsZero() {
-		query += ` WHERE ts >= ?`
+		where = ` WHERE ts >= ?`
 		args = append(args, formatTime(q.Since.UTC()))
 	}
-	query += ` ORDER BY id ASC`
+
+	query := `SELECT ` + columns + ` FROM audit_events` + where + ` ORDER BY id ASC`
 	if q.Limit > 0 {
-		query += ` LIMIT ?`
+		// Take the newest window, then present it oldest-first.
+		query = `SELECT ` + columns + ` FROM (SELECT ` + columns +
+			` FROM audit_events` + where + ` ORDER BY id DESC LIMIT ?) ORDER BY id ASC`
 		args = append(args, q.Limit)
 	}
 
@@ -544,7 +630,13 @@ func (s *SQLite) QueryAudit(ctx context.Context, q AuditQuery) ([]AuditEvent, er
 // PutSecret insert-or-replaces the secret at ref. Generation is previous
 // generation + 1 (starting at 1). Runs in one transaction and returns the
 // new generation.
-func (s *SQLite) PutSecret(ctx context.Context, ref string, ciphertext []byte) (int64, error) {
+//
+// audit builds the events for the import/replacement; they are written inside
+// the same transaction and must not be nil.
+func (s *SQLite) PutSecret(ctx context.Context, ref string, ciphertext []byte, audit func(generation int64) []AuditEvent) (int64, error) {
+	if audit == nil {
+		return 0, errAuditCallbackRequired
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("store: put secret begin: %w", err)
@@ -579,6 +671,9 @@ func (s *SQLite) PutSecret(ctx context.Context, ref string, ciphertext []byte) (
 		if err != nil {
 			return 0, fmt.Errorf("store: put secret update: %w", err)
 		}
+	}
+	if err := appendAuditTx(ctx, tx, audit(generation)); err != nil {
+		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("store: put secret commit: %w", err)
@@ -625,20 +720,27 @@ func newID(prefix string) (string, error) {
 	return prefix + "-" + hex.EncodeToString(b[:]), nil
 }
 
+// storedTimeLayout is FIXED-WIDTH on purpose. Timestamps are compared and
+// ordered lexicographically by SQLite, and time.RFC3339Nano trims trailing
+// zeros from the fractional part: "…:00.1Z" would sort BEFORE "…:00Z" even
+// though it happens later, silently corrupting `--since` filtering and audit
+// ordering at precision boundaries. Nine fixed digits make text order and
+// chronological order the same thing.
+const storedTimeLayout = "2006-01-02T15:04:05.000000000Z"
+
 func formatTime(t time.Time) string {
-	return t.UTC().Format(time.RFC3339Nano)
+	return t.UTC().Format(storedTimeLayout)
 }
 
+// parseTime reads the fixed-width stored form, falling back to RFC3339Nano so
+// rows written by an earlier build still load.
 func parseTime(s string) (time.Time, error) {
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		// Fall back to RFC3339 for values written without fractional seconds.
-		t, err = time.Parse(time.RFC3339, s)
-		if err != nil {
-			return time.Time{}, err
+	for _, layout := range []string{storedTimeLayout, time.RFC3339Nano, time.RFC3339} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC(), nil
 		}
 	}
-	return t.UTC(), nil
+	return time.Time{}, fmt.Errorf("store: unparseable timestamp %q", s)
 }
 
 type rowScanner interface {

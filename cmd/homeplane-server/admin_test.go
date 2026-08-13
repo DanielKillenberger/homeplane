@@ -18,6 +18,17 @@ import (
 	"github.com/DanielKillenberger/homeplane/internal/store"
 )
 
+// noAudit provides explicit no-op audit callbacks for test SEEDING. The store
+// requires a callback on every mutation, so opting out is visible here rather
+// than implicit.
+var noAudit = struct {
+	enrol func(store.Machine, bool) []store.AuditEvent
+	issue func(store.Grant, *store.Grant) []store.AuditEvent
+}{
+	enrol: func(store.Machine, bool) []store.AuditEvent { return nil },
+	issue: func(store.Grant, *store.Grant) []store.AuditEvent { return nil },
+}
+
 // seedState builds a state directory with a database, an age key, one enrolled
 // machine, and one active grant — the shape the admin CLI operates on.
 func seedState(t *testing.T) (dir string, machineID string, grantID string) {
@@ -33,11 +44,11 @@ func seedState(t *testing.T) (dir string, machineID string, grantID string) {
 	}
 
 	ctx := context.Background()
-	m, _, err := st.Enrol(ctx, store.Identity{NodeID: "node-a", NodeName: "mac-a"}, "mac-a", "darwin", "hash-a")
+	m, _, err := st.Enrol(ctx, store.Identity{NodeID: "node-a", NodeName: "mac-a"}, "mac-a", "darwin", "hash-a", noAudit.enrol)
 	if err != nil {
 		t.Fatalf("Enrol: %v", err)
 	}
-	g, _, err := st.IssueGrant(ctx, m.ID, policy.HarnessCodex, []string{string(policy.ConnectorRead)}, "tok-a")
+	g, _, err := st.IssueGrant(ctx, m.ID, policy.HarnessCodex, []string{string(policy.ConnectorRead)}, "tok-a", noAudit.issue)
 	if err != nil {
 		t.Fatalf("IssueGrant: %v", err)
 	}
@@ -113,6 +124,14 @@ func TestAdminAuditReadsTheLogAndRecordsTheRead(t *testing.T) {
 			if e.ObservedNodeID != "" {
 				t.Errorf("operator event carries an observed node %q", e.ObservedNodeID)
 			}
+			// The affected machine is the TARGET, not the actor: an operator
+			// revocation must not read as the machine revoking its own grant.
+			if e.AuthMachineID != "" {
+				t.Errorf("operator event claims authenticated machine %q", e.AuthMachineID)
+			}
+			if e.Detail["target_machine_id"] == "" {
+				t.Error("operator revocation does not record the target machine")
+			}
 			if e.GrantID != grantID {
 				t.Errorf("revocation grant = %q, want %q", e.GrantID, grantID)
 			}
@@ -171,11 +190,11 @@ func TestAdminRevokeCrossesMachineBoundaries(t *testing.T) {
 		t.Fatalf("store.Open: %v", err)
 	}
 	ctx := context.Background()
-	other, _, err := st.Enrol(ctx, store.Identity{NodeID: "node-b", NodeName: "linux-b"}, "linux-b", "linux", "hash-b")
+	other, _, err := st.Enrol(ctx, store.Identity{NodeID: "node-b", NodeName: "linux-b"}, "linux-b", "linux", "hash-b", noAudit.enrol)
 	if err != nil {
 		t.Fatalf("Enrol: %v", err)
 	}
-	g, _, err := st.IssueGrant(ctx, other.ID, policy.HarnessClaudeCode, []string{string(policy.ConnectorRead)}, "tok-b")
+	g, _, err := st.IssueGrant(ctx, other.ID, policy.HarnessClaudeCode, []string{string(policy.ConnectorRead)}, "tok-b", noAudit.issue)
 	if err != nil {
 		t.Fatalf("IssueGrant: %v", err)
 	}

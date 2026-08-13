@@ -3,9 +3,11 @@ package store
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -20,9 +22,17 @@ func newTestStore(t *testing.T) *SQLite {
 	return st
 }
 
+// noAudit is the explicit "record nothing" callback used where a test seeds
+// state rather than exercising a lifecycle path. The store REQUIRES a callback,
+// so opting out is always visible at the call site.
+func noAuditEnrol(Machine, bool) []AuditEvent { return nil }
+func noAuditIssue(Grant, *Grant) []AuditEvent { return nil }
+func noAuditRevoke(Grant) []AuditEvent        { return nil }
+func noAuditSecret(int64) []AuditEvent        { return nil }
+
 func mustEnrol(t *testing.T, st *SQLite, nodeID, name string) Machine {
 	t.Helper()
-	m, _, err := st.Enrol(context.Background(), Identity{NodeID: nodeID, NodeName: name}, name, "linux", "hash-"+nodeID)
+	m, _, err := st.Enrol(context.Background(), Identity{NodeID: nodeID, NodeName: name}, name, "linux", "hash-"+nodeID, noAuditEnrol)
 	if err != nil {
 		t.Fatalf("Enrol: %v", err)
 	}
@@ -103,11 +113,11 @@ func TestEnrolIsIdentityPreservingRotation(t *testing.T) {
 	ctx := context.Background()
 	id := Identity{NodeID: "node-1", NodeName: "mac"}
 
-	first, rotated, err := st.Enrol(ctx, id, "mac", "darwin", "hash-1")
+	first, rotated, err := st.Enrol(ctx, id, "mac", "darwin", "hash-1", noAuditEnrol)
 	if err != nil || rotated {
 		t.Fatalf("first enrol: m=%+v rotated=%v err=%v", first, rotated, err)
 	}
-	second, rotated, err := st.Enrol(ctx, id, "mac-renamed", "darwin", "hash-2")
+	second, rotated, err := st.Enrol(ctx, id, "mac-renamed", "darwin", "hash-2", noAuditEnrol)
 	if err != nil {
 		t.Fatalf("second enrol: %v", err)
 	}
@@ -149,11 +159,11 @@ func TestOnlyOneActiveGrantPerMachineAndHarness(t *testing.T) {
 	ctx := context.Background()
 	m := mustEnrol(t, st, "node-1", "mac")
 
-	first, superseded, err := st.IssueGrant(ctx, m.ID, "codex", []string{"connector.read"}, "tok-1")
+	first, superseded, err := st.IssueGrant(ctx, m.ID, "codex", []string{"connector.read"}, "tok-1", noAuditIssue)
 	if err != nil || superseded != nil {
 		t.Fatalf("first grant: superseded=%v err=%v", superseded, err)
 	}
-	second, superseded, err := st.IssueGrant(ctx, m.ID, "codex", []string{"connector.read"}, "tok-2")
+	second, superseded, err := st.IssueGrant(ctx, m.ID, "codex", []string{"connector.read"}, "tok-2", noAuditIssue)
 	if err != nil {
 		t.Fatalf("second grant: %v", err)
 	}
@@ -187,12 +197,12 @@ func TestRevokeGrantIsIdempotent(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
 	m := mustEnrol(t, st, "node-1", "mac")
-	g, _, err := st.IssueGrant(ctx, m.ID, "codex", []string{"connector.read"}, "tok-1")
+	g, _, err := st.IssueGrant(ctx, m.ID, "codex", []string{"connector.read"}, "tok-1", noAuditIssue)
 	if err != nil {
 		t.Fatalf("IssueGrant: %v", err)
 	}
 
-	revoked, changed, err := st.RevokeGrant(ctx, g.ID, "revoked_by_machine")
+	revoked, changed, err := st.RevokeGrant(ctx, g.ID, "revoked_by_machine", noAuditRevoke)
 	if err != nil || !changed {
 		t.Fatalf("first revoke: changed=%v err=%v", changed, err)
 	}
@@ -200,7 +210,7 @@ func TestRevokeGrantIsIdempotent(t *testing.T) {
 		t.Error("revoked grant has no revoked_at")
 	}
 
-	again, changed, err := st.RevokeGrant(ctx, g.ID, "revoked_by_operator")
+	again, changed, err := st.RevokeGrant(ctx, g.ID, "revoked_by_operator", noAuditRevoke)
 	if err != nil {
 		t.Fatalf("repeat revoke: %v", err)
 	}
@@ -211,7 +221,7 @@ func TestRevokeGrantIsIdempotent(t *testing.T) {
 		t.Errorf("repeat revocation overwrote the original reason: %q", again.RevokedReason)
 	}
 
-	if _, _, err := st.RevokeGrant(ctx, "g-nope", "x"); !errors.Is(err, ErrNotFound) {
+	if _, _, err := st.RevokeGrant(ctx, "g-nope", "x", noAuditRevoke); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown grant revoke err = %v, want ErrNotFound", err)
 	}
 }
@@ -222,10 +232,10 @@ func TestListGrantsIsPerMachine(t *testing.T) {
 	a := mustEnrol(t, st, "node-a", "mac-a")
 	b := mustEnrol(t, st, "node-b", "linux-b")
 
-	if _, _, err := st.IssueGrant(ctx, a.ID, "codex", []string{"connector.read"}, "tok-a"); err != nil {
+	if _, _, err := st.IssueGrant(ctx, a.ID, "codex", []string{"connector.read"}, "tok-a", noAuditIssue); err != nil {
 		t.Fatalf("IssueGrant: %v", err)
 	}
-	if _, _, err := st.IssueGrant(ctx, b.ID, "codex", []string{"connector.read"}, "tok-b"); err != nil {
+	if _, _, err := st.IssueGrant(ctx, b.ID, "codex", []string{"connector.read"}, "tok-b", noAuditIssue); err != nil {
 		t.Fatalf("IssueGrant: %v", err)
 	}
 
@@ -282,11 +292,11 @@ func TestSecretsAreVersionedOnReplacement(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
 
-	gen, err := st.PutSecret(ctx, "google/oauth-client", []byte("cipher-1"))
+	gen, err := st.PutSecret(ctx, "google/oauth-client", []byte("cipher-1"), noAuditSecret)
 	if err != nil || gen != 1 {
 		t.Fatalf("first PutSecret: gen=%d err=%v", gen, err)
 	}
-	gen, err = st.PutSecret(ctx, "google/oauth-client", []byte("cipher-2"))
+	gen, err = st.PutSecret(ctx, "google/oauth-client", []byte("cipher-2"), noAuditSecret)
 	if err != nil || gen != 2 {
 		t.Fatalf("second PutSecret: gen=%d err=%v", gen, err)
 	}
@@ -324,8 +334,245 @@ func TestForeignKeysAreEnforcedOnEveryConnection(t *testing.T) {
 	// A grant for a machine that does not exist must be refused by the schema,
 	// whichever pooled connection happens to serve the request.
 	for i := 0; i < 5; i++ {
-		if _, _, err := st.IssueGrant(context.Background(), "m-nonexistent", "codex", []string{"connector.read"}, "tok"); err == nil {
+		if _, _, err := st.IssueGrant(context.Background(), "m-nonexistent", "codex", []string{"connector.read"}, "tok", noAuditIssue); err == nil {
 			t.Fatal("IssueGrant accepted a grant for an unknown machine (foreign keys not enforced)")
+		}
+	}
+}
+
+// badAudit returns an event the store must reject (non-allow-listed detail
+// key), standing in for any audit-write failure.
+func badAudit() []AuditEvent {
+	return []AuditEvent{{
+		Event: EventGrantRevoked, ActorKind: ActorMachine, Outcome: OutcomeAllowed,
+		Detail: map[string]string{"document_body": "nope"},
+	}}
+}
+
+// TestMutationsRollBackWhenTheirAuditWriteFails is the fail-CLOSED proof: a
+// lifecycle change must never survive without the record of it. Each case
+// injects an audit failure and asserts the mutation did not happen.
+func TestMutationsRollBackWhenTheirAuditWriteFails(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("enrolment", func(t *testing.T) {
+		st := newTestStore(t)
+		_, _, err := st.Enrol(ctx, Identity{NodeID: "node-1", NodeName: "mac"}, "mac", "darwin", "hash-1",
+			func(Machine, bool) []AuditEvent { return badAudit() })
+		if err == nil {
+			t.Fatal("enrolment succeeded despite a failing audit write")
+		}
+		if _, err := st.MachineByNodeID(ctx, "node-1"); !errors.Is(err, ErrNotFound) {
+			t.Fatal("machine record survived a rolled-back enrolment")
+		}
+	})
+
+	t.Run("credential rotation", func(t *testing.T) {
+		st := newTestStore(t)
+		id := Identity{NodeID: "node-1", NodeName: "mac"}
+		if _, _, err := st.Enrol(ctx, id, "mac", "darwin", "hash-1", noAuditEnrol); err != nil {
+			t.Fatalf("seed enrol: %v", err)
+		}
+		if _, _, err := st.Enrol(ctx, id, "mac", "darwin", "hash-2",
+			func(Machine, bool) []AuditEvent { return badAudit() }); err == nil {
+			t.Fatal("rotation succeeded despite a failing audit write")
+		}
+		m, err := st.MachineByNodeID(ctx, "node-1")
+		if err != nil {
+			t.Fatalf("MachineByNodeID: %v", err)
+		}
+		if m.CredentialHash != "hash-1" || m.CredentialVersion != 1 {
+			t.Fatalf("credential rotated despite the rollback: %s v%d", m.CredentialHash, m.CredentialVersion)
+		}
+	})
+
+	t.Run("grant issuance", func(t *testing.T) {
+		st := newTestStore(t)
+		m := mustEnrol(t, st, "node-1", "mac")
+		if _, _, err := st.IssueGrant(ctx, m.ID, "codex", []string{"connector.read"}, "tok-1",
+			func(Grant, *Grant) []AuditEvent { return badAudit() }); err == nil {
+			t.Fatal("grant issuance succeeded despite a failing audit write")
+		}
+		grants, err := st.ListGrants(ctx, m.ID)
+		if err != nil {
+			t.Fatalf("ListGrants: %v", err)
+		}
+		if len(grants) != 0 {
+			t.Fatalf("grant survived a rolled-back issuance: %+v", grants)
+		}
+	})
+
+	t.Run("grant supersession", func(t *testing.T) {
+		st := newTestStore(t)
+		m := mustEnrol(t, st, "node-1", "mac")
+		first, _, err := st.IssueGrant(ctx, m.ID, "codex", []string{"connector.read"}, "tok-1", noAuditIssue)
+		if err != nil {
+			t.Fatalf("seed grant: %v", err)
+		}
+		if _, _, err := st.IssueGrant(ctx, m.ID, "codex", []string{"connector.read"}, "tok-2",
+			func(Grant, *Grant) []AuditEvent { return badAudit() }); err == nil {
+			t.Fatal("supersession succeeded despite a failing audit write")
+		}
+		// The original grant must still be usable: a half-applied supersession
+		// would revoke a working token with no record of why.
+		got, err := st.ActiveGrantByTokenHash(ctx, "tok-1")
+		if err != nil || got.ID != first.ID {
+			t.Fatalf("original grant was revoked by a rolled-back supersession: %+v err=%v", got, err)
+		}
+	})
+
+	t.Run("revocation", func(t *testing.T) {
+		st := newTestStore(t)
+		m := mustEnrol(t, st, "node-1", "mac")
+		g, _, err := st.IssueGrant(ctx, m.ID, "codex", []string{"connector.read"}, "tok-1", noAuditIssue)
+		if err != nil {
+			t.Fatalf("seed grant: %v", err)
+		}
+		if _, _, err := st.RevokeGrant(ctx, g.ID, "revoked_by_machine",
+			func(Grant) []AuditEvent { return badAudit() }); err == nil {
+			t.Fatal("revocation succeeded despite a failing audit write")
+		}
+		still, err := st.GrantByID(ctx, g.ID)
+		if err != nil {
+			t.Fatalf("GrantByID: %v", err)
+		}
+		if still.State != GrantActive {
+			t.Fatal("grant was revoked without its audit record")
+		}
+	})
+
+	t.Run("secret import", func(t *testing.T) {
+		st := newTestStore(t)
+		if _, err := st.PutSecret(ctx, "google/oauth-client", []byte("cipher"),
+			func(int64) []AuditEvent { return badAudit() }); err == nil {
+			t.Fatal("secret import succeeded despite a failing audit write")
+		}
+		if _, err := st.GetSecret(ctx, "google/oauth-client"); !errors.Is(err, ErrNotFound) {
+			t.Fatal("secret survived a rolled-back import")
+		}
+	})
+}
+
+func TestMutationsRequireAnAuditCallback(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	if _, _, err := st.Enrol(ctx, Identity{NodeID: "n"}, "n", "linux", "h", nil); err == nil {
+		t.Error("Enrol accepted a nil audit callback")
+	}
+	if _, _, err := st.IssueGrant(ctx, "m", "codex", nil, "t", nil); err == nil {
+		t.Error("IssueGrant accepted a nil audit callback")
+	}
+	if _, _, err := st.RevokeGrant(ctx, "g", "r", nil); err == nil {
+		t.Error("RevokeGrant accepted a nil audit callback")
+	}
+	if _, err := st.PutSecret(ctx, "ref", []byte("c"), nil); err == nil {
+		t.Error("PutSecret accepted a nil audit callback")
+	}
+}
+
+// TestTimestampsOrderChronologicallyAtPrecisionBoundaries covers the trap that
+// variable-width RFC3339Nano text sets: ".1Z" must not sort before ".0…Z".
+func TestTimestampsOrderChronologicallyAtPrecisionBoundaries(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	base := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+
+	// Deliberately mixed precision, appended out of chronological order.
+	times := []time.Time{
+		base.Add(100 * time.Millisecond), // .100000000
+		base,                             // .000000000
+		base.Add(time.Second),            // whole second
+		base.Add(1500 * time.Millisecond),
+	}
+	for _, ts := range times {
+		if err := st.AppendAudit(ctx, AuditEvent{
+			TS: ts, Event: EventEnrolment, ActorKind: ActorMachine, Outcome: OutcomeAllowed,
+		}); err != nil {
+			t.Fatalf("AppendAudit: %v", err)
+		}
+	}
+
+	// `since` at the whole second must include the 1.0s and 1.5s events and
+	// exclude the sub-second ones before it.
+	got, err := st.QueryAudit(ctx, AuditQuery{Since: base.Add(time.Second)})
+	if err != nil {
+		t.Fatalf("QueryAudit: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("since-filter returned %d events, want 2: %+v", len(got), got)
+	}
+	for _, e := range got {
+		if e.TS.Before(base.Add(time.Second)) {
+			t.Errorf("event at %s leaked past a later since-threshold", e.TS)
+		}
+	}
+
+	// And a fractional threshold must exclude the exact-second event.
+	got, err = st.QueryAudit(ctx, AuditQuery{Since: base.Add(50 * time.Millisecond)})
+	if err != nil {
+		t.Fatalf("QueryAudit: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("fractional since-filter returned %d events, want 3", len(got))
+	}
+}
+
+// TestQueryAuditLimitReturnsTheNewestWindow guards the incident-response case:
+// the default admin view must show recent events, not the first ones ever
+// written.
+func TestQueryAuditLimitReturnsTheNewestWindow(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	for i := 0; i < 10; i++ {
+		reason := "event-" + string(rune('0'+i))
+		if err := st.AppendAudit(ctx, AuditEvent{
+			Event: EventAuthDenied, ActorKind: ActorMachine, Outcome: OutcomeDenied, Reason: reason,
+		}); err != nil {
+			t.Fatalf("AppendAudit: %v", err)
+		}
+	}
+	got, err := st.QueryAudit(ctx, AuditQuery{Limit: 3})
+	if err != nil {
+		t.Fatalf("QueryAudit: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d events, want 3", len(got))
+	}
+	if got[0].Reason != "event-7" || got[2].Reason != "event-9" {
+		t.Fatalf("limit returned the wrong window: %s..%s, want event-7..event-9", got[0].Reason, got[2].Reason)
+	}
+	if !got[0].TS.Before(got[2].TS) && got[0].ID >= got[2].ID {
+		t.Error("the newest window is not presented in append order")
+	}
+}
+
+// TestDatabaseAndSidecarsAreNotGroupOrWorldReadable covers the WAL/SHM files,
+// which hold the same live rows as the database itself.
+func TestDatabaseAndSidecarsAreNotGroupOrWorldReadable(t *testing.T) {
+	old := syscall.Umask(0o022)
+	defer syscall.Umask(old)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "homeplane.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	// Force WAL/SHM into existence with a real write.
+	m := mustEnrol(t, st, "node-1", "mac")
+	if _, _, err := st.IssueGrant(context.Background(), m.ID, "codex", []string{"connector.read"}, "tok", noAuditIssue); err != nil {
+		t.Fatalf("IssueGrant: %v", err)
+	}
+
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		info, err := os.Stat(path + suffix)
+		if err != nil {
+			continue // the sidecar may not exist on every platform/journal state
+		}
+		if perm := info.Mode().Perm(); perm&0o077 != 0 {
+			t.Errorf("%s has mode %#o; group/world must have no access", path+suffix, perm)
 		}
 	}
 }

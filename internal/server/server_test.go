@@ -3,6 +3,7 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -123,6 +124,22 @@ func (h *harness) issueGrant(addr, credential, harnessName string, capabilities 
 		body["capabilities"] = capabilities
 	}
 	return h.do(http.MethodPost, "/grants", addr, credential, body)
+}
+
+// auditFailureStore wraps the real store and makes every audit write fail, to
+// prove the server refuses the mutation rather than completing it unrecorded.
+type auditFailureStore struct{ *store.SQLite }
+
+func (auditFailureStore) AppendAudit(context.Context, store.AuditEvent) error {
+	return errors.New("audit backend unavailable")
+}
+
+func (s auditFailureStore) Enrol(ctx context.Context, id store.Identity, name, osName, hash string,
+	_ func(store.Machine, bool) []store.AuditEvent) (store.Machine, bool, error) {
+	return s.SQLite.Enrol(ctx, id, name, osName, hash, func(store.Machine, bool) []store.AuditEvent {
+		return []store.AuditEvent{{Event: store.EventEnrolment, ActorKind: store.ActorMachine,
+			Outcome: store.OutcomeAllowed, Detail: map[string]string{"unwritable_key": "x"}}}
+	})
 }
 
 func (h *harness) auditEvents() []store.AuditEvent {
@@ -647,4 +664,30 @@ func TestHealthzReportsServerComponentsOnly(t *testing.T) {
 		}
 		degrade(t, health.ComponentStore)
 	})
+}
+
+// TestMutationFailsWhenItsAuditRecordCannotBeWritten proves the fail-closed
+// posture end-to-end: a machine must not walk away holding a credential the
+// server has no record of issuing.
+func TestMutationFailsWhenItsAuditRecordCannotBeWritten(t *testing.T) {
+	st := newStore(t)
+	srv, err := server.New(auditFailureStore{st},
+		fakeResolver{byAddr: map[string]store.Identity{addrA: machineA}},
+		health.New(health.Component{Name: health.ComponentStore, Probe: health.StoreProbe(st)}),
+		server.Config{Policy: policy.Default()})
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	h := &harness{t: t, st: st, handler: srv.Handler()}
+
+	_, credential, res := h.enrol(addrA, "mac-a", "darwin")
+	if res.status != http.StatusInternalServerError {
+		t.Fatalf("enrol status = %d, want 500 when the audit write fails (body %s)", res.status, res.raw)
+	}
+	if credential != "" {
+		t.Fatal("server returned a credential for an enrolment it could not record")
+	}
+	if _, err := st.MachineByNodeID(context.Background(), machineA.NodeID); err == nil {
+		t.Fatal("machine record persisted despite the failed audit write")
+	}
 }

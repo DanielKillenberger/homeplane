@@ -27,13 +27,19 @@ import (
 // Store is the persistence surface the control plane needs. It is an interface
 // so handler tests can drive failure paths (store down, audit-write failure)
 // that a real database will not produce on demand.
+// Every mutating method takes an audit callback whose events are written in
+// the same transaction as the mutation, so a lifecycle change and the record of
+// it either both land or neither does.
 type Store interface {
-	Enrol(ctx context.Context, id store.Identity, name, osName, credentialHash string) (store.Machine, bool, error)
+	Enrol(ctx context.Context, id store.Identity, name, osName, credentialHash string,
+		audit func(m store.Machine, rotated bool) []store.AuditEvent) (store.Machine, bool, error)
 	MachineByNodeID(ctx context.Context, nodeID string) (store.Machine, error)
 	MachineByCredentialHash(ctx context.Context, credentialHash string) (store.Machine, error)
-	IssueGrant(ctx context.Context, machineID, harness string, capabilities []string, tokenHash string) (store.Grant, *store.Grant, error)
+	IssueGrant(ctx context.Context, machineID, harness string, capabilities []string, tokenHash string,
+		audit func(g store.Grant, superseded *store.Grant) []store.AuditEvent) (store.Grant, *store.Grant, error)
 	GrantByID(ctx context.Context, id string) (store.Grant, error)
-	RevokeGrant(ctx context.Context, id, reason string) (store.Grant, bool, error)
+	RevokeGrant(ctx context.Context, id, reason string,
+		audit func(g store.Grant) []store.AuditEvent) (store.Grant, bool, error)
 	ListGrants(ctx context.Context, machineID string) ([]store.Grant, error)
 	AppendAudit(ctx context.Context, e store.AuditEvent) error
 }
@@ -138,10 +144,15 @@ func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) err
 	return dec.Decode(dst)
 }
 
-// audit appends an audit row. A failure to record is logged loudly but never
-// changes the caller's outcome: dropping the request because the log is broken
-// would turn an observability fault into an availability fault. The health
-// endpoint surfaces the underlying store failure separately.
+// audit appends a STANDALONE audit row — one with no accompanying state change,
+// which in this package means a rejected call. Events that accompany a mutation
+// are written by that mutation's transaction instead (see Store), so they can
+// never diverge from it.
+//
+// Here, and only here, a failed write is logged rather than propagated: the
+// request is already being denied, so nothing privileged happened that could go
+// unrecorded, and turning a broken log into a different error code would just
+// mislead the caller. The store failure surfaces through /healthz.
 func (s *Server) audit(ctx context.Context, e store.AuditEvent) {
 	if e.TS.IsZero() {
 		e.TS = time.Now().UTC()

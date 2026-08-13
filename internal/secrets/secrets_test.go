@@ -102,3 +102,72 @@ func TestLoadKeyFileRejectsMissingAndEmptyFiles(t *testing.T) {
 		t.Error("key file without an identity accepted")
 	}
 }
+
+// TestGenerateKeyFileLeavesNoDebrisOnSuccess checks the atomic-publish path
+// cleans up after itself: a stray readable temp copy of the key would defeat
+// the point of the 0600 target.
+func TestGenerateKeyFileLeavesNoDebrisOnSuccess(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "secrets.age-key")
+	if _, err := GenerateKeyFile(path); err != nil {
+		t.Fatalf("GenerateKeyFile: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "secrets.age-key" {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("directory contains %v, want only the key file", names)
+	}
+}
+
+// TestGenerateKeyFileDoesNotDisturbAnExistingKey pins the refusal semantics on
+// the atomic path: the existing key (and everything encrypted under it) must
+// survive a second init attempt untouched.
+func TestGenerateKeyFileDoesNotDisturbAnExistingKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "secrets.age-key")
+	kr, err := GenerateKeyFile(path)
+	if err != nil {
+		t.Fatalf("GenerateKeyFile: %v", err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	ciphertext, err := kr.Encrypt([]byte("provider-secret"))
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+
+	if _, err := GenerateKeyFile(path); err == nil {
+		t.Fatal("second GenerateKeyFile succeeded")
+	}
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("the existing key file was modified by a refused regeneration")
+	}
+	reloaded, err := LoadKeyFile(path)
+	if err != nil {
+		t.Fatalf("LoadKeyFile: %v", err)
+	}
+	if _, err := reloaded.Decrypt(ciphertext); err != nil {
+		t.Fatalf("previously sealed secret is no longer decryptable: %v", err)
+	}
+	// No temp debris from the failed attempt either.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("failed regeneration left %d files behind", len(entries)-1)
+	}
+}

@@ -88,6 +88,8 @@ func runAdminAudit(args []string) error {
 	// The operator's own read is itself an audited event: an append-only log
 	// that cannot show who read it is only half a record. ActorOperator with no
 	// observed node is the honest attribution — there is no network caller.
+	// A failure to record it fails the command: silently succeeding would leave
+	// the operator believing the read was logged when it was not.
 	detail := map[string]string{"limit": strconv.Itoa(*limit)}
 	if !sinceTime.IsZero() {
 		detail["since"] = sinceTime.UTC().Format(time.RFC3339)
@@ -98,7 +100,7 @@ func runAdminAudit(args []string) error {
 		Outcome:   store.OutcomeAllowed,
 		Detail:    detail,
 	}); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not record audit-read event: %v\n", err)
+		return fmt.Errorf("could not record the audit-read event: %w", err)
 	}
 
 	if *asJSON {
@@ -144,7 +146,25 @@ func runAdminRevokeGrant(args []string) error {
 	defer st.Close()
 
 	ctx := context.Background()
-	g, changed, err := st.RevokeGrant(ctx, grantID, "revoked_by_operator")
+	// The revocation and its audit row commit together; if the record cannot be
+	// written, the grant is not revoked either.
+	g, changed, err := st.RevokeGrant(ctx, grantID, "revoked_by_operator",
+		func(g store.Grant) []store.AuditEvent {
+			return []store.AuditEvent{{
+				Event:     store.EventGrantRevoked,
+				ActorKind: store.ActorOperator,
+				// AuthMachineID stays EMPTY: the actor is the local operator,
+				// not the machine. The affected machine is the TARGET of the
+				// action and is recorded as such — conflating the two would
+				// make the log read as though that machine revoked its own
+				// grant.
+				Harness: g.Harness,
+				GrantID: g.ID,
+				Outcome: store.OutcomeAllowed,
+				Reason:  "revoked_by_operator",
+				Detail:  map[string]string{"target_machine_id": g.MachineID},
+			}}
+		})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return fmt.Errorf("unknown grant %q", grantID)
@@ -152,17 +172,6 @@ func runAdminRevokeGrant(args []string) error {
 		return err
 	}
 	if changed {
-		if err := st.AppendAudit(ctx, store.AuditEvent{
-			Event:         store.EventGrantRevoked,
-			ActorKind:     store.ActorOperator,
-			AuthMachineID: g.MachineID,
-			Harness:       g.Harness,
-			GrantID:       g.ID,
-			Outcome:       store.OutcomeAllowed,
-			Reason:        "revoked_by_operator",
-		}); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not record revocation event: %v\n", err)
-		}
 		fmt.Printf("revoked grant %s (machine %s, harness %s)\n", g.ID, g.MachineID, g.Harness)
 		return nil
 	}
@@ -253,21 +262,20 @@ func runAdminSecretImport(args []string) error {
 	defer st.Close()
 
 	ctx := context.Background()
-	generation, err := st.PutSecret(ctx, ref, ciphertext)
+	generation, err := st.PutSecret(ctx, ref, ciphertext, func(generation int64) []store.AuditEvent {
+		return []store.AuditEvent{{
+			Event:     store.EventSecretImported,
+			ActorKind: store.ActorOperator,
+			Outcome:   store.OutcomeAllowed,
+			Detail: map[string]string{
+				"secret_ref":        ref,
+				"secret_generation": strconv.FormatInt(generation, 10),
+				"source":            source,
+			},
+		}}
+	})
 	if err != nil {
 		return err
-	}
-	if err := st.AppendAudit(ctx, store.AuditEvent{
-		Event:     store.EventSecretImported,
-		ActorKind: store.ActorOperator,
-		Outcome:   store.OutcomeAllowed,
-		Detail: map[string]string{
-			"secret_ref":        ref,
-			"secret_generation": strconv.FormatInt(generation, 10),
-			"source":            source,
-		},
-	}); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not record secret-import event: %v\n", err)
 	}
 	// Report the ref and generation only. The value is never echoed back.
 	fmt.Printf("imported secret %q (generation %d, %d bytes, source %s)\n", ref, generation, len(plaintext), source)
