@@ -15,3 +15,6 @@ spike/edge-proxy/edge-proxy
 *.db-wal
 *.db-shm
 *.age-key
+
+# staged release artifacts (rebuildable via scripts/stage-release.sh)
+/dist/
