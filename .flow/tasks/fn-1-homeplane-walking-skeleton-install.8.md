@@ -37,9 +37,10 @@ The server-brokered OAuth credential flow end to end against the spec's state ma
 - [ ] Emits versioned evidence artifact `test/evidence/<task-id>.json` (commit SHA, platform, commands run, assertions, timestamps)
 
 ## Done summary
-TBD
+Implemented R13's credential broker end to end, closing all eight impl-review findings across three rounds. `internal/server/credflow` runs the OAuth flow as a genuinely asynchronous state machine: the relay consumes the one-shot outcome and returns 202 pending, while a server-owned exchange job — uncancellable by any request, awaited at shutdown — redeems the code and commits the credential via `store.PutSecretCAS`. The flow's window bounds the human's consent, not the exchange, and that exclusion is now claimed atomically: eligibility and the terminal decision happen in one locked step, so expiry and a concurrent relay compete for the same lock and exactly one of them wins. Terminal states are fail-closed on audit (decided, recorded, only then exposed) and neither transition can overwrite an existing ending; open flows are bounded per machine and swept; both driver secrets are validated before consent is spent.
 
+`internal/agent/credflow` plus `homeplane-agent add-credentials` binds the loopback listener first, opens the browser, relays once, and converges on the server's outcome by polling — tolerating a lost relay response instead of contradicting a credential that was actually stored. Provider tokens never reach the machine: the flow writes no file at all. Everything provider-specific comes from the connector manifest's `oauth2-authcode` driver, proven behaviourally (a second fake provider onboards through a manifest entry alone) and structurally (an AST scan asserts no provider name in any string literal or identifier of the broker's source).
 ## Evidence
-- Commits:
-- Tests:
+- Commits: ab21a29296d403f49fdcfc3470432df164f687b1, 565602b0654996a795d898a154c7486926b1155a, 1c4142c4fb6cf0dc214de73d31e604c02a11dfd2, 6568e0bd4d003e17ecca08767a66065964d1df10, f457f26283e80b4e0ca87de6c17d2257d3afc05a, de654a3b1d5b8e14d2709396f2ccc6bfd25fd195, 83bd6f55b1d3ef87b5cd168cd5f6e4a25d290467, 853ce54e9aefcd6c05aa8aef2c4a20414b5763f2, f3f527efc8e3308b6c119da31ae488ed80c71267, 239f4bbd3b53017508aeb673d70ad75071bd2ec9
+- Tests: go build ./..., go vet ./..., go test ./... -count=1, go test -race ./internal/... ./cmd/... -count=1, go test ./internal/server/credflow/ -count=5, scripts/emit-evidence.sh fn-1-homeplane-walking-skeleton-install.8 (307/307 assertions, 3 gates, pass, clean tree, at f3f527e)
 - PRs:
