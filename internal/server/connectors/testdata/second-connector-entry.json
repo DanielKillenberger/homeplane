@@ -1,0 +1,38 @@
+{
+  "provider": "fabrikam-tasks",
+  "credential_ref": "fabrikam/oauth-session",
+  "credential_acquisition": {
+    "driver": "oauth2-authcode",
+    "params": {
+      "auth_endpoint": "https://login.fabrikam.test/oauth2/authorize",
+      "token_endpoint": "https://login.fabrikam.test/oauth2/token",
+      "client_id_ref": "fabrikam/client-id",
+      "client_secret_ref": "fabrikam/client-secret",
+      "redirect_path": "/credentials/fabrikam/callback",
+      "prompt": "consent"
+    },
+    "scopes": ["tasks.read", "tasks.write", "tasks.delete"]
+  },
+  "mcp_server": {
+    "name": "fabrikam-tasks",
+    "transport": "streamable-http",
+    "source": "stub://in-process"
+  },
+  "tool_inventory": ["list_tasks", "create_task", "complete_task", "purge_tasks"],
+  "tools": [
+    { "tool": "list_tasks", "action_class": "read" },
+    {
+      "tool": "create_task",
+      "action_class": "write",
+      "artifact_id": { "source": "response", "pointer": "$.task.id" }
+    },
+    {
+      "tool": "complete_task",
+      "action_class": "write",
+      "artifact_id": { "source": "request", "pointer": "$.task_id" }
+    }
+  ],
+  "excluded_tools": [
+    { "tool": "purge_tasks", "reason": "bulk delete is never authorized from a harness" }
+  ]
+}

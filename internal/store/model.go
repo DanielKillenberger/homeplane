@@ -103,6 +103,21 @@ const (
 	EventAuthDenied         = "auth_denied"
 	EventSecretImported     = "secret_imported"
 	EventAuditQueried       = "audit_queried"
+
+	// Connector-plane events, written by the manifest-driven policy/audit
+	// engine (task .3) and by the edge that hosts it (task .16).
+	//
+	// EventConnectorToolCall is the AUTHORITATIVE record of an admitted call and
+	// is written BEFORE the tool runs; EventConnectorToolResult records how that
+	// call ended (and the artifact id, when only the response reveals it).
+	EventConnectorToolCall   = "connector_tool_call"
+	EventConnectorToolResult = "connector_tool_result"
+	// EventConnectorDenied records a well-formed call refused on authority —
+	// the grant lacked the capability the tool's action class requires.
+	EventConnectorDenied = "connector_denied"
+	// EventPolicyViolation records a call refused by the manifest itself:
+	// unknown connector, or a tool that is unmapped or explicitly excluded.
+	EventPolicyViolation = "policy_violation"
 )
 
 // AuditEvent is an append-only record. It is deliberately METADATA ONLY: there
@@ -172,6 +187,16 @@ var allowedDetailKeys = map[string]bool{
 	"method":                 true,
 	"http_status":            true,
 	"observed_addr":          true,
+
+	// Connector-plane metadata. Note what is NOT here and cannot be added by a
+	// connector: any key capable of carrying request or response content.
+	// "args_digest" is a one-way hash of the request arguments precisely so the
+	// arguments themselves never need a home in this vocabulary.
+	"provider":            true,
+	"args_digest":         true,
+	"call_id":             true,
+	"required_capability": true,
+	"exclusion_reason":    true,
 }
 
 // MaxDetailValueLen bounds any single Detail value. Combined with the key
