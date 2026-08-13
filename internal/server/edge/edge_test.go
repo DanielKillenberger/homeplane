@@ -3,6 +3,7 @@ package edge
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -444,6 +445,73 @@ func TestTransportFramesRequireAuthentication(t *testing.T) {
 	}
 	if len(h.gateway.seen()) != 0 {
 		t.Fatalf("unauthenticated transport frames reached the gateway")
+	}
+}
+
+// A gateway that accepts the connection and never answers must not be able to
+// hold a forwarded frame open forever — the listener's write deadline is lifted
+// for SSE, so the bound has to live in the transport.
+func TestSilentGatewayDoesNotHangForwardedFrames(t *testing.T) {
+	h := newHarness(t)
+
+	release := make(chan struct{})
+	silent := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-release // accept, read the request, never write a header
+	}))
+	// Order matters: Close waits for outstanding handlers, so the blocked
+	// handler has to be released FIRST (defers run last-in, first-out).
+	defer silent.Close()
+	defer close(release)
+
+	upstream, err := ParseUpstream(silent.URL + "/mcp")
+	if err != nil {
+		t.Fatalf("ParseUpstream: %v", err)
+	}
+	transport := NewUpstreamTransport()
+	transport.ResponseHeaderTimeout = 250 * time.Millisecond
+
+	stalled, err := New(Config{
+		Store:             h.sink,
+		Identity:          h.edge.cfg.Identity,
+		Broker:            h.edge.cfg.Broker,
+		Upstream:          upstream,
+		UpstreamTransport: transport,
+	})
+	if err != nil {
+		t.Fatalf("edge.New: %v", err)
+	}
+	h.edge = stalled
+
+	done := make(chan int, 1)
+	go func() { done <- h.initialize(addrA, h.tokenA).status }()
+
+	select {
+	case status := <-done:
+		if status != http.StatusBadGateway {
+			t.Errorf("stalled forward returned %d, want 502", status)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a silent gateway hung a forwarded frame: the transport has no response-header deadline")
+	}
+}
+
+// The default transport carries those bounds, so a deployment that configures
+// nothing still cannot be hung by a silent gateway.
+func TestDefaultUpstreamTransportIsBounded(t *testing.T) {
+	tr := NewUpstreamTransport()
+	if tr.ResponseHeaderTimeout <= 0 {
+		t.Error("no response-header deadline")
+	}
+	if tr.TLSHandshakeTimeout <= 0 {
+		t.Error("no TLS handshake deadline")
+	}
+	if tr.DialContext == nil {
+		t.Error("no bounded dialer")
+	}
+	// The BODY stays unbounded: an established SSE stream must outlive every
+	// deadline above.
+	if tr.ExpectContinueTimeout <= 0 {
+		t.Error("no expect-continue deadline")
 	}
 }
 

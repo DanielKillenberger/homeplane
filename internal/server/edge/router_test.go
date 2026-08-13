@@ -48,22 +48,55 @@ func TestRoutingResolvesToolsToTheirConnector(t *testing.T) {
 	}
 }
 
-// A gateway composition the edge cannot route deterministically must not serve
-// traffic: guessing whose policy applies to an ambiguous tool name is exactly
-// how a read-only connector's rules end up applied to another connector's
-// delete tool.
-func TestAmbiguousAndReservedCompositionsAreRefused(t *testing.T) {
-	ambiguous := `{"version":1,"connectors":[` +
+// Two connectors sharing a bare tool name is a NORMAL multi-connector
+// composition, not a startup failure: the gateway namespaces such tools, and
+// refusing the manifest would mean the deployment could not run at all (R12).
+// Only the unqualified form is denied — guessing whose policy applies is how
+// one connector's read-only rules end up applied to another's delete tool.
+func TestSharedToolNamesStayRoutableWhenQualified(t *testing.T) {
+	shared := `{"version":1,"connectors":[` +
 		connectorJSON("notes-a") + `,` + connectorJSON("notes-b") + `]}`
-	if _, err := newToolRouter(manifestFor(t, ambiguous)); err == nil {
-		t.Error("two connectors declaring the same tool name were accepted")
-	} else if !strings.Contains(err.Error(), "list_notes") {
-		t.Errorf("error does not name the colliding tool: %v", err)
+	r, err := newToolRouter(manifestFor(t, shared))
+	if err != nil {
+		t.Fatalf("a qualifiable composition was refused: %v", err)
 	}
 
-	reserved := `{"version":1,"connectors":[` + connectorJSON(UnroutedProvider) + `]}`
-	if _, err := newToolRouter(manifestFor(t, reserved)); err == nil {
-		t.Error("a connector using the reserved provider name was accepted")
+	if provider, tool := r.route("list_notes"); provider != AmbiguousProvider || tool != "list_notes" {
+		t.Errorf("bare ambiguous name routed to (%q, %q), want the ambiguous marker", provider, tool)
+	}
+	for _, want := range []string{"notes-a", "notes-b"} {
+		provider, tool := r.route(want + QualifierSeparator + "list_notes")
+		if provider != want || tool != "list_notes" {
+			t.Errorf("qualified name routed to (%q, %q), want (%q, list_notes)", provider, tool, want)
+		}
+	}
+	if got := r.ambiguousTools(); len(got) != 1 || got[0] != "list_notes" {
+		t.Errorf("ambiguousTools() = %v, want [list_notes]", got)
+	}
+
+	// A third connector claiming the same name keeps it ambiguous rather than
+	// letting the last one declared win it back.
+	three := `{"version":1,"connectors":[` +
+		connectorJSON("notes-a") + `,` + connectorJSON("notes-b") + `,` + connectorJSON("notes-c") + `]}`
+	r, err = newToolRouter(manifestFor(t, three))
+	if err != nil {
+		t.Fatalf("newToolRouter: %v", err)
+	}
+	if provider, _ := r.route("list_notes"); provider != AmbiguousProvider {
+		t.Errorf("a thrice-claimed name routed to %q", provider)
+	}
+}
+
+// The markers are not connector names: a manifest may not claim one, or
+// "belongs to no connector" would become a reachable connector.
+func TestReservedProviderNamesAreRefused(t *testing.T) {
+	for _, name := range []string{UnroutedProvider, AmbiguousProvider} {
+		reserved := `{"version":1,"connectors":[` + connectorJSON(name) + `]}`
+		if _, err := newToolRouter(manifestFor(t, reserved)); err == nil {
+			t.Errorf("a connector named %q was accepted", name)
+		} else if !strings.Contains(err.Error(), name) {
+			t.Errorf("error does not name the connector: %v", err)
+		}
 	}
 }
 
