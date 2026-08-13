@@ -54,6 +54,23 @@ any is degraded, so `curl -sf .../healthz` fails. Machine-side state
 (enrolment, vault, sync, GNO, harness config) belongs to `homeplane-agent
 status`.
 
+## Audit guarantees
+
+The audit log is authoritative (D13), so it is fail-closed in both directions:
+
+- A lifecycle mutation (enrolment, credential rotation, grant issuance or
+  supersession, revocation, secret import) and its audit rows commit in one
+  SQLite transaction — if the record cannot be written, the change does not
+  happen.
+- A rejected call that cannot be recorded returns 503 rather than a plain
+  401/403. The request is refused either way; the different status says the
+  server could not uphold its own audit guarantee.
+
+Rows are metadata only — enforced by the schema and an allow-listed detail
+vocabulary, not by convention — and attribution splits observed identity
+(WhoIs) from authenticated identity (credential), with rejected calls carrying
+a non-reversible token fingerprint instead of an owner.
+
 ## Operator surface
 
 The admin CLI is server-local by design: operator authority is shell access to

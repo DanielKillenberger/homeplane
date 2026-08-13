@@ -37,15 +37,14 @@ func (s *Server) observe(w http.ResponseWriter, r *http.Request) (store.Identity
 		if err == nil {
 			reason = "identity_empty"
 		}
-		s.audit(r.Context(), store.AuditEvent{
+		s.log.Warn("peer identity unresolvable", "remote", r.RemoteAddr, "error", err)
+		s.deny(w, r, store.AuditEvent{
 			Event:     store.EventAuthDenied,
 			ActorKind: store.ActorMachine,
 			Outcome:   store.OutcomeDenied,
 			Reason:    reason,
 			Detail:    map[string]string{"path": r.URL.Path, "method": r.Method},
-		})
-		s.log.Warn("peer identity unresolvable", "remote", r.RemoteAddr, "error", err)
-		s.writeError(w, http.StatusForbidden, codeForbidden, "peer tailnet identity could not be resolved")
+		}, http.StatusForbidden, codeForbidden, "peer tailnet identity could not be resolved")
 		return store.Identity{}, false
 	}
 	return id, true
@@ -72,17 +71,16 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) (caller, b
 
 	tok, ok := bearer(r)
 	if !ok {
-		s.auditDenied(r, observed, "", "missing_machine_credential")
-		w.Header().Set("WWW-Authenticate", "Bearer")
-		s.writeError(w, http.StatusUnauthorized, codeUnauthenticated, "missing machine credential")
+		s.denyAuth(w, r, observed, "", "missing_machine_credential", nil,
+			http.StatusUnauthorized, codeUnauthenticated, "missing machine credential")
 		return caller{}, false
 	}
 
 	m, err := s.store.MachineByNodeID(r.Context(), observed.NodeID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			s.auditDenied(r, observed, tok, "machine_not_enrolled")
-			s.writeError(w, http.StatusUnauthorized, codeUnauthenticated, "machine is not enrolled")
+			s.denyAuth(w, r, observed, tok, "machine_not_enrolled", nil,
+				http.StatusUnauthorized, codeUnauthenticated, "machine is not enrolled")
 			return caller{}, false
 		}
 		s.log.Error("machine lookup", "error", err)
@@ -94,37 +92,34 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) (caller, b
 		// Is this a valid credential for some OTHER machine — i.e. a replay
 		// from the wrong node — or simply an invalid credential?
 		if other, err := s.store.MachineByCredentialHash(r.Context(), cred.Hash(tok)); err == nil {
-			s.auditDeniedDetail(r, observed, tok, "machine_mismatch", map[string]string{
-				"bound_machine_id": other.ID,
-				"path":             r.URL.Path,
-				"method":           r.Method,
-			})
-			s.writeError(w, http.StatusForbidden, codeForbidden, "credential is not valid from this machine")
+			s.denyAuth(w, r, observed, tok, "machine_mismatch",
+				map[string]string{"bound_machine_id": other.ID, "path": r.URL.Path, "method": r.Method},
+				http.StatusForbidden, codeForbidden, "credential is not valid from this machine")
 			return caller{}, false
 		} else if !errors.Is(err, store.ErrNotFound) {
 			s.log.Error("credential lookup", "error", err)
 			s.writeError(w, http.StatusInternalServerError, codeInternal, "credential lookup failed")
 			return caller{}, false
 		}
-		s.auditDenied(r, observed, tok, "invalid_machine_credential")
-		s.writeError(w, http.StatusUnauthorized, codeUnauthenticated, "invalid machine credential")
+		s.denyAuth(w, r, observed, tok, "invalid_machine_credential", nil,
+			http.StatusUnauthorized, codeUnauthenticated, "invalid machine credential")
 		return caller{}, false
 	}
 
 	return caller{Observed: observed, Machine: m}, true
 }
 
-// auditDenied records a rejected call. Note what it does NOT do: it never sets
-// AuthMachineID, because nothing authenticated. The presented credential is
-// reduced to a non-reversible fingerprint so repeated attempts correlate with
-// each other without being attributable to whichever machine owns the token.
-func (s *Server) auditDenied(r *http.Request, observed store.Identity, presentedToken, reason string) {
-	s.auditDeniedDetail(r, observed, presentedToken, reason, map[string]string{
-		"path": r.URL.Path, "method": r.Method,
-	})
-}
-
-func (s *Server) auditDeniedDetail(r *http.Request, observed store.Identity, presentedToken, reason string, detail map[string]string) {
+// denyAuth records an authentication rejection and refuses the request.
+//
+// Note what the row does NOT contain: AuthMachineID is never set, because
+// nothing authenticated. The presented credential is reduced to a
+// non-reversible fingerprint, so repeated attempts correlate with each other
+// without becoming attributable to whichever machine owns the token.
+func (s *Server) denyAuth(w http.ResponseWriter, r *http.Request, observed store.Identity,
+	presentedToken, reason string, detail map[string]string, status int, code errorCode, message string) {
+	if detail == nil {
+		detail = map[string]string{"path": r.URL.Path, "method": r.Method}
+	}
 	ev := store.AuditEvent{
 		Event:            store.EventAuthDenied,
 		ActorKind:        store.ActorMachine,
@@ -137,5 +132,5 @@ func (s *Server) auditDeniedDetail(r *http.Request, observed store.Identity, pre
 	if presentedToken != "" {
 		ev.TokenFingerprint = cred.Fingerprint(presentedToken)
 	}
-	s.audit(r.Context(), ev)
+	s.deny(w, r, ev, status, code, message)
 }

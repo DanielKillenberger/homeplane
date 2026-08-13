@@ -666,6 +666,55 @@ func TestHealthzReportsServerComponentsOnly(t *testing.T) {
 	})
 }
 
+// TestDenialsFailClosedWhenTheyCannotBeRecorded covers the other half of the
+// audit guarantee: a rejected call must never be answered as an ordinary denial
+// when the server could not write the record of it. Probing an endpoint with a
+// stolen or bogus credential is exactly what an operator reads the log to find.
+func TestDenialsFailClosedWhenTheyCannotBeRecorded(t *testing.T) {
+	st := newStore(t)
+	// Seed a machine directly, so a real credential exists to authenticate with.
+	ctx := context.Background()
+	if _, _, err := st.Enrol(ctx, machineA, "mac-a", "darwin", "hash-a",
+		func(store.Machine, bool) []store.AuditEvent { return nil }); err != nil {
+		t.Fatalf("seed enrol: %v", err)
+	}
+
+	srv, err := server.New(auditFailureStore{st},
+		fakeResolver{byAddr: map[string]store.Identity{addrA: machineA, addrB: machineB}},
+		health.New(health.Component{Name: health.ComponentStore, Probe: health.StoreProbe(st)}),
+		server.Config{Policy: policy.Default()})
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	h := &harness{t: t, st: st, handler: srv.Handler()}
+
+	cases := []struct {
+		name       string
+		addr       string
+		credential string
+	}{
+		{"unresolvable peer", addrC, "irrelevant"},
+		{"missing credential", addrA, ""},
+		{"invalid credential", addrA, "not-a-real-credential"},
+		{"unenrolled node", addrB, "not-a-real-credential"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := h.do(http.MethodGet, "/grants", tc.addr, tc.credential, nil)
+			if res.status != http.StatusServiceUnavailable {
+				t.Fatalf("status = %d, want 503 when the denial cannot be recorded (body %s)", res.status, res.raw)
+			}
+			if res.body["error"] != "unavailable" {
+				t.Errorf("error code = %v, want unavailable", res.body["error"])
+			}
+			// Whatever else happens, the call must not have been served.
+			if strings.Contains(res.raw, "grants") {
+				t.Errorf("a refused request returned grant data: %s", res.raw)
+			}
+		})
+	}
+}
+
 // TestMutationFailsWhenItsAuditRecordCannotBeWritten proves the fail-closed
 // posture end-to-end: a machine must not walk away holding a credential the
 // server has no record of issuing.

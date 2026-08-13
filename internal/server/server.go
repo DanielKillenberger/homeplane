@@ -114,6 +114,7 @@ const (
 	codeForbidden       errorCode = "forbidden"
 	codeNotFound        errorCode = "not_found"
 	codeInternal        errorCode = "internal"
+	codeUnavailable     errorCode = "unavailable"
 )
 
 type errorBody struct {
@@ -148,16 +149,34 @@ func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) err
 // which in this package means a rejected call. Events that accompany a mutation
 // are written by that mutation's transaction instead (see Store), so they can
 // never diverge from it.
-//
-// Here, and only here, a failed write is logged rather than propagated: the
-// request is already being denied, so nothing privileged happened that could go
-// unrecorded, and turning a broken log into a different error code would just
-// mislead the caller. The store failure surfaces through /healthz.
-func (s *Server) audit(ctx context.Context, e store.AuditEvent) {
+func (s *Server) audit(ctx context.Context, e store.AuditEvent) error {
 	if e.TS.IsZero() {
 		e.TS = time.Now().UTC()
 	}
 	if err := s.store.AppendAudit(ctx, e); err != nil {
-		s.log.Error("audit append failed", "event", e.Event, "error", err)
+		s.log.Error("audit append failed", "event", e.Event, "reason", e.Reason, "error", err)
+		return err
 	}
+	return nil
+}
+
+// deny records a rejected call and then refuses it.
+//
+// If the record cannot be written the caller gets 503 instead of the ordinary
+// 401/403. A rejected call is exactly the kind an operator most needs to see —
+// invalid tokens, replays from the wrong machine, over-policy requests — so
+// answering "denied" while quietly failing to write that down would leave an
+// attacker's probing invisible. The request is refused either way; only the
+// status differs, and it differs because the server genuinely cannot uphold its
+// own audit guarantee.
+func (s *Server) deny(w http.ResponseWriter, r *http.Request, e store.AuditEvent, status int, code errorCode, message string) {
+	if err := s.audit(r.Context(), e); err != nil {
+		s.writeError(w, http.StatusServiceUnavailable, codeUnavailable,
+			"request refused, but the refusal could not be recorded: audit log unavailable")
+		return
+	}
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+	}
+	s.writeError(w, status, code, message)
 }

@@ -165,7 +165,7 @@ func (s *Server) handleIssueGrant(w http.ResponseWriter, r *http.Request) {
 
 	capabilities, err := s.cfg.Policy.Resolve(harness, req.Capabilities)
 	if err != nil {
-		s.audit(r.Context(), store.AuditEvent{
+		s.deny(w, r, store.AuditEvent{
 			Event:            store.EventGrantIssued,
 			ActorKind:        store.ActorMachine,
 			ObservedNodeID:   c.Observed.NodeID,
@@ -177,8 +177,7 @@ func (s *Server) handleIssueGrant(w http.ResponseWriter, r *http.Request) {
 			Detail: map[string]string{
 				"requested_capabilities": truncate(strings.Join(req.Capabilities, ","), store.MaxDetailValueLen),
 			},
-		})
-		s.writeError(w, http.StatusForbidden, codeForbidden, err.Error())
+		}, http.StatusForbidden, codeForbidden, err.Error())
 		return
 	}
 
@@ -317,7 +316,7 @@ func (s *Server) handleRevokeGrant(w http.ResponseWriter, r *http.Request) {
 	g, err := s.store.GrantByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			s.audit(r.Context(), store.AuditEvent{
+			s.deny(w, r, store.AuditEvent{
 				Event:            store.EventGrantRevoked,
 				ActorKind:        store.ActorMachine,
 				ObservedNodeID:   c.Observed.NodeID,
@@ -326,8 +325,7 @@ func (s *Server) handleRevokeGrant(w http.ResponseWriter, r *http.Request) {
 				GrantID:          id,
 				Outcome:          store.OutcomeDenied,
 				Reason:           "unknown_grant",
-			})
-			s.writeError(w, http.StatusNotFound, codeNotFound, "unknown grant")
+			}, http.StatusNotFound, codeNotFound, "unknown grant")
 			return
 		}
 		s.log.Error("grant lookup", "error", err)
@@ -335,7 +333,7 @@ func (s *Server) handleRevokeGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if g.MachineID != c.Machine.ID {
-		s.audit(r.Context(), store.AuditEvent{
+		s.deny(w, r, store.AuditEvent{
 			Event:            store.EventGrantRevoked,
 			ActorKind:        store.ActorMachine,
 			ObservedNodeID:   c.Observed.NodeID,
@@ -345,8 +343,7 @@ func (s *Server) handleRevokeGrant(w http.ResponseWriter, r *http.Request) {
 			Harness:          g.Harness,
 			Outcome:          store.OutcomeDenied,
 			Reason:           "cross_machine_revocation",
-		})
-		s.writeError(w, http.StatusForbidden, codeForbidden, "grant belongs to another machine")
+		}, http.StatusForbidden, codeForbidden, "grant belongs to another machine")
 		return
 	}
 
