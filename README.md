@@ -19,6 +19,8 @@ Architecture, decisions, and scope live in `STRATEGY.md`,
 | `install.sh` | Installer: platform gating, checksummed artifacts, Node 22 provisioning |
 | `internal/store` | SQLite persistence (machines, grants, audit, encrypted secrets) |
 | `internal/server` | Enrolment, grant lifecycle, audit, health handlers |
+| `internal/server/connectors` | Connector manifest, policy engine, audit derivation, in-process broker |
+| `internal/server/edge` | Streamable-HTTP MCP edge: grant auth, WhoIs machine binding, gateway forwarding |
 | `internal/policy` | Server-side per-harness capability policy |
 | `internal/cred` | Credential minting, hashing, audit fingerprints |
 | `internal/secrets` | age encryption for provider secrets at rest |
@@ -48,7 +50,9 @@ homeplane-server serve \
   --hostname homeplane \
   --addr :443 \
   --connector-endpoint-url https://homeplane.<tailnet>.ts.net/mcp \
-  --gateway-health-url http://127.0.0.1:8080/health
+  --gateway-health-url http://127.0.0.1:8080/health \
+  --connector-manifest /etc/homeplane/connectors.json \
+  --gateway-mcp-url http://127.0.0.1:44022/mcp
 ```
 
 `GET /healthz` reports **server** components only (store, gateway runtime,
@@ -56,6 +60,38 @@ tsnet, credential store) and returns 503 with a component-level payload when
 any is degraded, so `curl -sf .../healthz` fails. Machine-side state
 (enrolment, vault, sync, GNO, harness config) belongs to `homeplane-agent
 status`.
+
+## The connector edge
+
+The control plane and the connector edge share one tsnet listener. The edge is
+served on `--connector-edge-path` (default `/mcp`) once **both**
+`--connector-manifest` and `--gateway-mcp-url` are given; supplying one without
+the other is refused rather than quietly serving no connectors.
+
+A harness points at the edge with the grant token it was issued:
+
+```
+harness  --(streamable HTTP + Authorization: Bearer <grant token>, tailnet)-->  edge
+edge     --(loopback HTTP, grant token stripped)-->  composed gateway (ToolHive)
+```
+
+What the edge adds, and nothing else (D6's adopted shape — see
+`docs/decisions/d6-gateway.md`):
+
+- **Grant authentication**, resolved from the store on every request. There is
+  no token cache, so a revoked grant stops working on the next call.
+- **Machine binding**: the WhoIs-observed tailnet node must be the node the
+  grant's machine enrolled from. A token replayed from another node is refused
+  and audited against the node that sent it, never against the token's owner.
+- **Manifest authorization and the authoritative audit row** for every
+  `tools/call`, via `internal/server/connectors` — unmapped and excluded tools
+  fail closed, and a call that cannot be recorded is not forwarded.
+
+`--gateway-mcp-url` must be a **loopback** address and is refused otherwise:
+the isolation guarantee is that the only route to the gateway from another
+tailnet node runs through the edge. Every other MCP frame (initialize,
+`tools/list`, the SSE stream, session teardown) is forwarded verbatim with the
+Homeplane grant token stripped — MCP semantics stay with the gateway.
 
 ## Installing a machine
 

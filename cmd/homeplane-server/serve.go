@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,6 +21,8 @@ import (
 	"github.com/DanielKillenberger/homeplane/internal/policy"
 	"github.com/DanielKillenberger/homeplane/internal/secrets"
 	"github.com/DanielKillenberger/homeplane/internal/server"
+	"github.com/DanielKillenberger/homeplane/internal/server/connectors"
+	"github.com/DanielKillenberger/homeplane/internal/server/edge"
 	"github.com/DanielKillenberger/homeplane/internal/store"
 	"github.com/DanielKillenberger/homeplane/internal/tsnetid"
 )
@@ -30,6 +33,9 @@ type serveFlags struct {
 	addr         string
 	endpointURL  string
 	gatewayURL   string
+	gatewayMCP   string
+	manifestPath string
+	edgePath     string
 	gatewayProbe time.Duration
 }
 
@@ -41,6 +47,9 @@ func runServe(args []string) error {
 	fs.StringVar(&f.addr, "addr", ":443", "address to listen on WITHIN the tailnet")
 	fs.StringVar(&f.endpointURL, "connector-endpoint-url", "", "connector edge URL handed to harnesses with each grant")
 	fs.StringVar(&f.gatewayURL, "gateway-health-url", "", "loopback health URL of the composed gateway runtime (ToolHive)")
+	fs.StringVar(&f.gatewayMCP, "gateway-mcp-url", "", "LOOPBACK MCP endpoint of the composed gateway, e.g. http://127.0.0.1:44022/mcp")
+	fs.StringVar(&f.manifestPath, "connector-manifest", "", "path to the connector manifest the edge authorizes against")
+	fs.StringVar(&f.edgePath, "connector-edge-path", defaultEdgePath, "path the connector edge is served on")
 	fs.DurationVar(&f.gatewayProbe, "gateway-probe-timeout", 2*time.Second, "timeout for the gateway health probe")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "homeplane-server serve — run the control plane over tsnet\n\n")
@@ -50,9 +59,15 @@ func runServe(args []string) error {
 credential store) and returns 503 with a component-level payload when any is
 degraded. Machine-side state belongs to `+"`homeplane-agent status`"+`.
 
-Until the connector edge and gateway are wired (tasks .16/.15), leaving
--gateway-health-url empty makes the gateway_runtime component report degraded.
-That is intentional: an unwired component must never render as healthy.`)
+Leaving -gateway-health-url empty makes the gateway_runtime component report
+degraded. That is intentional: an unwired component must never render as
+healthy.
+
+The connector edge is served on -connector-edge-path (default `+defaultEdgePath+`) once
+BOTH -connector-manifest and -gateway-mcp-url are given. The gateway MCP URL
+must be a LOOPBACK address: the isolation guarantee is that the only route to
+the gateway from another tailnet node runs through the edge, where the grant
+token, the WhoIs machine binding and the manifest apply.`)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -108,17 +123,30 @@ That is intentional: an unwired component must never render as healthy.`)
 		return err
 	}
 
+	handler, edgeWired, err := composeHandler(srv, st, tsnetid.New(localClient), f, log)
+	if err != nil {
+		return err
+	}
+
 	ln, err := ts.Listen("tcp", f.addr)
 	if err != nil {
 		return fmt.Errorf("tsnet listen %s: %w", f.addr, err)
 	}
 	httpSrv := &http.Server{
-		Handler:           srv.Handler(),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
+	}
+	if edgeWired {
+		// The connector edge carries long-lived streamable-HTTP responses (the
+		// MCP SSE stream), which a whole-response write deadline would cut mid
+		// session. Header and body reads stay bounded; only the write deadline
+		// is lifted, and only because a stream shares this listener.
+		httpSrv.WriteTimeout = 0
+		httpSrv.ReadTimeout = 0
 	}
 
 	errCh := make(chan error, 1)
@@ -138,6 +166,75 @@ That is intentional: an unwired component must never render as healthy.`)
 		defer cancel()
 		return httpSrv.Shutdown(shutdownCtx)
 	}
+}
+
+// defaultEdgePath is where the connector edge is served. It is the path a
+// grant's endpoint_url points a harness at.
+const defaultEdgePath = "/mcp"
+
+// composeHandler puts the control plane and (when configured) the connector
+// edge behind one tsnet listener, so both are reached over the same tailnet
+// identity the WhoIs resolver reports.
+//
+// The edge is wired only when BOTH the manifest and the gateway's loopback MCP
+// endpoint are given. Giving one without the other is an error rather than a
+// quiet fallback: an operator who configured half an edge would otherwise get a
+// server that looks healthy and serves no connectors at all.
+func composeHandler(srv *server.Server, st *store.SQLite, resolver edge.IdentityResolver,
+	f serveFlags, log *slog.Logger) (http.Handler, bool, error) {
+	control := srv.Handler()
+
+	switch {
+	case f.manifestPath == "" && f.gatewayMCP == "":
+		log.Warn("connector edge not wired; control plane only",
+			"hint", "pass -connector-manifest and -gateway-mcp-url to serve connectors")
+		return control, false, nil
+	case f.manifestPath == "":
+		return nil, false, fmt.Errorf("-gateway-mcp-url was given without -connector-manifest")
+	case f.gatewayMCP == "":
+		return nil, false, fmt.Errorf("-connector-manifest was given without -gateway-mcp-url")
+	}
+
+	manifest, err := connectors.LoadFile(f.manifestPath)
+	if err != nil {
+		return nil, false, fmt.Errorf("connector manifest: %w", err)
+	}
+	engine, err := connectors.Register(manifest)
+	if err != nil {
+		return nil, false, fmt.Errorf("connector manifest: %w", err)
+	}
+	upstream, err := edge.ParseUpstream(f.gatewayMCP)
+	if err != nil {
+		return nil, false, err
+	}
+
+	connectorEdge, err := edge.New(edge.Config{
+		Store:    st,
+		Identity: resolver,
+		Broker:   connectors.NewBroker(engine, edge.NewHTTPRuntime(upstream, nil), st),
+		Upstream: upstream,
+		Logger:   log,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	path := f.edgePath
+	if path == "" {
+		path = defaultEdgePath
+	}
+	if !strings.HasPrefix(path, "/") {
+		return nil, false, fmt.Errorf("-connector-edge-path %q must start with /", path)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/", control)
+	mux.Handle(path, connectorEdge.Handler())
+	mux.Handle(strings.TrimSuffix(path, "/")+"/", connectorEdge.Handler())
+
+	log.Info("connector edge wired", "path", path, "gateway", upstream.String(),
+		"providers", strings.Join(engine.Providers(), ","))
+	return mux, true, nil
 }
 
 // tsnetProbe reports whether the embedded tailnet node is actually up. Without
