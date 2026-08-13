@@ -17,9 +17,18 @@
   binding remain to be exercised on the real server (task .16/.15).
 - Linux-headless behavior for secrets (gate 4) was verified from ToolHive source AND empirically in
   a headless Debian bookworm (arm64) container running the official `toolhive_0.42.1_linux_arm64`
-  release — no D-Bus, no desktop (evidence in gate 4). The Linux *workload* runtime (Docker on the
-  Linux host) was not exercised (needs Docker-in-Docker or a VM); it is ToolHive's primary platform
-  and is exercised for real by task .15 (server deployment).
+  release — no D-Bus, no desktop (evidence in gate 4). The Linux *workload* runtime was ALSO
+  exercised empirically: inside a headless Linux Docker-in-Docker environment (docker:27-dind,
+  arm64), the same official release ran `thv run fetch` end-to-end — image pulled, container
+  supervised, streamable-HTTP proxy up on `http://127.0.0.1:52295/mcp` (loopback-bound), and the
+  MCP initialize handshake (protocol 2025-06-18) answered:
+
+  ```
+  fetch  ghcr.io/stackloklabs/gofetch/server:1.0.5  running  http://127.0.0.1:52295/mcp  52295
+  data: {"jsonrpc":"2.0","id":1,"result":{...,"protocolVersion":"2025-06-18","serverInfo":{"name":"fetch-server",...}}}
+  ```
+
+  The real Linux server deployment (systemd, real Docker daemon, tailnet) is still task .15's job.
 - Scratch code: `spike/edge-proxy/` (disposable prototype, ~160 lines Go). Not production code.
 
 ## Adopted shape
@@ -323,9 +332,11 @@ Contracts; the composed gateway is NOT in the OAuth-dance loop.**
    (unmapped-tool denial by parsing `tools/call` at the edge) + SQLite-backed grant lookup +
    AuditEvent writes. Keep the token-strip behavior. Keep ToolHive workloads loopback-bound
    (default) — verify with the direct-access-fails test from a second node (spike limitation).
-2. **.15 (deployment):** ToolHive CLI on the Linux server requires Docker/Podman. `thv run`
-   `--enable-audit` on every workload for supplementary diagnostics. If ToolHive secrets end up
-   used at all, document the per-boot keyring seeding or use the `environment` provider.
+2. **.15 (deployment):** ToolHive CLI on the Linux server requires Docker/Podman (the CLI + Docker
+   runtime path is validated headless in DinD above; the real server adds systemd + tailnet).
+   `thv run --enable-audit` on every workload for supplementary diagnostics. If ToolHive secrets
+   end up used at all, document the per-boot keyring seeding or use the `environment` provider.
+   Owns the direct-access-fails test from a second tailnet node.
 3. **.12 (Drive) — carries gate 5's blocking obligation:** build the pinned patched
    workspace-mcp ref (v1.24.0 + read-tools→`drive_file` scope remap), run the live six-operation
    proof with a `drive.file`-only credential, record file IDs + trash/cleanup evidence; use
@@ -337,6 +348,25 @@ Contracts; the composed gateway is NOT in the OAuth-dance loop.**
    `--header "Authorization: Bearer …"` works on 2.1.227.
 5. **Protocol hygiene:** consider `--strict-protocol-validation` on workloads once the supported
    client matrix is pinned.
+
+## Review disposition (codex impl-review, 2026-08-13)
+
+Two review rounds (gpt-5.6-sol @ xhigh) returned **NEEDS_HUMAN** — the task's own designed
+terminal for an adoption whose gates cannot all complete in the spike environment. Findings the
+spike RESOLVED in-round: manifest authorization / unmapped-tool denial now demonstrated live
+(gate 1), headless-Linux secrets validated empirically (gate 4), Linux workload runtime validated
+in DinD (environment note), gate 5 honestly downgraded to CONDITIONAL with a pinned single
+resolution and version pin. Findings that REMAIN and are Daniel-gated / environment-gated:
+
+1. **Cross-node + tsnet WhoIs proof (gate 1):** requires a second tailnet node and the real tsnet
+   edge — neither exists in this environment (conductor-acknowledged limitation). Owner: .16/.15.
+2. **Live `drive.file`-only six-operation Drive run (gate 5):** requires a Google OAuth app +
+   Daniel's browser consent — credentials do not exist yet by design (server-side custody lands in
+   .8/.12). Owner: .12, blocking obligation recorded above.
+
+Human decision requested: accept D6 = GO with these two named residuals (proceed to Wave 2, the
+residuals blocking .16/.15/.12 respectively), or hold D6 open until a second node and Google OAuth
+app are provisioned and re-run the spike's missing legs first.
 
 ## Fallback ladder disposition
 
