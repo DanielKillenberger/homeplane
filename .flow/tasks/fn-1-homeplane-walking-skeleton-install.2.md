@@ -37,9 +37,12 @@ Greenfield Go scaffold and the control-plane core: tsnet-embedded server with en
 - [ ] Emits versioned evidence artifact `test/evidence/<task-id>.json` (commit SHA, platform, commands run, assertions, timestamps)
 
 ## Done summary
-TBD
+Greenfield Go scaffold plus the homeplane-server control plane: tsnet-embedded HTTP server with auto-approved tailnet enrolment (re-enrol = identity-preserving credential rotation, old credential atomically invalidated), a single-phase superseding grant lifecycle bound to server-side per-harness capability policy, idempotent revocation, non-secret GET /grants scoped to the calling machine, server-component-only /healthz (503 + named degraded component), and a server-local operator admin CLI (audit, revoke-grant, secret import/init-key) that is never exposed over HTTP.
 
+Authorization anchors on WhoIs-observed node identity plus a hashed machine credential: a credential replayed from another node is 403 machine_mismatch, cross-machine grant issuance is structurally impossible (no caller-supplied machine_id), and cross-machine revocation is 403. The audit log is fail-closed in both directions — lifecycle mutations commit with their audit rows in one transaction (a failed audit write rolls the mutation back), and a rejected call that cannot be recorded returns 503 instead of a plain 401/403 — with metadata-only rows enforced by the schema and an allow-listed detail vocabulary, splitting observed from authenticated identity and fingerprinting rejected tokens instead of misattributing them. Provider secrets are age-encrypted at rest (D3) under an atomically published 0600 key.
+
+87 assertions green across build/vet/test; codex (gpt-5.6-sol @ xhigh) SHIP after three rounds closing eight findings, including transactional audit, fixed-width timestamps, newest-window audit queries, and 0600 WAL/SHM sidecars. Evidence artifact at test/evidence/fn-1-homeplane-walking-skeleton-install.2.json.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: e5a642057a6bee546fbabfddc75b0833dbab8794, 47ff5e472e13186bd411e67d104039cd917682a1, 539e2ff2a74604ba01b1d4037487e0701f87d71d, 6825bd485508abd3f11efc68e91df319cfff80c8, 94179bbfa6f06108ba05cceea47f9637ce18bd49
+- Tests: go build ./..., go vet ./..., go test ./... -count=1 (7 packages ok, 87/87 assertions), scripts/emit-evidence.sh fn-1-homeplane-walking-skeleton-install.2 -> test/evidence/fn-1-homeplane-walking-skeleton-install.2.json (commit 6825bd4, working_tree_dirty=false), impl-review codex:gpt-5.6-sol:xhigh -> SHIP (3 rounds; 8 findings all verified fixed; receipt /tmp/impl-review-receipt-fn-1-homeplane-walking-skeleton-install.2.json), green receipt: .flow/tmp/green-receipts/94179bbf-unittest.json
 - PRs:
