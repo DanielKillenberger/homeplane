@@ -3,12 +3,14 @@ package agent_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -345,6 +347,121 @@ func TestReEnrolReusesTheRecordedServerURL(t *testing.T) {
 	}
 	if outcome.ServerURL != cp.url {
 		t.Errorf("server url = %q, want %q", outcome.ServerURL, cp.url)
+	}
+}
+
+// --- concurrent rotation ----------------------------------------------------
+
+func TestPersistingAStaleEnrolmentResponseIsRefused(t *testing.T) {
+	cp := newControlPlane(t)
+	dir := stateDir(t)
+
+	client, err := agent.NewClient(cp.url, 5*time.Second)
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	ctx := context.Background()
+
+	// Two rotations, oldest first — exactly what two racing `enrol` processes
+	// obtain from the server.
+	older, err := client.Enrol(ctx, "test-machine", "darwin")
+	if err != nil {
+		t.Fatalf("first enrol: %v", err)
+	}
+	newer, err := client.Enrol(ctx, "test-machine", "darwin")
+	if err != nil {
+		t.Fatalf("second enrol: %v", err)
+	}
+	if newer.CredentialVersion <= older.CredentialVersion {
+		t.Fatalf("precondition: versions did not advance (%d -> %d)", older.CredentialVersion, newer.CredentialVersion)
+	}
+
+	id := agent.EnrolIdentity{ServerURL: cp.url, MachineName: "test-machine", OS: "darwin"}
+	if _, err := agent.PersistEnrolment(dir, newer, id); err != nil {
+		t.Fatalf("persist newer: %v", err)
+	}
+
+	// The loser lands second. It must be refused, not written.
+	_, err = agent.PersistEnrolment(dir, older, id)
+	if err == nil {
+		t.Fatal("persisting a superseded credential succeeded")
+	}
+	if !errors.Is(err, agent.ErrStaleEnrolment) {
+		t.Errorf("error = %v, want ErrStaleEnrolment", err)
+	}
+
+	stored := readCredential(t, dir)
+	if stored != newer.MachineCredential {
+		t.Error("the stale response overwrote the live credential")
+	}
+	state, _, err := agent.PeekState(dir)
+	if err != nil {
+		t.Fatalf("peek state: %v", err)
+	}
+	if state.CredentialVersion != newer.CredentialVersion {
+		t.Errorf("stored credential version = %d, want %d", state.CredentialVersion, newer.CredentialVersion)
+	}
+	if _, err := client.WithCredential(stored).ListGrants(ctx); err != nil {
+		t.Errorf("the stored credential does not authenticate: %v", err)
+	}
+}
+
+func TestConcurrentEnrolmentsLeaveTheMachineHoldingALiveCredential(t *testing.T) {
+	cp := newControlPlane(t)
+	dir := stateDir(t)
+	enrol(t, dir, cp.url)
+
+	const racers = 8
+	var wg sync.WaitGroup
+	errs := make([]error, racers)
+	for i := range racers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := agent.Enrol(context.Background(), agent.EnrolOptions{
+				StateDir:    dir,
+				ServerURL:   cp.url,
+				MachineName: "test-machine",
+				Timeout:     10 * time.Second,
+			})
+			errs[i] = err
+		}(i)
+	}
+	wg.Wait()
+
+	succeeded := 0
+	for i, err := range errs {
+		switch {
+		case err == nil:
+			succeeded++
+		case errors.Is(err, agent.ErrStaleEnrolment):
+			// The expected way to lose the race: the response was discarded
+			// rather than written over a newer credential.
+		default:
+			t.Errorf("racer %d failed unexpectedly: %v", i, err)
+		}
+	}
+	if succeeded == 0 {
+		t.Fatal("no concurrent enrolment succeeded")
+	}
+
+	// The property that matters: whatever landed, the machine can still talk to
+	// the server. Persisting a superseded credential would break exactly this.
+	client, err := agent.NewClient(cp.url, 5*time.Second)
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	stored := readCredential(t, dir)
+	if _, err := client.WithCredential(stored).ListGrants(context.Background()); err != nil {
+		t.Errorf("after %d concurrent enrolments the stored credential is dead: %v", racers, err)
+	}
+
+	state, _, err := agent.PeekState(dir)
+	if err != nil {
+		t.Fatalf("peek state: %v", err)
+	}
+	if state.MachineID == "" || state.CredentialVersion == 0 {
+		t.Errorf("state is inconsistent after the race: %+v", state)
 	}
 }
 

@@ -52,6 +52,9 @@ func TestSaveEnrolmentLeavesNoTemporaryFilesBehind(t *testing.T) {
 	}
 	var names []string
 	for _, e := range entries {
+		if e.Name() == ".lock" { // the enrolment lock is expected bookkeeping
+			continue
+		}
 		names = append(names, e.Name())
 		if strings.Contains(e.Name(), ".tmp-") {
 			t.Errorf("atomic write left a temporary file behind: %s", e.Name())

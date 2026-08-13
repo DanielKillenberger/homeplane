@@ -21,6 +21,7 @@ The server-brokered OAuth credential flow end to end against the spec's state ma
 - `docs/decisions/d6-gateway.md` — D3/D10 outcomes (from .1)
 - `internal/agent/` CLI plumbing (from .4); `internal/server/` from .2
 - https://developers.google.com/identity/protocols/oauth2/native-app — loopback flow requirements
+- `.flow/memory` SQLite-trap entries from .2 (pooled-PRAGMA, RFC3339Nano ordering, WAL sidecar perms) — the credential-flow state machine writes to the same store <!-- Updated by plan-sync: fn-1.2 recorded SQLite pitfalls downstream store-touching tasks should read first -->
 
 ## Acceptance
 - [ ] Full flow against a test OAuth provider: completed credential lands server-side only; agent filesystem free of provider tokens

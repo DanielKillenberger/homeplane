@@ -20,6 +20,7 @@ The network half of the connector plane (split from .3 per plan review): the str
 **Required:**
 - `docs/decisions/d6-gateway.md` — adopted shape + client-compat evidence (from .1)
 - `internal/server/connectors/` policy/audit engine (from .3); grant interfaces (from .2)
+- `.flow/memory` SQLite-trap entries from .2 (pooled-PRAGMA, RFC3339Nano ordering, WAL sidecar perms) — the edge appends audit rows to the same store via the .3 extraction <!-- Updated by plan-sync: fn-1.2 recorded SQLite pitfalls downstream store-touching tasks should read first -->
 
 ## Acceptance
 - [ ] MCP call with valid grant traverses client → edge → gateway → stub tool over streamable HTTP from another machine

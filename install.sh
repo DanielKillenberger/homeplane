@@ -1,25 +1,29 @@
 #!/usr/bin/env bash
 # install.sh — install the Homeplane agent onto this machine.
 #
-# The installer's contract, in order:
+# The installer is split into a VALIDATE phase and a COMMIT phase, and it never
+# interleaves them:
 #
-#   1. Decide whether this machine is SUPPORTED (OS, architecture, init system)
-#      and refuse clearly if it is not — before touching the filesystem.
-#   2. Verify every artifact against a checksum manifest. A mismatch aborts and
-#      leaves nothing behind: a tampered or truncated download must never become
-#      a half-installed agent.
-#   3. Provision the Node 22 prerequisite DETERMINISTICALLY (a checksummed
-#      vendored tarball, or a distro package explicitly opted into). A supported
-#      machine that cannot get Node is an installation failure, not a degraded
-#      success.
-#   4. Only then place the binary — atomically, and idempotently, so re-running
-#      the installer refreshes the agent without disturbing enrolment state.
+#   validate  1. Is this machine supported (OS, architecture, init system)?
+#             2. Does every staged artifact match the checksum manifest?
+#             3. Does the agent binary actually run here?
+#             4. Can the Node 22 prerequisite be satisfied, and does the
+#                extracted runtime run and report >= 22?
+#   commit    5. Move the validated Node runtime into the prefix, keeping the
+#             6. previous one aside, then place the agent atomically.
+#
+# Nothing under the install prefix is touched until every check above has
+# passed, and the previous Node runtime is retained until the WHOLE install
+# succeeds — a failure at any point restores it. A checksum-valid but malformed
+# release therefore cannot destroy a working machine, and it cannot leave a
+# machine with a new runtime and no agent.
 #
 # Supported platforms: macOS (launchd) and systemd-based Linux with
-# `systemctl --user`. Everything else is rejected in step 1.
+# `systemctl --user`. Everything else is rejected before step 2.
 #
 # Artifacts are consumed from a locally staged, checksummed release-form
-# directory (spec Boundaries: the published CI release pipeline is deferred).
+# directory produced by scripts/stage-release.sh (spec Boundaries: the
+# published CI release pipeline is deferred).
 #
 # Usage:
 #   ./install.sh [--stage-dir DIR] [--prefix DIR] [--help]
@@ -41,6 +45,7 @@ readonly PROGRAM="install.sh"
 
 # Node prerequisite. Pinning the exact version is what makes provisioning
 # deterministic: two machines installed a month apart get the same runtime.
+# scripts/node-pinned.sha256 must pin this same version (asserted by the tests).
 readonly NODE_MIN_MAJOR=22
 readonly NODE_VERSION="${HOMEPLANE_NODE_VERSION:-22.11.0}"
 
@@ -57,7 +62,7 @@ die() {
 info() { echo "$PROGRAM: $*"; }
 
 usage() {
-  sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # --- argument parsing --------------------------------------------------------
@@ -79,6 +84,35 @@ done
 
 readonly BIN_DIR="$PREFIX/bin"
 readonly NODE_DIR="$PREFIX/node"
+
+# --- failure handling --------------------------------------------------------
+#
+# INSTALL_COMPLETE flips to 1 only when the whole install has landed. Until
+# then, exiting for ANY reason (a `die`, a failed command under `set -e`, a
+# signal) rolls the prefix back to the runtime it had on entry.
+
+TMP_ROOT=""
+INSTALL_COMPLETE=0
+NODE_RESTORE_NEEDED=0
+NODE_DIR_CREATED=0
+
+on_exit() {
+  if [[ $INSTALL_COMPLETE -eq 0 && $NODE_RESTORE_NEEDED -eq 1 && -d "$NODE_DIR.previous" ]]; then
+    rm -rf "$NODE_DIR"
+    mv "$NODE_DIR.previous" "$NODE_DIR"
+    echo "$PROGRAM: install failed; restored the previous node runtime at $NODE_DIR" >&2
+  elif [[ $INSTALL_COMPLETE -eq 0 && $NODE_DIR_CREATED -eq 1 ]]; then
+    # There was no previous runtime to restore, so the honest rollback is to
+    # remove the one this run was in the middle of placing.
+    rm -rf "$NODE_DIR"
+    echo "$PROGRAM: install failed; removed the partially placed node runtime" >&2
+  fi
+  if [[ -n "$TMP_ROOT" && -d "$TMP_ROOT" ]]; then
+    rm -rf "$TMP_ROOT"
+  fi
+  return 0
+}
+trap on_exit EXIT
 
 # --- step 1: platform support ------------------------------------------------
 
@@ -188,7 +222,30 @@ Nothing has been installed. The staged artifact is corrupt or has been tampered 
   info "verified $name ($got)"
 }
 
-# --- step 3: Node 22 ---------------------------------------------------------
+# --- step 3: validate the agent binary ---------------------------------------
+
+# VALIDATED_AGENT is the path of an agent binary that has been checksum-verified
+# AND observed to run on this machine. Only this file is ever installed.
+VALIDATED_AGENT=""
+
+prepare_agent() {
+  local artifact="$1"
+  verify_artifact "$artifact"
+
+  local candidate="$TMP_ROOT/homeplane-agent"
+  cp "$STAGE_DIR/$artifact" "$candidate"
+  chmod 0755 "$candidate"
+  # A checksum only proves the bytes are the intended ones; running the binary
+  # is what catches the intended bytes for the wrong platform. This happens
+  # entirely outside the prefix, so a wrong-platform artifact can neither
+  # replace a working agent nor leave one behind.
+  if ! "$candidate" version >/dev/null 2>&1; then
+    die "the staged artifact '$artifact' did not run on this machine. It is checksum-valid, so it is probably built for a different platform. Nothing has been changed."
+  fi
+  VALIDATED_AGENT="$candidate"
+}
+
+# --- step 4: validate the Node 22 prerequisite -------------------------------
 
 node_major() {
   local bin="$1" version
@@ -222,15 +279,24 @@ node_archive_name() {
   echo "node-v${NODE_VERSION}-${node_os}-${node_arch}.tar.gz"
 }
 
-# provision_node installs the Node prerequisite, or fails the installation.
+# NODE_ACTION is decided during validation and carried out during commit.
+#   none      a usable Node is already installed
+#   vendored  VALIDATED_NODE holds an extracted, runnable Node >= 22
+#   package   the distro package manager will be asked (opted into explicitly)
+NODE_ACTION="none"
+VALIDATED_NODE=""
+
+# prepare_node decides how the prerequisite will be met and PROVES it, without
+# writing anything into the prefix.
 #
 # There is deliberately no "carry on without Node" branch: the vault sync and
 # GNO this machine exists to run are Node programs, and an installer that
 # quietly produced a machine which cannot run them would be reporting success
 # for a machine that does not work.
-provision_node() {
+prepare_node() {
   local os="$1" arch="$2"
   if have_node_22; then
+    NODE_ACTION="none"
     info "node $NODE_MIN_MAJOR+ already present"
     return
   fi
@@ -239,52 +305,39 @@ provision_node() {
   archive="$(node_archive_name "$os" "$arch")"
   if [[ -f "$STAGE_DIR/$archive" ]]; then
     verify_artifact "$archive"
-    local tmp
-    tmp="$(mktemp -d "${TMPDIR:-/tmp}/homeplane-node.XXXXXX")"
-    # Extract into a temporary root first: a failed or partial extraction never
+    local extract_root="$TMP_ROOT/node-extract"
+    mkdir -p "$extract_root"
+    # Extract into a temporary root: a failed or partial extraction never
     # becomes the machine's Node installation.
-    tar -xzf "$STAGE_DIR/$archive" -C "$tmp" || die "could not extract $archive"
+    tar -xzf "$STAGE_DIR/$archive" -C "$extract_root" || die "could not extract $archive"
     local extracted
-    extracted="$(find "$tmp" -maxdepth 1 -mindepth 1 -type d | head -n 1)"
-    [[ -n "$extracted" && -x "$extracted/bin/node" ]] || die "$archive does not contain bin/node"
-    mkdir -p "$PREFIX"
-    rm -rf "$NODE_DIR.incoming" "$NODE_DIR.previous"
-    mv "$extracted" "$NODE_DIR.incoming"
-    # Move the previous runtime aside rather than deleting it first, so a failed
-    # swap leaves a working Node in place instead of no Node at all.
-    if [[ -d "$NODE_DIR" ]]; then
-      mv "$NODE_DIR" "$NODE_DIR.previous"
-    fi
-    mv "$NODE_DIR.incoming" "$NODE_DIR"
-    rm -rf "$NODE_DIR.previous" "$tmp"
+    extracted="$(find "$extract_root" -maxdepth 1 -mindepth 1 -type d | head -n 1)"
+    [[ -n "$extracted" && -x "$extracted/bin/node" ]] || die "$archive does not contain bin/node; nothing has been changed"
 
     local major
-    major="$(node_major "$NODE_DIR/bin/node")" || die "provisioned node is not runnable"
-    [[ "$major" -ge "$NODE_MIN_MAJOR" ]] || die "vendored node reports major version $major, need >= $NODE_MIN_MAJOR"
-    mkdir -p "$BIN_DIR"
-    ln -sf "$NODE_DIR/bin/node" "$BIN_DIR/node"
-    if [[ -x "$NODE_DIR/bin/npm" ]]; then
-      ln -sf "$NODE_DIR/bin/npm" "$BIN_DIR/npm"
-    fi
-    info "provisioned node v$NODE_VERSION from the staged tarball into $NODE_DIR"
+    major="$(node_major "$extracted/bin/node")" \
+      || die "the node runtime in $archive did not run on this machine; nothing has been changed"
+    [[ "$major" -ge "$NODE_MIN_MAJOR" ]] \
+      || die "the node runtime in $archive reports major version $major, need >= $NODE_MIN_MAJOR; nothing has been changed"
+
+    NODE_ACTION="vendored"
+    VALIDATED_NODE="$extracted"
     return
   fi
 
   if [[ "${HOMEPLANE_NODE_PACKAGE:-0}" == "1" ]]; then
-    provision_node_package "$os"
-    have_node_22 || die "the distro package did not produce node >= $NODE_MIN_MAJOR"
-    info "provisioned node from the distribution package manager"
+    NODE_ACTION="package"
     return
   fi
 
   die "node >= $NODE_MIN_MAJOR is required and was not found.
-Stage the checksummed tarball '$archive' in $STAGE_DIR (with its $MANIFEST_NAME entry), or re-run with HOMEPLANE_NODE_PACKAGE=1 to install it from this distribution's package manager.
+Stage the checksummed tarball '$archive' in $STAGE_DIR (scripts/stage-release.sh does this), or re-run with HOMEPLANE_NODE_PACKAGE=1 to install it from this distribution's package manager.
 Nothing has been installed."
 }
 
 provision_node_package() {
   local os="$1"
-  [[ "$os" == "linux" ]] || die "package-manager Node provisioning is only supported on Linux"
+  [[ "$os" == "linux" ]] || die "package-manager Node provisioning is only supported on Linux; stage the checksummed node tarball instead"
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update && sudo apt-get install -y nodejs
   elif command -v dnf >/dev/null 2>&1; then
@@ -294,23 +347,44 @@ provision_node_package() {
   fi
 }
 
-# --- step 4: place the agent -------------------------------------------------
+# --- step 5/6: commit --------------------------------------------------------
 
-install_agent() {
-  local artifact="$1"
+commit_node() {
+  local os="$1"
+  case "$NODE_ACTION" in
+    none) return ;;
+    package)
+      provision_node_package "$os"
+      have_node_22 || die "the distro package did not produce node >= $NODE_MIN_MAJOR"
+      info "provisioned node from the distribution package manager"
+      return ;;
+  esac
+
+  mkdir -p "$PREFIX" "$BIN_DIR"
+  rm -rf "$NODE_DIR.previous"
+  if [[ -d "$NODE_DIR" ]]; then
+    # Move the previous runtime aside rather than deleting it. It is not removed
+    # until the ENTIRE install has succeeded, and on_exit puts it back if
+    # anything after this point fails.
+    mv "$NODE_DIR" "$NODE_DIR.previous"
+    NODE_RESTORE_NEEDED=1
+  else
+    NODE_DIR_CREATED=1
+  fi
+  mv "$VALIDATED_NODE" "$NODE_DIR"
+  ln -sf "$NODE_DIR/bin/node" "$BIN_DIR/node"
+  if [[ -x "$NODE_DIR/bin/npm" ]]; then
+    ln -sf "$NODE_DIR/bin/npm" "$BIN_DIR/npm"
+  fi
+  info "provisioned node v$NODE_VERSION from the staged tarball into $NODE_DIR"
+}
+
+commit_agent() {
   mkdir -p "$BIN_DIR"
   local target="$BIN_DIR/homeplane-agent"
   local staging="$target.incoming.$$"
-  cp "$STAGE_DIR/$artifact" "$staging"
+  cp "$VALIDATED_AGENT" "$staging"
   chmod 0755 "$staging"
-  # Verify the artifact RUNS on this machine before it becomes the installed
-  # agent. A checksum only proves the bytes are the intended ones; this catches
-  # the intended bytes for the wrong platform. Failing here leaves any
-  # previously installed agent untouched.
-  if ! "$staging" version >/dev/null 2>&1; then
-    rm -f "$staging"
-    die "the staged artifact '$artifact' did not run on this machine. It is checksum-valid, so it is probably built for a different platform. Nothing has been changed."
-  fi
   # A rename is atomic, so a concurrent `homeplane-agent status` either sees the
   # old binary or the new one, never a half-copied file. This is also what makes
   # a re-run a refresh rather than a second installation.
@@ -331,11 +405,19 @@ main() {
   [[ -d "$STAGE_DIR" ]] || die "staged artifact directory $STAGE_DIR does not exist (pass --stage-dir)"
   [[ -f "$STAGE_DIR/$MANIFEST_NAME" ]] || die "no $MANIFEST_NAME in $STAGE_DIR; refusing to install unverified artifacts"
 
-  artifact="homeplane-agent-${os}-${arch}"
-  verify_artifact "$artifact"
+  TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/homeplane-install.XXXXXX")"
 
-  provision_node "$os" "$arch"
-  install_agent "$artifact"
+  # Validate everything first...
+  artifact="homeplane-agent-${os}-${arch}"
+  prepare_agent "$artifact"
+  prepare_node "$os" "$arch"
+
+  # ...then commit, newest-runtime-first, with the old one still recoverable.
+  commit_node "$os"
+  commit_agent
+
+  INSTALL_COMPLETE=1
+  rm -rf "$NODE_DIR.previous"
 
   cat <<EOF
 

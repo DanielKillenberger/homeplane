@@ -95,30 +95,89 @@ func Enrol(ctx context.Context, opts EnrolOptions) (EnrolOutcome, error) {
 		return EnrolOutcome{}, err
 	}
 
+	return PersistEnrolment(dir, res, EnrolIdentity{
+		ServerURL:   client.BaseURL(),
+		MachineName: name,
+		OS:          osName,
+	})
+}
+
+// EnrolIdentity is the non-secret metadata recorded alongside an enrolment
+// response.
+type EnrolIdentity struct {
+	ServerURL   string
+	MachineName string
+	OS          string
+}
+
+// ErrStaleEnrolment means the response being persisted is older than the
+// credential already on disk, so writing it would leave this machine holding a
+// credential the server has already superseded.
+var ErrStaleEnrolment = errors.New("agent: enrolment response is older than the stored credential")
+
+// PersistEnrolment writes an enrolment response to the state directory.
+//
+// It is separated from the network call, and exported, because this is the step
+// that has to be safe against CONCURRENCY. Two enrolments racing (a retry and
+// its predecessor, a human and a scheduled job) each rotate the server-side
+// credential, and the server only honours the newest. If the loser's older
+// response landed last, the machine would be left holding a dead credential and
+// would only discover it at the next authenticated call.
+//
+// Two mechanisms, because one is not enough:
+//
+//   - The state directory is locked, so the read-modify-write of state.json and
+//     machine.cred cannot interleave with another process's.
+//   - Under that lock, a response whose credential version is not NEWER than
+//     the stored one for the same machine is refused outright. This is what
+//     protects the case a lock cannot: a filesystem that ignores advisory
+//     locks, or two responses ordered differently than they were issued.
+func PersistEnrolment(dir string, res EnrolResult, id EnrolIdentity) (EnrolOutcome, error) {
+	if res.MachineID == "" || res.MachineCredential == "" {
+		return EnrolOutcome{}, errors.New("agent: enrolment response is missing machine identity or credential")
+	}
+
 	store, err := Open(dir)
 	if err != nil {
 		return EnrolOutcome{}, err
 	}
-	// Load through the store so unrecognised keys written by later tasks are
-	// carried across the rewrite.
-	state, _, err := store.Load()
+	release, err := store.Lock()
+	if err != nil {
+		return EnrolOutcome{}, err
+	}
+	defer release()
+
+	// Load INSIDE the lock: anything read before it could already be stale, and
+	// this is also what carries unrecognised keys written by later tasks across
+	// the rewrite.
+	state, hadState, err := store.Load()
 	if err != nil {
 		return EnrolOutcome{}, err
 	}
 
+	if hadState && state.MachineID == res.MachineID && state.CredentialVersion >= res.CredentialVersion {
+		// Note what is NOT done here: nothing is written, and no error is raised
+		// about the machine's health. The machine is fine — it holds the newer
+		// credential. Only THIS response is discarded.
+		return EnrolOutcome{}, fmt.Errorf(
+			"%w: credential version %d is already stored, this response carries %d. The stored credential is the live one; nothing was changed",
+			ErrStaleEnrolment, state.CredentialVersion, res.CredentialVersion)
+	}
+
 	now := time.Now().UTC()
+	rotated := res.Rotated
 	state.SchemaVersion = StateSchemaVersion
-	state.ServerURL = client.BaseURL()
+	state.ServerURL = id.ServerURL
 	state.MachineID = res.MachineID
-	state.MachineName = name
-	state.OS = osName
+	state.MachineName = id.MachineName
+	state.OS = id.OS
 	state.CredentialVersion = res.CredentialVersion
 	if state.EnroledAt.IsZero() {
 		state.EnroledAt = now
 	}
-	if res.Rotated {
-		rotated := now
-		state.RotatedAt = &rotated
+	if rotated {
+		rotatedAt := now
+		state.RotatedAt = &rotatedAt
 	}
 
 	if err := store.SaveEnrolment(state, res.MachineCredential); err != nil {
@@ -127,10 +186,10 @@ func Enrol(ctx context.Context, opts EnrolOptions) (EnrolOutcome, error) {
 
 	return EnrolOutcome{
 		MachineID:         res.MachineID,
-		MachineName:       name,
+		MachineName:       id.MachineName,
 		ServerURL:         state.ServerURL,
 		StateDir:          dir,
-		Rotated:           res.Rotated,
+		Rotated:           rotated,
 		CredentialVersion: res.CredentialVersion,
 	}, nil
 }
