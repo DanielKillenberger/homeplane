@@ -392,6 +392,14 @@ it requires a Google OAuth app + Daniel's browser consent — credentials that d
 design (server-side custody lands in .8/.12). The task spec itself assigns the real-Google proof
 to task .12, where it is recorded above as a blocking obligation.
 
+Final review round (after the cross-node evidence landed): the reviewer raised no new objection to
+gates 1–4 and held **NEEDS_HUMAN** solely on the task's own rule that an adopted shape must pass
+all five gates — which gate 5 cannot until .12's Daniel-gated live run. That is precisely the
+terminal the task prescribes ("the terminal outcome is NEEDS_HUMAN with findings"). Decision for
+Daniel: accept D6 = GO with the single .12-owned residual (recommended — unblocks Wave 2; nothing
+Drive-dependent ships before .12's recorded run), or hold D6 open until the Google OAuth app
+exists and the six-op run is recorded first.
+
 ## Fallback ladder disposition
 
 - (a) ToolHive-direct: rejected (gate 2/3 native limitations above), not needed.
