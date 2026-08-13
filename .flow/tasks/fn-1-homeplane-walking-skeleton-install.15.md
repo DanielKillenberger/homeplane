@@ -32,9 +32,8 @@ Productionize the server side on Daniel's real Tailnet server (round-4 review fi
 
 
 ## Done summary
-TBD
-
+Deployed the Homeplane server and its composed ToolHive gateway onto the real Tailnet host (clawniel, rootless Podman) under systemd --user in a single polite-guest prefix, with `deploy/server/` carrying the whole path: a checksum-verified installer that acquires and validates every input before touching the running deployment, rendered unit templates, the connector manifest, a pinned ToolHive release, a runbook, and a verification script that runs from a second tailnet node. The server joins the tailnet as its own `homeplane` node; the gateway stays loopback-only and is unreachable from another node while the edge answers and fails closed without a grant token; re-deploys preserve the age key, database and node identity. The one acceptance item not met — importing the Google OAuth client id/secret — was deferred with Daniel's explicit authorization (creating that OAuth app is an action inside his own Google account); it is recorded on this task, inherited by fn-1.12, and reported by the verifier as `pending`, never as a pass.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 871bd357c8f90a0849745c80a9f39287c15f2083, df1cd0adacb80a891d2428cf799b86dd439093b0, 724ad2a0e535079093232c73ab422bc5e6051059, 6ba1e43dbf3c0638d59ccb94f3496c93c13ce156, 85f54bfb746d0ed9ee6c43127cd7eebaf0373be6, 243955cd6fd4421c7d66f6ba20cfc78fbe46157a, 49f36b91877fccd68b056af9889184806d17107f, eec69e6b7bec4edf78681bfafc0e8e58a4c3fb61, 4d1c720b32f975e91039e97ea4f36cee2d24b63c
+- Tests: go build ./... && go vet ./... && go test ./... -count=1 (538/538 assertions green), go test ./internal/server/credflow/ -count=40 -run TestARelayedFlowIsNotExpiredByTheConsentWindow, go test -race ./internal/server/credflow/ -count=5, scripts/emit-evidence.sh fn-1-homeplane-walking-skeleton-install.15 --extra <live-deployment run> (538/538, 3 gates, pass, clean tree), deploy/server/verify.sh --host clawniel --fqdn homeplane.tailab4e9b.ts.net (10 checks: 9 pass, 1 declared pending) run from this Mac as a second tailnet node, deploy/server/verify.sh --host clawniel --snapshot (before/after each re-deploy: age key, db inode, tsnet identity, stored secrets all preserved), deploy/server/deploy.sh --host clawniel (first install + 4 upgrade re-runs), ssh clawniel install-server.sh --stage-dir . with no staged server.env (installed-config fallback path)
 - PRs:
