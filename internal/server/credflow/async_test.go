@@ -346,3 +346,106 @@ func (a *toggleAudit) AppendAudit(ctx context.Context, e store.AuditEvent) error
 	}
 	return a.delegate.AppendAudit(ctx, e)
 }
+
+// TestARelayedFlowIsNotExpiredByTheConsentWindow closes the race the
+// asynchronous exchange introduced.
+//
+// The flow's window exists to bound how long the HUMAN has to consent. Once an
+// outcome is relayed the human is done, and the server-owned exchange job is
+// the sole author of the ending. Applying the consent deadline to a flow whose
+// exchange is still running produced two endings for one flow: the sweep
+// audited `expired`, and moments later the job stored the credential and
+// reported `completed` — an audit trail that disagrees with the credential
+// store, which is the one failure this package must never produce quietly.
+func TestARelayedFlowIsNotExpiredByTheConsentWindow(t *testing.T) {
+	cases := []struct {
+		name       string
+		wantState  credflow.State
+		wantFailed bool
+		// breakProvider makes the held exchange fail once released.
+		breakProvider bool
+	}{
+		{name: "exchange succeeds after the deadline", wantState: credflow.StateCompleted},
+		{name: "exchange fails after the deadline", wantState: credflow.StateFailed, wantFailed: true, breakProvider: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newFakeProvider(t, "alpha")
+			h := newHarness(t, harnessOptions{providers: []*fakeProvider{p}, clock: newClock()})
+
+			release := p.hold()
+			start := h.start(machineA, p.name, false)
+			flowID := start.str("flow_id")
+			code, _, state := p.consent(t, h.client, start.str("authorization_url"))
+			if relay := h.relay(machineA, flowID, map[string]string{"code": code, "state": state}); relay.status != http.StatusAccepted {
+				release()
+				t.Fatalf("relay: status %d body %s", relay.status, relay.raw)
+			}
+
+			// The consent window closes while the provider is still thinking.
+			h.advance(2 * time.Hour)
+			if got := h.poll(machineA, flowID).str("state"); got != string(credflow.StatePending) {
+				release()
+				t.Fatalf("state after the consent window closed = %q, want pending: "+
+					"the exchange owns this flow's ending now", got)
+			}
+			// A sweep (any start triggers one) must not expire it either.
+			sweeper := h.start(machineB, p.name, false).str("flow_id")
+			if got := h.poll(machineA, flowID).str("state"); got != string(credflow.StatePending) {
+				release()
+				t.Fatalf("a sweep expired a relayed flow: state = %q, want pending", got)
+			}
+
+			if tc.breakProvider {
+				p.mu.Lock()
+				p.tokenStatus = http.StatusBadRequest
+				p.tokenBody = `{"error":"invalid_grant"}`
+				p.mu.Unlock()
+			}
+			release()
+
+			final := h.awaitTerminal(machineA, flowID)
+			if final.str("state") != string(tc.wantState) {
+				t.Fatalf("final state = %q, want %q (body %s)", final.str("state"), tc.wantState, final.raw)
+			}
+
+			// Exactly one ending, and the audit log tells the same story as the
+			// credential store.
+			committed, failed := 0, 0
+			for _, e := range h.auditEvents() {
+				if e.Detail["flow_id"] != flowID {
+					continue // the sweeper flow has its own (expired) ending
+				}
+				switch e.Event {
+				case store.EventCredentialFlowCommitted:
+					committed++
+				case store.EventCredentialFlowFailed:
+					failed++
+				}
+			}
+			switch {
+			case tc.wantFailed && (failed != 1 || committed != 0):
+				t.Fatalf("audit rows for a failed flow: committed=%d failed=%d, want 0 and 1", committed, failed)
+			case !tc.wantFailed && (committed != 1 || failed != 0):
+				t.Fatalf("audit rows for a stored credential: committed=%d failed=%d, want 1 and 0", committed, failed)
+			}
+
+			_, _, err := h.credential(p.name)
+			if tc.wantFailed && !errors.Is(err, store.ErrNotFound) {
+				t.Fatalf("a failed flow stored a credential: %v", err)
+			}
+			if !tc.wantFailed && err != nil {
+				t.Fatalf("a completed flow stored no credential: %v", err)
+			}
+
+			// The unrelayed flow started along the way DOES expire once its own
+			// window closes — the consent deadline still governs a flow nobody
+			// has consented on.
+			h.advance(2 * time.Hour)
+			if got := h.poll(machineB, sweeper).str("state"); got != string(credflow.StateExpired) {
+				t.Errorf("unrelayed flow state = %q, want expired", got)
+			}
+		})
+	}
+}

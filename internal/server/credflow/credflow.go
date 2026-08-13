@@ -469,7 +469,7 @@ func (s *Service) sweep(ctx context.Context) {
 	var stale []*flow
 	for id, f := range s.flows {
 		switch {
-		case !f.state.Terminal() && now.After(f.expiresAt):
+		case s.expirableLocked(f, now):
 			stale = append(stale, f)
 		case f.state.Terminal() && now.Sub(f.terminalAt) > s.cfg.TerminalRetention:
 			delete(s.flows, id)
@@ -486,6 +486,20 @@ func (s *Service) sweep(ctx context.Context) {
 			s.log.Error("record credential flow expiry", "flow_id", f.id, "error", err)
 		}
 	}
+}
+
+// expirableLocked reports whether a flow's CONSENT window has closed on it.
+//
+// The window governs the human, not the exchange. Once an outcome has been
+// relayed the human's part is over and the server-owned exchange job becomes
+// the sole author of this flow's ending — so a relayed flow is never expired,
+// however long the provider takes. Expiring one would produce two terminal
+// transitions for a single flow: an audited `expired` and, moments later, a
+// stored credential reported as `completed`.
+//
+// It must be called with s.mu held.
+func (s *Service) expirableLocked(f *flow, now time.Time) bool {
+	return !f.state.Terminal() && f.decided == nil && !f.relayed && now.After(f.expiresAt)
 }
 
 // expire moves a pending flow past its deadline to expired. The existing
@@ -520,7 +534,7 @@ func (s *Service) lookup(id, machineID string) (*flow, bool) {
 // A returned error means the flow's real state cannot be shown yet.
 func (s *Service) settle(ctx context.Context, f *flow) error {
 	s.mu.Lock()
-	expired := !f.state.Terminal() && f.decided == nil && s.cfg.Now().UTC().After(f.expiresAt)
+	expired := s.expirableLocked(f, s.cfg.Now().UTC())
 	undecided := f.decided != nil && !f.state.Terminal()
 	s.mu.Unlock()
 
@@ -685,16 +699,34 @@ func (s *Service) exchangeAndStore(ctx context.Context, f *flow, code string) {
 		return
 	}
 
-	// Success needs no separate audit row and cannot be held back by one: the
-	// commit event was written INSIDE the store transaction that stored the
-	// credential, so the record and the credential landed together.
+	s.complete(f, generation)
+}
+
+// complete records the flow's one success transition.
+//
+// Success needs no separate audit row and cannot be held back by one: the
+// commit event was written INSIDE the store transaction that stored the
+// credential, so the record and the credential landed together.
+//
+// The guard is an invariant check, not a race to win. A flow that is already
+// terminal here would mean something else ended it while its exchange was
+// running — the flow would then have TWO endings, one of them audited and
+// wrong. Since a relayed flow is excluded from consent-window expiry, nothing
+// else can end it; if that ever changes, this logs loudly rather than papering
+// over a credential whose recorded outcome disagrees with the store.
+func (s *Service) complete(f *flow, generation int64) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if f.state.Terminal() {
+		s.log.Error("credential stored for a flow that had already finished — its recorded outcome is wrong",
+			"provider", f.provider, "flow_id", f.id, "recorded_state", f.state, "generation", generation)
+		return
+	}
 	f.state = StateCompleted
 	f.diag = nil
 	f.decided = nil
 	f.terminalAt = s.cfg.Now().UTC()
-	s.mu.Unlock()
-	s.log.Info("credential stored", "provider", provider, "flow_id", f.id, "generation", generation)
+	s.log.Info("credential stored", "provider", f.provider, "flow_id", f.id, "generation", generation)
 }
 
 // sealCredential renders and encrypts the stored credential.
@@ -789,12 +821,19 @@ func (s *Service) commitTerminal(ctx context.Context, f *flow) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !f.state.Terminal() {
-		f.state = decided.state
-		f.diag = decided.diag
-		f.terminalAt = s.cfg.Now().UTC()
-		f.decided = nil
+	if f.state.Terminal() {
+		// The row is already written, so this is not recoverable — it is
+		// reported. A flow that ended twice means the audit log now disagrees
+		// with what the credential store actually holds, which is the one thing
+		// this package must never let happen quietly.
+		s.log.Error("credential flow reached a second terminal state — its audit trail is inconsistent",
+			"flow_id", f.id, "provider", f.provider, "recorded_state", f.state, "second_state", decided.state)
+		return nil
 	}
+	f.state = decided.state
+	f.diag = decided.diag
+	f.terminalAt = s.cfg.Now().UTC()
+	f.decided = nil
 	return nil
 }
 

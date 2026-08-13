@@ -123,6 +123,9 @@ The flow is an asynchronous state machine (`pending` → `completed` | `denied` 
   that no request can cancel, and the machine learns what came of it by polling.
   A relay response lost in transit therefore costs one more poll rather than
   leaving the CLI reporting failure for a credential that was actually stored.
+- The flow's window bounds how long the HUMAN has to consent, not how long the
+  exchange may take: once an outcome is relayed, the exchange job alone decides
+  the ending, so a slow provider can never produce two conflicting outcomes.
 - A terminal state is never shown before its audit row is written, and open
   flows are bounded per machine and forgotten after a retention window.
 - Replacement is an atomic swap: the existing credential stays active until the
