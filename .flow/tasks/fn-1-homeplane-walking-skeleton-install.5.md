@@ -33,9 +33,8 @@ Find or retrieve the Daniel-OS vault and keep it continuously synchronized under
 - [ ] Emits versioned evidence artifact `test/evidence/<task-id>.json` (commit SHA, platform, commands run, assertions, timestamps)
 
 ## Done summary
-TBD
-
+Vault detect/retrieve + supervised continuous sync, built against the REAL obsidian-headless 0.0.13 contract (captured from the pinned build's own parser and asserted on every run; the pin carries verified tarball and cli.js checksums). Activation is a three-stage sequence (prepare → install → apply) where every step refuses independently. The pre-activation rehearsal has two explicit modes: a default unauthenticated CONTRACT check that requires the build to refuse an unconfigured directory the way upstream does, and a LIFECYCLE rehearsal (sync-setup against a disposable remote, then a real pass) reserved for .7; the fake CLI is stateful so an invalid lifecycle fails a test rather than passing. Retrieval runs login → sync-list-remote (explicit selection) → sync-setup → a pull-only first pass → restored bidirectional, failing loudly if the restore fails. Two distinct credentials never touch argv. Sync liveness is an external probe (pid signal-0 by default, launchctl/systemctl optionally), so a SIGKILLed process that recorded no exit reports degraded instead of a permanent false ok.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: bc33814b46c68256a7297d1d0246c896418be844, d369ba6a84173e32a25addc51809fa5f6ba0c0f9, 8e0a4e36c72e87117bcb9d574ece4860a496979d, a512b447e4d8b12cb2120a0a9f9a188eaf7d6f3e, 2411b9c64c07c0605aac2441ffcb13ae6cece97c, 270a7c164126144a21d4592d3d454df773fa8f91
+- Tests: go build ./..., go vet ./..., go test ./... -count=1, HOMEPLANE_OB_BIN=<real 0.0.13> go test ./internal/agent/vault/ -run 'PinnedBuild|PinnedContract|Attested|SecretsAreNever' (PASS against the real artifact), scripts/emit-evidence.sh fn-1-homeplane-walking-skeleton-install.5 (401/401 assertions, 3 gates, pass)
 - PRs:
