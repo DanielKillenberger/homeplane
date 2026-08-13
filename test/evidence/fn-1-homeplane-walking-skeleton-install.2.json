@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "fn-1-homeplane-walking-skeleton-install.2",
-  "commit": "47ff5e472e13186bd411e67d104039cd917682a1",
+  "commit": "6825bd485508abd3f11efc68e91df319cfff80c8",
   "working_tree_dirty": false,
   "platform": {
     "go_version": "go version go1.26.5 darwin/arm64",
@@ -9,8 +9,8 @@
     "goarch": "arm64",
     "uname": "Darwin 25.5.0 arm64"
   },
-  "started_at": "2026-08-13T19:56:46Z",
-  "finished_at": "2026-08-13T19:56:53Z",
+  "started_at": "2026-08-13T20:00:36Z",
+  "finished_at": "2026-08-13T20:00:44Z",
   "gates": [
     {
       "gate": "build",
@@ -29,8 +29,8 @@
     }
   ],
   "assertion_counts": {
-    "total": 82,
-    "passed": 82,
+    "total": 87,
+    "passed": 87,
     "failed": 0
   },
   "assertions": [
@@ -278,6 +278,36 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestCrossMachineGrantIssuanceIsImpossible",
       "result": "pass",
+      "elapsed_seconds": 0.01
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server",
+      "test": "TestDenialsFailClosedWhenTheyCannotBeRecorded",
+      "result": "pass",
+      "elapsed_seconds": 0.01
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server",
+      "test": "TestDenialsFailClosedWhenTheyCannotBeRecorded/invalid_credential",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server",
+      "test": "TestDenialsFailClosedWhenTheyCannotBeRecorded/missing_credential",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server",
+      "test": "TestDenialsFailClosedWhenTheyCannotBeRecorded/unenrolled_node",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server",
+      "test": "TestDenialsFailClosedWhenTheyCannotBeRecorded/unresolvable_peer",
+      "result": "pass",
       "elapsed_seconds": 0
     },
     {
@@ -308,7 +338,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestHealthzReportsServerComponentsOnly",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
@@ -332,7 +362,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestListGrantsIsScopedToCallerAndNonSecret",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
@@ -374,7 +404,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestUnauthenticatedAndUnenrolledCallsAreRejected",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
@@ -410,13 +440,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
       "test": "TestClosedStoreReportsErrorRatherThanPanicking",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
       "test": "TestDatabaseAndSidecarsAreNotGroupOrWorldReadable",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
@@ -428,13 +458,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
       "test": "TestForeignKeysAreEnforcedOnEveryConnection",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
       "test": "TestListGrantsIsPerMachine",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
@@ -500,7 +530,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
       "test": "TestQueryAuditLimitReturnsTheNewestWindow",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
