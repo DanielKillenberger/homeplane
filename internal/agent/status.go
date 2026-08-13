@@ -207,6 +207,15 @@ func enrolmentComponent(hasState bool, state State, credential string) Component
 func vaultComponent(state State) ComponentReport {
 	c := ComponentReport{Name: ComponentVault}
 	if strings.TrimSpace(state.VaultPath) == "" {
+		// No path. The recorded reason is what distinguishes "no vault on this
+		// machine" from "retrieval failed because the sync credential was
+		// rejected" — both leave VaultPath empty, and R3 requires status to
+		// name which one happened.
+		if state.Vault != nil && strings.TrimSpace(state.Vault.State) != "" {
+			c.State = state.Vault.State
+			c.Detail = state.Vault.Detail
+			return c
+		}
 		c.State = StateNotConfigured
 		c.Detail = "no vault path recorded yet"
 		return c
