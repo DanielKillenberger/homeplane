@@ -58,10 +58,14 @@ const (
 	ActionUnknown ActionClass = "unknown"
 )
 
-// defaultCapability is the capability an action class requires when a mapping
-// does not name one explicitly. A mapping MAY require a stronger capability
-// than its class implies; it can never require a weaker one (enforced below).
-var defaultCapability = map[ActionClass]policy.Capability{
+// classCapability is the capability each action class requires. A mapping may
+// restate its capability explicitly (self-documenting manifests are welcome),
+// but it may never name a DIFFERENT one: a `capability` field that could
+// diverge from the action class is an authority downgrade waiting to happen —
+// declare a delete tool as requiring connector.read and a read-only grant
+// deletes. There is no dominance ordering between these capabilities to make
+// "stronger" meaningful, so divergence is simply refused at load time.
+var classCapability = map[ActionClass]policy.Capability{
 	ActionRead:   policy.ConnectorRead,
 	ActionWrite:  policy.ConnectorWrite,
 	ActionSend:   policy.ConnectorSend,
@@ -213,6 +217,44 @@ func KnownDrivers() []string {
 
 var identRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._@/-]*$`)
 
+// toolNameRe is the shape a tool name may take. Tool names originate OUTSIDE
+// Homeplane — the gateway advertises them and a caller names one on every
+// invocation — so they are bounded and character-restricted before they are
+// allowed anywhere near a manifest or an audit row.
+var toolNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
+
+// MaxIdentifierLen bounds every identifier this package accepts or records:
+// provider names, credential refs and tool names. It exists because an audit
+// row must stay a bounded metadata record even when the name in the request was
+// chosen by whoever sent the request.
+const MaxIdentifierLen = 128
+
+func validateIdentifier(kind, value string) error {
+	if len(value) > MaxIdentifierLen {
+		return fmt.Errorf("%w: %s is %d bytes, the limit is %d",
+			ErrInvalidManifest, kind, len(value), MaxIdentifierLen)
+	}
+	if !identRe.MatchString(value) {
+		return fmt.Errorf("%w: %s %q is not a valid identifier", ErrInvalidManifest, kind, value)
+	}
+	return nil
+}
+
+func validateToolName(provider, tool string) error {
+	if strings.TrimSpace(tool) == "" {
+		return fmt.Errorf("%w: connector %q: tool with an empty name", ErrInvalidManifest, provider)
+	}
+	if len(tool) > MaxIdentifierLen {
+		return fmt.Errorf("%w: connector %q: tool name is %d bytes, the limit is %d",
+			ErrInvalidManifest, provider, len(tool), MaxIdentifierLen)
+	}
+	if !toolNameRe.MatchString(tool) {
+		return fmt.Errorf("%w: connector %q: tool name %q contains characters that are not allowed",
+			ErrInvalidManifest, provider, tool)
+	}
+	return nil
+}
+
 // Parse decodes a manifest and validates it. Unknown JSON fields are REFUSED:
 // a mistyped `action_class` key would otherwise decode to an empty class and
 // silently change what a tool is allowed to do.
@@ -275,12 +317,11 @@ func (m Manifest) Validate() error {
 }
 
 func (c Connector) validate() error {
-	if !identRe.MatchString(c.Provider) {
-		return fmt.Errorf("%w: provider %q is not a valid identifier", ErrInvalidManifest, c.Provider)
+	if err := validateIdentifier("provider", c.Provider); err != nil {
+		return err
 	}
-	if !identRe.MatchString(c.CredentialRef) {
-		return fmt.Errorf("%w: connector %q: credential_ref %q is not a valid secret reference",
-			ErrInvalidManifest, c.Provider, c.CredentialRef)
+	if err := validateIdentifier("credential_ref", c.CredentialRef); err != nil {
+		return fmt.Errorf("%w (connector %q)", err, c.Provider)
 	}
 	if err := c.Credential.validate(c.Provider); err != nil {
 		return err
@@ -304,8 +345,8 @@ func (c Connector) validate() error {
 		classified[t.Tool] = "mapped"
 	}
 	for _, e := range c.Excluded {
-		if strings.TrimSpace(e.Tool) == "" {
-			return fmt.Errorf("%w: connector %q: excluded tool with empty name", ErrInvalidManifest, c.Provider)
+		if err := validateToolName(c.Provider, e.Tool); err != nil {
+			return err
 		}
 		if strings.TrimSpace(e.Reason) == "" {
 			return fmt.Errorf("%w: connector %q: excluded tool %q needs a reason",
@@ -328,8 +369,8 @@ func (c Connector) validate() error {
 	inventory := make(map[string]bool, len(c.ToolInventory))
 	var unclassified []string
 	for _, tool := range c.ToolInventory {
-		if strings.TrimSpace(tool) == "" {
-			return fmt.Errorf("%w: connector %q: empty tool name in tool_inventory", ErrInvalidManifest, c.Provider)
+		if err := validateToolName(c.Provider, tool); err != nil {
+			return err
 		}
 		if inventory[tool] {
 			return fmt.Errorf("%w: connector %q: tool %q listed twice in tool_inventory",
@@ -360,16 +401,25 @@ func (c Connector) validate() error {
 }
 
 func (t ToolMapping) validate(provider string) error {
-	if strings.TrimSpace(t.Tool) == "" {
-		return fmt.Errorf("%w: connector %q: tool mapping with empty name", ErrInvalidManifest, provider)
+	if err := validateToolName(provider, t.Tool); err != nil {
+		return err
 	}
-	if _, ok := defaultCapability[t.ActionClass]; !ok {
+	want, ok := classCapability[t.ActionClass]
+	if !ok {
 		return fmt.Errorf("%w: connector %q: tool %q has action_class %q (want read, write, send or delete)",
 			ErrInvalidManifest, provider, t.Tool, t.ActionClass)
 	}
 	if t.Capability != "" && !knownCapabilities[t.Capability] {
 		return fmt.Errorf("%w: connector %q: tool %q requires unknown capability %q",
 			ErrInvalidManifest, provider, t.Tool, t.Capability)
+	}
+	// The capability a tool requires is a FUNCTION of its action class, never an
+	// independent knob. A mapping that could name a weaker capability than its
+	// class would hand a read-only grant delete authority through a manifest
+	// edit — exactly the authorization bypass the manifest exists to prevent.
+	if t.Capability != "" && t.Capability != want {
+		return fmt.Errorf("%w: connector %q: tool %q is %s-class and must require %q, not %q",
+			ErrInvalidManifest, provider, t.Tool, t.ActionClass, want, t.Capability)
 	}
 	if t.ArtifactID != nil {
 		if err := t.ArtifactID.validate(provider, t.Tool); err != nil {
@@ -380,11 +430,10 @@ func (t ToolMapping) validate(provider string) error {
 }
 
 // RequiredCapability is the capability a grant must carry to invoke the tool.
+// It is derived from the action class; a manifest may restate it but cannot
+// change it (see validate).
 func (t ToolMapping) RequiredCapability() policy.Capability {
-	if t.Capability != "" {
-		return t.Capability
-	}
-	return defaultCapability[t.ActionClass]
+	return classCapability[t.ActionClass]
 }
 
 func (e Extractor) validate(provider, tool string) error {

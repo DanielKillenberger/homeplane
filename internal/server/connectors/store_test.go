@@ -13,12 +13,18 @@ import (
 // test double: the store validates the metadata vocabulary and persists into
 // fixed columns. Wiring the broker straight to *store.SQLite proves the two
 // halves agree, in process, with no server and no gateway.
-func TestConnectorRowsPersistThroughTheRealAuditLog(t *testing.T) {
+func newRealStore(t *testing.T) *store.SQLite {
+	t.Helper()
 	db, err := store.Open(filepath.Join(t.TempDir(), "homeplane.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+func TestConnectorRowsPersistThroughTheRealAuditLog(t *testing.T) {
+	db := newRealStore(t)
 
 	rt := newStubRuntime()
 	rt.respond("create_note", `{"note":{"id":"n-created","body":"`+secretBody+`"}}`)

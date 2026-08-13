@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/DanielKillenberger/homeplane/internal/store"
 )
@@ -43,11 +44,24 @@ type Broker struct {
 	runtime ToolRuntime
 	audit   AuditSink
 	newID   func() string
+	// resultWriteTimeout bounds the detached write of the post-call result row.
+	resultWriteTimeout time.Duration
 }
+
+// DefaultResultWriteTimeout bounds the result row's detached write. It is
+// generous for a server-local SQLite append and short enough that a wedged log
+// cannot pin a request goroutine.
+const DefaultResultWriteTimeout = 5 * time.Second
 
 // NewBroker wires an engine to a runtime and an audit sink.
 func NewBroker(e *Engine, rt ToolRuntime, sink AuditSink) *Broker {
-	return &Broker{engine: e, runtime: rt, audit: sink, newID: newCallID}
+	return &Broker{
+		engine:             e,
+		runtime:            rt,
+		audit:              sink,
+		newID:              newCallID,
+		resultWriteTimeout: DefaultResultWriteTimeout,
+	}
 }
 
 // Engine exposes the registered manifest for callers that only need decisions.
@@ -75,7 +89,16 @@ func (b *Broker) Invoke(ctx context.Context, req Request) (json.RawMessage, erro
 	// The call has now had its effect, so the result row cannot gate it — but a
 	// missing result row still means the trail is incomplete, and the caller is
 	// told so rather than being handed a response that nothing recorded.
-	if err := b.audit.AppendAudit(ctx, b.engine.ResultEvent(req, decision, callID, resp, callErr)); err != nil {
+	//
+	// The write deliberately does NOT run on the caller's context: a harness
+	// that hangs up (or times out) while the provider is working would
+	// otherwise cancel the record of a call that already happened. It is
+	// detached from cancellation and given its own tight deadline instead, so
+	// the row survives the disconnect without becoming an unbounded write.
+	resultCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), b.resultWriteTimeout)
+	defer cancel()
+
+	if err := b.audit.AppendAudit(resultCtx, b.engine.ResultEvent(req, decision, callID, resp, callErr)); err != nil {
 		return nil, fmt.Errorf("%w: call %s completed but its result could not be recorded: %v",
 			ErrAuditUnavailable, callID, err)
 	}

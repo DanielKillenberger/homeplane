@@ -28,6 +28,9 @@ type stubRuntime struct {
 	calls     []stubCall
 	responses map[string]json.RawMessage
 	failures  map[string]error
+	// before runs inside the call, standing in for whatever can happen while a
+	// provider is working — a client disconnecting, most importantly.
+	before func()
 }
 
 func newStubRuntime() *stubRuntime {
@@ -49,6 +52,9 @@ func (s *stubRuntime) fail(tool string, err error) *stubRuntime {
 
 func (s *stubRuntime) CallTool(_ context.Context, provider, tool string, args json.RawMessage) (json.RawMessage, error) {
 	s.calls = append(s.calls, stubCall{Provider: provider, Tool: tool, Args: string(args)})
+	if s.before != nil {
+		s.before()
+	}
 	if err, ok := s.failures[tool]; ok {
 		return nil, err
 	}
