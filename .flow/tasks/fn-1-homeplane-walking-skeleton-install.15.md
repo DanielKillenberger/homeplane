@@ -9,6 +9,7 @@ Productionize the server side on Daniel's real Tailnet server (round-4 review fi
 ### Approach
 - Linux server artifact built by the same staged release-form process as the agent artifacts (.4).
 - Persistent configuration + state location (`/var/lib/homeplane/` or similar): SQLite store, connector manifest, credential store per D3, tsnet state (auth key bootstrap documented).
+- **Container runtime requirement (from .1 spike, docs/decisions/d6-gateway.md):** ToolHive CLI requires Docker or Podman to run connector workloads; the real production server (clawniel) has **Podman, not Docker** — the CLI+Docker runtime path was only validated headless in DinD during the spike, so confirm/adapt the ToolHive↔Podman integration on the actual host. <!-- Updated by plan-sync: fn-1.1 spike found production server runs podman not docker --> `thv run --enable-audit` on every workload for supplementary diagnostics.
 - Supervision: systemd service units for homeplane-server AND the composed gateway (per D6 adopted shape), restart-on-failure, ordered startup (gateway before edge or health-gated).
 - Gateway upstream bound loopback/isolated namespace only (bypass boundary — verified here on the real host and in .3's test).
 - Upgrade path: re-run deploy with a newer artifact → config/state preserved, services restarted cleanly.

@@ -3,3 +3,15 @@
 
 # spike build artifacts (disposable)
 spike/edge-proxy/edge-proxy
+
+# Go build output
+/homeplane-server
+/homeplane-agent
+/bin/
+
+# Local server state (database, age key, tsnet state) — never commit
+/.homeplane-state/
+*.db
+*.db-wal
+*.db-shm
+*.age-key

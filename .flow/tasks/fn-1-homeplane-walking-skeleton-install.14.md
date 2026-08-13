@@ -13,6 +13,7 @@ Operator documentation written against observed behavior, plus the final small a
 ### Investigation targets
 **Required:**
 - Evidence file from .7 + owning tasks' test suites; spec Requirement coverage table
+- `docs/decisions/d6-gateway.md` "Consequences / follow-ups" + gate 1 client-compat notes (from .1) — known runbook nuances: under `codex exec`'s default read-only sandbox, MCP tool calls are auto-cancelled (interactive sessions or a permissive approval policy are required); Codex static bearer config via `bearer_token_env_var` (0.146.0); Claude Code HTTP MCP via `claude mcp add --transport http --header "Authorization: Bearer …"` (2.1.227) <!-- Updated by plan-sync: fn-1.1 spike recorded these client-compat nuances for the runbook -->
 
 ## Acceptance
 - [ ] README + ARCHITECTURE + RUNBOOK accurate to observed behavior (spot-checked against live system)

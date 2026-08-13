@@ -17,7 +17,7 @@ Greenfield Go scaffold and the control-plane core: tsnet-embedded server with en
 - **Authorization invariants:** WhoIs node must match enrolled machine; machine credential must hash-match; grants creatable/activatable/revocable only by their own machine over HTTP (cross-machine → 403). Tailnet reachability alone is never authorization.
 - **Operator surface:** server-local admin CLI — `homeplane-server admin audit [--since]`, `homeplane-server admin revoke-grant <id>`, `homeplane-server admin secret import <ref>` (bootstrap of provider app credentials from protected stdin or a validated 0600 file into the D3 store — never over the network API). Operator identity = local shell access on the server host. (Machine-level revocation and block/unblock are deferred hardening per spec Boundaries.) Operator identity = local shell access on the server host; no operator HTTP credential in the skeleton. Machines never read global audit.
 - `GET /healthz`: **server components only** (store, gateway runtime, tsnet, credential store); machine state is the agent's job (review fix).
-- AuditEvent: append-only; metadata only, never payload bodies (R16). Records enrolment + credential rotation + grant lifecycle now.
+- AuditEvent: append-only; metadata only, never payload bodies (audit metadata discipline — former R16, folded per D17). Records enrolment + credential rotation + grant lifecycle now.
 - Grant + machine credentials: random 256-bit, stored hashed.
 
 ## Investigation targets
