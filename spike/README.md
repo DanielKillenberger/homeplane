@@ -15,8 +15,9 @@ thv list                               # note the http://127.0.0.1:<PORT>/mcp UR
 
 cd spike/edge-proxy && go build -o edge-proxy .
 echo '{"token-a":"claude-code","token-b":"codex"}' > /tmp/tokens.json
+echo '{"fetch":"read"}' > /tmp/manifest.json      # tool -> action class; unmapped tools/call -> 403
 ./edge-proxy -listen <tailnet-ip>:9100 -upstream http://127.0.0.1:<PORT> \
-  -tokens /tmp/tokens.json -audit /tmp/audit.log
+  -tokens /tmp/tokens.json -manifest /tmp/manifest.json -audit /tmp/audit.log
 
 # MCP through the edge (streamable HTTP, protocol 2025-06-18):
 curl -si -X POST http://<tailnet-ip>:9100/mcp \

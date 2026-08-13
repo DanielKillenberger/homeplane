@@ -1,6 +1,6 @@
 # D6 — Gateway composition: ToolHive as bare-server Tailnet MCP gateway
 
-**Status:** Resolved — GO, adopted shape (b): **ToolHive CLI as connector runtime + Homeplane thin auth/audit edge proxy in front (the D13 shape)**
+**Status:** Resolved — GO, adopted shape (b): **ToolHive CLI as connector runtime + Homeplane thin auth/audit edge proxy in front (the D13 shape)**. Gates 1–4 PASS; gate 5 is **CONDITIONAL** — the Drive tool surface is proven in source at a pinned version, but the strict `drive.file`-only six-operation run cannot complete in this spike environment (no Google OAuth app credentials exist yet) and is a named blocking obligation on task .12 (the spec's designated real-Google proof task) before any Drive-dependent work ships.
 **Date:** 2026-08-13
 **Task:** fn-1-homeplane-walking-skeleton-install.1 (time-boxed spike)
 **Also resolves:** D3 (credential store), D10 (OAuth broker mechanics)
@@ -15,9 +15,12 @@
   network property claimed below (edge reachable on tailnet iface, gateway loopback-only) is verified
   from listener bindings (`netstat`) and real traffic, but a genuine cross-node call and tsnet WhoIs
   binding remain to be exercised on the real server (task .16/.15).
-- Linux-headless behavior for secrets (gate 4) was verified from ToolHive source (pinned paths cited),
-  not on a live Linux box — recorded per finding.
-- Scratch code: `spike/edge-proxy/` (disposable prototype, ~110 lines Go). Not production code.
+- Linux-headless behavior for secrets (gate 4) was verified from ToolHive source AND empirically in
+  a headless Debian bookworm (arm64) container running the official `toolhive_0.42.1_linux_arm64`
+  release — no D-Bus, no desktop (evidence in gate 4). The Linux *workload* runtime (Docker on the
+  Linux host) was not exercised (needs Docker-in-Docker or a VM); it is ToolHive's primary platform
+  and is exercised for real by task .15 (server deployment).
+- Scratch code: `spike/edge-proxy/` (disposable prototype, ~160 lines Go). Not production code.
 
 ## Adopted shape
 
@@ -101,13 +104,28 @@ tools/call  → "This domain is for use in documentation examples..." (real fetc
   2026-07-28 RC transport/auth changes: nothing in the path pins an old revision, and both current
   clients negotiated 2025-06-18 through it.
 
-**Edge invariants demonstrably admitted:** the edge terminates every request before the gateway
-(401 without/with-unknown token, below), sees the full JSON-RPC body (so manifest authorization and
-unmapped-tool denial can be enforced by parsing `tools/call` names at this exact point), strips the
-grant token before forwarding upstream, and writes the authoritative per-request audit. WhoIs
-machine-binding needs tsnet on the real server (its listener yields the caller's node identity);
-the network shape is identical to the spike's tailnet-iface listener. Gateway bypass boundary holds:
-the workload proxy is loopback-only, so only the edge is network-reachable.
+**Edge invariants — demonstrated, not asserted:** the edge terminates every request before the
+gateway (401 without/with-unknown token, below), strips the grant token before forwarding upstream,
+and writes the authoritative per-request audit. **Manifest authorization incl. unmapped-tool
+denial was demonstrated live**, not just argued: the prototype takes a declarative
+`manifest.json` (tool → action class), parses `tools/call` from the JSON-RPC body at the edge, and
+fails closed —
+
+```
+mapped tool   (fetch, read):        HTTP 200, forwarded
+unmapped tool (delete_everything):  HTTP 403 "tool not authorized by manifest"
+audit: {"action_class":"read","client":"claude-code","event":"forwarded","tool":"fetch",...}
+audit: {"client":"claude-code","event":"denied","reason":"unmapped_tool","tool":"delete_everything",...}
+```
+
+so per-call audit rows carry (client, tool, action_class) and denials are attributed to the
+authenticated client — the full attribution tuple the real edge extends with (machine, grant).
+**Residual (named, not waved off):** WhoIs machine-binding requires tsnet on the real server (its
+listener yields the caller's tailnet node identity) and a genuine second node — neither exists in
+this spike environment; the network shape is identical to the spike's tailnet-iface listener, and
+the binding is exercised by tasks .16/.15 with a direct-access-fails test from a second node.
+Gateway bypass boundary holds here: the workload proxy is loopback-only, so only the edge is
+network-reachable.
 
 ## Gate 2 — Per-client auth, revocation within seconds: **PASS**
 
@@ -158,19 +176,39 @@ Exactly the D13 split the spec assumed: Homeplane's `AuditEvent` log at the edge
 for (machine, harness, grant) attribution; ToolHive's audit is supplementary diagnostics (useful:
 tool-level outcome + latency).
 
-## Gate 4 — Secrets usable headless on a Linux server: **PASS** (with documented workaround)
+## Gate 4 — Secrets usable headless on a Linux server: **PASS** (empirical, with documented workaround)
 
 Providers (ToolHive v0.42.1): `encrypted` (AES-256-GCM file, key in OS keyring), `1password`
 (read-only), `environment` (`TOOLHIVE_SECRET_*`, read-only). Source-verified headless behavior
 (`pkg/secrets/keyring/composite.go`): the keyring is a composite — zalando/go-keyring (macOS
 Keychain / Windows / **Linux D-Bus Secret Service**) with a **Linux-only fallback to kernel keyctl**
 (`pkg/secrets/keyring/keyctl_linux.go`, `KEY_SPEC_USER_KEYRING`) — so `encrypted` works on a
-headless Linux server **without any desktop session or D-Bus**. Caveats, verified in source:
+headless Linux server **without any desktop session or D-Bus**.
 
+**Empirically validated on headless Linux** (Debian bookworm arm64 container, official
+`toolhive_0.42.1_linux_arm64` release, `dbus-daemon` absent):
+
+```
+=== D-Bus present? NO
+=== secret setup non-interactive attempt (encrypted provider, no TTY):
+Error: … failed to get secrets password: … inappropriate ioctl for device
+=== secret setup with pseudo-TTY (one-time):
+Please enter your keyring password:            # accepted
+=== keyring after setup (kernel keyctl, user keyring):
+ 175615276 --alswrv  0  0   \_ user: toolhive:toolhive
+=== set + get secret from FRESH processes, no prompt:
+$ echo -n "s3cret-value" | thv secret set spike-test   # ok
+$ thv secret get spike-test                            # → s3cret-value
+$ thv secret list                                      # → spike-test
+```
+
+Caveats, verified empirically + in source:
+
+- Setup (first password entry) needs a TTY once: with no keyring entry and no TTY it fails
+  (`inappropriate ioctl for device` on Linux, `operation not supported by device` on macOS).
+  After that one-time seed, all secret operations run headless from fresh processes.
 - The kernel user keyring does not survive reboot: after reboot the keyring password must be
-  re-seeded once (interactive `thv secret setup`, or any `thv` secret op on a TTY). Empirically
-  confirmed the no-TTY failure mode: `Error: … failed to read password: operation not supported by
-  device` when no keyring entry exists and stdin is not a TTY.
+  re-seeded once (interactive `thv secret setup` on a TTY, e.g. over SSH).
 - `TOOLHIVE_SECRETS_PASSWORD` is **not** a user-facing fallback: it is only used internally to pass
   the password to detached child processes (`pkg/workloads/manager.go`); `GetSecretsPassword` never
   reads it at startup (`pkg/secrets/factory.go`).
@@ -179,13 +217,24 @@ headless Linux server **without any desktop session or D-Bus**. Caveats, verifie
 
 **D3 resolution** (see below) keeps Homeplane's own credentials out of this problem entirely.
 
-## Gate 5 — Google Drive exact operations under `drive.file`: **PASS** (with one scope caveat)
+## Gate 5 — Google Drive exact operations under `drive.file`: **CONDITIONAL — not yet PASS; blocking obligation on task .12**
+
+What this spike CAN and CANNOT evidence, stated plainly: the six-operation tool surface and
+file-ID availability are proven in source at a pinned version (below). A **live** six-operation run
+under `drive.file`-only was NOT performed and cannot be performed in this environment — no Google
+OAuth app credentials exist yet (creating them and completing the browser consent is Daniel-side
+work that the spec assigns to the credential tasks), and the server's read tools as shipped declare
+`drive.readonly` (details below), which conflicts with the strict `drive.file`-only criterion.
+**Adoption of the D13 shape does NOT rest on this gate** (gates 1–4 carry it); Drive-dependent
+work does. Gate 5 completes in task .12 (the spec's designated real-Google proof task) under the
+pinned conditions at the end of this section, and .12 MUST NOT be marked done without them.
 
 The ToolHive registry has **no Google Drive server** (`thv search drive/google/workspace` → none),
-and the reference `@modelcontextprotocol/server-gdrive` is read-only (fails this gate). The adopted
-Drive connector is **`workspace-mcp`** (taylorwilsdon/google_workspace_mcp, PyPI `workspace-mcp`),
-runnable in ToolHive via the `uvx://workspace-mcp` protocol scheme (ToolHive builds the container).
-Tool-surface evidence, verified in source (`gdrive/drive_tools.py`):
+and the reference `@modelcontextprotocol/server-gdrive` is read-only (fails this gate outright).
+The selected Drive connector is **`workspace-mcp`** (taylorwilsdon/google_workspace_mcp, PyPI
+`workspace-mcp`), **pinned: release v1.24.0, main @ `99fa5e9add78` at inspection time**, runnable
+in ToolHive via the `uvx://workspace-mcp` protocol scheme (ToolHive builds the container; pin the
+version in the uvx spec). Tool-surface evidence, verified in source (`gdrive/drive_tools.py`):
 
 | Proof step | Tool | Evidence |
 |---|---|---|
@@ -196,17 +245,30 @@ Tool-surface evidence, verified in source (`gdrive/drive_tools.py`):
 | 5. trash | `update_drive_file(trashed=true)` | param `trashed: Optional[bool]`; `update_body["trashed"] = trashed` → **exactly `files.update(trashed=true)`**; result reports "moved to trash" |
 | 6. cleanup verification | `search_drive_files` / metadata | search appends `and trashed=false` by default; file metadata renders `Trashed: True` |
 
-Scopes: the server defines `drive_file` → `https://www.googleapis.com/auth/drive.file` and write
-tools (create/update/trash) require exactly it. **Caveat:** its *read* tools declare `drive_read` →
-`drive.readonly` (SCOPE_GROUPS, `auth/service_decorator.py:565`), although the Drive API itself
-permits reading app-created files under `drive.file` alone. Options for the Drive task (.12):
-grant `drive.file + drive.readonly` (read-only broadening), or carry a one-line scope-group
-override/fork mapping the read tools to `drive.file`. Either way the six operations exist
-concretely with IDs in results — the surface is not partial and not read-only. Artifact-id
-extraction note for the manifest: results are text, so the declarative extractor for this connector
-is a regex over `(ID: <id>)` rather than a JSONPath (manifest already allows "JSONPath-style
-pointer into the tool's request or response"; request-side `file_id` is a clean JSONPath for steps
-2–6).
+Scopes: the server defines `drive_file` → `https://www.googleapis.com/auth/drive.file` and the
+write tools (create/update/trash) require exactly it. **The blocker:** its *read* tools
+(`get_drive_file_content`, `search_drive_files`) declare `drive_read` → `drive.readonly`
+(SCOPE_GROUPS, `auth/service_decorator.py:565`), and the decorator passes those `required_scopes`
+into credential retrieval — a `drive.file`-only credential triggers reauth for reads rather than
+being used. The Drive API itself permits reading app-created files under `drive.file` alone
+(documented `drive.file` semantics: per-file access, including read, to files created or opened by
+the app), so this is a conservative scope *declaration* in the connector, not an API limitation.
+
+**Pinned resolution (one, not a menu):** Homeplane carries a pinned patch of workspace-mcp
+v1.24.0 remapping the two read tools used by the six-step proof to the `drive_file` scope group
+(a two-line SCOPE_GROUPS/decorator change), consumed by ToolHive as a pinned uvx/container ref —
+still composition (the patch changes a scope constant, no MCP or connector logic). Granting
+`drive.file + drive.readonly` instead was considered and rejected: it violates the gate's
+`drive.file`-only criterion and widens read access to the whole Drive. **Task .12 must: build the
+pinned patched ref, run all six operations live with a `drive.file`-only credential, capture file
+IDs from tool results and the trash/cleanup verification, and record that evidence — gate 5 flips
+to PASS only on that recorded run.**
+
+Either way the six operations exist concretely with IDs in results — the surface is not partial
+and not read-only. Artifact-id extraction note for the manifest: results are text, so the
+declarative extractor for this connector is a regex over `(ID: <id>)` rather than a JSONPath
+(manifest already allows "JSONPath-style pointer into the tool's request or response"; request-side
+`file_id` is a clean JSONPath for steps 2–6).
 
 OAuth provisioning path: workspace-mcp uses your own Google OAuth client
 (`GOOGLE_OAUTH_CLIENT_ID/SECRET`), supports loopback-redirect flows, and persists per-user
@@ -264,10 +326,12 @@ Contracts; the composed gateway is NOT in the OAuth-dance loop.**
 2. **.15 (deployment):** ToolHive CLI on the Linux server requires Docker/Podman. `thv run`
    `--enable-audit` on every workload for supplementary diagnostics. If ToolHive secrets end up
    used at all, document the per-boot keyring seeding or use the `environment` provider.
-3. **.12 (Drive):** use `uvx://workspace-mcp` with `--tools` filtering to the six-step surface;
-   resolve the read-scope caveat (`drive.file`+`drive.readonly` grant vs scope-group override);
-   manifest extractors: request-side JSONPath `$.file_id` for steps 2–6, response-text regex for
-   create.
+3. **.12 (Drive) — carries gate 5's blocking obligation:** build the pinned patched
+   workspace-mcp ref (v1.24.0 + read-tools→`drive_file` scope remap), run the live six-operation
+   proof with a `drive.file`-only credential, record file IDs + trash/cleanup evidence; use
+   `--tools` filtering to the six-step surface; manifest extractors: request-side JSONPath
+   `$.file_id` for steps 2–6, response-text regex for create. Gate 5 flips to PASS only on that
+   recorded run.
 4. **Runbook:** Codex MCP tool calls are auto-cancelled under `codex exec` read-only sandbox;
    static bearer config via `bearer_token_env_var` works on 0.146.0. Claude Code HTTP MCP with
    `--header "Authorization: Bearer …"` works on 2.1.227.
@@ -277,7 +341,11 @@ Contracts; the composed gateway is NOT in the OAuth-dance loop.**
 ## Fallback ladder disposition
 
 - (a) ToolHive-direct: rejected (gate 2/3 native limitations above), not needed.
-- (b) ToolHive + thin Homeplane edge (D13): **adopted; passed all five gates with the evidence
-  above.**
-- (c) MCPJungle: not reached — (b) passed. No bespoke gateway (forbidden by STRATEGY.md); the edge
-  is auth/audit/policy only.
+- (b) ToolHive + thin Homeplane edge (D13): **adopted — gates 1–4 PASS with the evidence above;
+  gate 5 CONDITIONAL with its completion pinned as a blocking obligation on task .12 (no
+  Drive-dependent work ships before its recorded live run).**
+- (c) MCPJungle: not reached — (b) carries the adoption. No bespoke gateway (forbidden by
+  STRATEGY.md); the edge is auth/audit/policy only.
+- Residuals that intentionally survive this spike, each with a named owner: real cross-node call +
+  tsnet WhoIs binding + direct-access-fails test (.16/.15), Linux workload runtime on the real
+  server (.15), live `drive.file`-only six-op run (.12).

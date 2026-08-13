@@ -8,7 +8,9 @@
   "default_sync": null,
   "depends_on_epics": [],
   "id": "fn-1-homeplane-walking-skeleton-install",
-  "impl_review_rounds": {},
+  "impl_review_rounds": {
+    "fn-1-homeplane-walking-skeleton-install.1": 1
+  },
   "next_task": 1,
   "plan_review_rounds": 0,
   "plan_review_status": "ship",
@@ -2900,6 +2902,61 @@
       "task": null,
       "timestamp": "2026-08-13T15:55:53.094411Z",
       "verdict": "SHIP"
+    },
+    {
+      "artifact_sha256": "b0386cfb82b1bed91818e99b260c97910a9880f1751c6ca73f1f1dbd876416f4",
+      "backend": "codex",
+      "counter_kind": "impl",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "not_applicable"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-f5d55645f37adb43880a4ea8c84fe080",
+            "classification": "introduced",
+            "findingId": "finding-f5d55645f37adb43880a4ea8c84fe080",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-6dd76c523a3225051426be5dc3da96af",
+            "classification": "introduced",
+            "findingId": "finding-6dd76c523a3225051426be5dc3da96af",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ba7ef7180ba1d43c68b6c4b7f1687c5b",
+            "classification": "introduced",
+            "findingId": "finding-ba7ef7180ba1d43c68b6c4b7f1687c5b",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "implementation"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "2e3ca8b3c1b9dac353154eede07a1fb0de798a1d",
+      "kind": "impl",
+      "outcome": "verdict",
+      "output_sha256": "9a00f57d50f8cdbb3d5b8b15a80c42096cf4518380ecdad067f000eca38cd5e1",
+      "reservation_id": "9cbbd70168084647addd35167ece9e0a",
+      "round_consumed": true,
+      "scope": "impl:fn-1-homeplane-walking-skeleton-install.1",
+      "superseded_by": null,
+      "task": "fn-1-homeplane-walking-skeleton-install.1",
+      "timestamp": "2026-08-13T17:59:40.046592Z",
+      "verdict": "NEEDS_HUMAN"
     }
   ],
   "review_hash_epoch": {
@@ -2930,6 +2987,7 @@
     }
   },
   "review_transport_failures": {
+    "impl:fn-1-homeplane-walking-skeleton-install.1": 0,
     "plan": 0
   },
   "spec_path": ".flow/specs/fn-1-homeplane-walking-skeleton-install.md",
@@ -2946,5 +3004,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-08-13T15:55:53.105439Z"
+  "updated_at": "2026-08-13T17:59:40.058499Z"
 }
