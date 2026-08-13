@@ -81,6 +81,31 @@ func TestSnapshotRefusesANonVault(t *testing.T) {
 	}
 }
 
+// The symlink-root hazard, at the snapshot layer: WalkDir does not follow a
+// symlink root, so an uncanonicalized path produces an EMPTY backup while the
+// real CLI syncs the target. An empty backup is worse than no backup: it looks
+// like one.
+func TestSnapshotThroughASymlinkedRootCapturesRealContent(t *testing.T) {
+	real := makeVault(t, map[string]string{"a.md": "alpha\n", "nested/b.md": "beta\n"})
+	link := filepath.Join(tempDir(t), "vault-link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	dest := filepath.Join(tempDir(t), "snap")
+
+	m, err := Snapshot(link, dest)
+	if err != nil {
+		t.Fatalf("Snapshot through a symlink: %v", err)
+	}
+	if len(m.Files) != 3 {
+		t.Fatalf("manifest has %d files through a symlink, want 3: %v", len(m.Files), m.Paths())
+	}
+	body, err := os.ReadFile(filepath.Join(dest, SnapshotTreeDirName, "a.md"))
+	if err != nil || string(body) != "alpha\n" {
+		t.Fatalf("snapshot through a symlink is empty or wrong (%v, %q)", err, body)
+	}
+}
+
 func TestScanIsContentAddressed(t *testing.T) {
 	v := makeVault(t, map[string]string{"a.md": "alpha\n"})
 	before, err := Scan(v)

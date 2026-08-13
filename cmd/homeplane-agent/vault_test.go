@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,15 +12,84 @@ import (
 	"testing"
 
 	"github.com/DanielKillenberger/homeplane/internal/agent"
+	"github.com/DanielKillenberger/homeplane/internal/agent/supervise"
 	"github.com/DanielKillenberger/homeplane/internal/agent/vault"
 )
 
-// These tests drive the CLI against temporary directories only. Nothing here
-// reads a real vault, a real Obsidian configuration, or the real sync service.
+// These tests drive the CLI against temporary directories and a fake
+// obsidian-headless stub. Nothing here reads a real vault, a real Obsidian
+// configuration, or the real network.
+
+const fakeOB = `#!/bin/sh
+case "$1" in
+  --version|-V) echo "0.0.13"; exit 0 ;;
+  sync-list-remote)
+    if [ -z "$OBSIDIAN_AUTH_TOKEN" ]; then echo "error: unauthorized" >&2; exit 1; fi
+    echo "Remote vaults:"; echo "Daniel-OS"; exit 0 ;;
+  sync-setup)
+    shift; DIR="$PWD"
+    while [ $# -gt 0 ]; do case "$1" in --path) DIR="$2"; shift 2 ;; *) shift ;; esac; done
+    mkdir -p "$DIR/.obsidian"; printf '{}\n' > "$DIR/.obsidian/app.json"; exit 0 ;;
+  sync-config) exit 0 ;;
+  sync)
+    shift; DIR="$PWD"
+    while [ $# -gt 0 ]; do case "$1" in --path) DIR="$2"; shift 2 ;; *) shift ;; esac; done
+    if [ -n "$FAKE_OB_PULL" ]; then
+      mkdir -p "$DIR/.obsidian"; printf '{}\n' > "$DIR/.obsidian/app.json"
+      echo "# pulled" > "$DIR/pulled.md"
+    fi
+    exit 0 ;;
+esac
+echo "error: unknown command $1" >&2; exit 1
+`
+
+func tmp(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("resolve temp dir: %v", err)
+	}
+	return dir
+}
+
+// writeOB installs the stub. The compiled-in pin still refuses it — which is
+// what the refusal tests want.
+func writeOB(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(tmp(t), "ob")
+	if err := os.WriteFile(path, []byte(fakeOB), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// pinnedOB installs the stub AND points the pin at it for the duration of one
+// test, so a happy path can run without a 40-package npm install.
+func pinnedOB(t *testing.T) string {
+	t.Helper()
+	path := writeOB(t)
+	sum := sha256File(t, path)
+	prev := loadPin
+	loadPin = func() (vault.Pin, error) {
+		return vault.Pin{Version: "0.0.13", Checksum: sum}, nil
+	}
+	t.Cleanup(func() { loadPin = prev })
+	return path
+}
+
+func sha256File(t *testing.T, path string) string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
 
 func vaultDir(t *testing.T, name string) string {
 	t.Helper()
-	dir := filepath.Join(t.TempDir(), name)
+	dir := filepath.Join(tmp(t), name)
 	if err := os.MkdirAll(filepath.Join(dir, ".obsidian"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +100,7 @@ func vaultDir(t *testing.T, name string) string {
 }
 
 func TestVaultDetectRecordsThePathAndStatusReportsIt(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
+	state := filepath.Join(tmp(t), "state")
 	v := vaultDir(t, "Daniel-OS")
 
 	got := invoke(t, "vault", "detect", "-state-dir", state, "-vault-path", v, "-record")
@@ -60,8 +131,8 @@ func TestVaultDetectRecordsThePathAndStatusReportsIt(t *testing.T) {
 }
 
 func TestVaultDetectRefusesANonVaultPath(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
-	got := invoke(t, "vault", "detect", "-state-dir", state, "-vault-path", t.TempDir())
+	state := filepath.Join(tmp(t), "state")
+	got := invoke(t, "vault", "detect", "-state-dir", state, "-vault-path", tmp(t))
 	if got.code == 0 {
 		t.Fatal("a non-vault directory was accepted")
 	}
@@ -70,11 +141,10 @@ func TestVaultDetectRefusesANonVaultPath(t *testing.T) {
 	}
 }
 
-// R3: no vault must be recorded as degraded-and-retryable, never as ok and
-// never as a silent success.
+// R3: no vault must be recorded as degraded-and-retryable, never as ok.
 func TestVaultDetectRecordsNoVaultAsDegraded(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
-	home := t.TempDir()
+	state := filepath.Join(tmp(t), "state")
+	home := tmp(t)
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
 
@@ -97,62 +167,109 @@ func TestVaultDetectRecordsNoVaultAsDegraded(t *testing.T) {
 	}
 }
 
-func TestVaultSetCredentialStoresItSecurelyFromStdin(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
-	const secret = "obsidian-sync-password"
+func TestVaultSetE2EPasswordStoresItSecurelyFromStdin(t *testing.T) {
+	state := filepath.Join(tmp(t), "state")
+	const secret = "e2e-encryption-password"
 
 	var out, errBuf bytes.Buffer
-	code := runVaultSetCredential([]string{"-state-dir", state}, strings.NewReader(secret+"\n"), &out, &errBuf)
+	code := runVaultSetE2E([]string{"-state-dir", state}, strings.NewReader(secret+"\n"), &out, &errBuf)
 	if code != 0 {
-		t.Fatalf("set-credential failed: %d\n%s", code, errBuf.String())
+		t.Fatalf("set-e2e-password failed: %d\n%s", code, errBuf.String())
 	}
-	// The command must not echo the secret back.
 	if strings.Contains(out.String(), secret) {
-		t.Fatalf("the credential was echoed: %q", out.String())
+		t.Fatalf("the password was echoed: %q", out.String())
 	}
-	got, err := vault.LoadCredential(state)
+	got, err := vault.LoadE2EPassword(state)
 	if err != nil {
-		t.Fatalf("LoadCredential: %v", err)
+		t.Fatalf("LoadE2EPassword: %v", err)
 	}
 	if got != secret {
-		t.Fatalf("credential = %q", got)
+		t.Fatalf("password = %q", got)
 	}
-	info, err := os.Stat(vault.CredentialPath(state))
+	info, err := os.Stat(vault.E2EPasswordPath(state))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Fatalf("mode = %o, want 0600", perm)
 	}
-	// The credential must never reach state.json.
 	if raw, err := os.ReadFile(filepath.Join(state, "state.json")); err == nil && strings.Contains(string(raw), secret) {
-		t.Fatal("the credential leaked into state.json")
+		t.Fatal("the password leaked into state.json")
 	}
 }
 
-// Activation must refuse before it touches anything when the pin is PENDING,
-// and it must record that refusal where `status` can see it.
-func TestVaultSyncActivateRefusesThePendingPinAndRecordsIt(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
-	v := vaultDir(t, "Daniel-OS")
+// R3's absent-vault path, end to end through the command surface.
+func TestVaultRetrieveFetchesAnAbsentVault(t *testing.T) {
+	state := filepath.Join(tmp(t), "state")
+	dest := filepath.Join(tmp(t), "Daniel-OS")
+	if err := vault.SaveAuthToken(state, "tok"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FAKE_OB_PULL", "1")
 
+	got := invoke(t, "vault", "retrieve", "-state-dir", state, "-path", dest, "-ob", pinnedOB(t))
+	if got.code != 0 {
+		t.Fatalf("retrieve failed: %d\n%s", got.code, got.stderr)
+	}
+	st, _, err := agent.PeekState(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.VaultPath == "" {
+		t.Fatal("retrieval did not record a vault path")
+	}
+	if !vault.IsVault(st.VaultPath) {
+		t.Fatalf("%s is not a vault", st.VaultPath)
+	}
+	if st.Vault == nil || st.Vault.State != agent.StateOK {
+		t.Fatalf("recorded vault state = %+v", st.Vault)
+	}
+}
+
+// The previously unreachable branch: retrieval without a stored token reports
+// an auth problem, distinct from "no vault found".
+func TestVaultRetrieveWithoutATokenReportsAnAuthProblem(t *testing.T) {
+	state := filepath.Join(tmp(t), "state")
+	got := invoke(t, "vault", "retrieve", "-state-dir", state, "-path", filepath.Join(tmp(t), "v"), "-ob", writeOB(t))
+	if got.code == 0 {
+		t.Fatal("retrieval ran without a token")
+	}
+	if !strings.Contains(got.stderr, "vault login") {
+		t.Fatalf("stderr = %q, want a pointer at `vault login`", got.stderr)
+	}
+	st, _, err := agent.PeekState(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Vault == nil || !strings.Contains(st.Vault.Detail, "auth token") {
+		t.Fatalf("recorded vault state = %+v, want an auth-token reason", st.Vault)
+	}
+}
+
+func TestVaultRetrieveRequiresAPath(t *testing.T) {
+	if got := invoke(t, "vault", "retrieve", "-state-dir", filepath.Join(tmp(t), "s")); got.code != exitUsage {
+		t.Fatalf("exit = %d, want %d", got.code, exitUsage)
+	}
+}
+
+// Activation must refuse before touching anything when the CLI is not the
+// pinned build, and record that refusal where `status` can see it.
+func TestVaultSyncActivateRefusesAnUnpinnedCLI(t *testing.T) {
+	state := filepath.Join(tmp(t), "state")
+	v := vaultDir(t, "Daniel-OS")
 	if got := invoke(t, "vault", "detect", "-state-dir", state, "-vault-path", v, "-record"); got.code != 0 {
 		t.Fatalf("detect: %s", got.stderr)
 	}
-	if err := vault.SaveCredential(state, "pw"); err != nil {
-		t.Fatal(err)
-	}
-	ob := filepath.Join(t.TempDir(), "ob")
-	if err := os.WriteFile(ob, []byte("#!/bin/sh\necho 0.0.13\n"), 0o755); err != nil {
+	if err := vault.SaveAuthToken(state, "tok"); err != nil {
 		t.Fatal(err)
 	}
 
 	got := invoke(t, "vault", "sync", "activate",
-		"-state-dir", state, "-ob", ob, "-unit-dir", filepath.Join(t.TempDir(), "units"))
+		"-state-dir", state, "-ob", writeOB(t), "-unit-dir", filepath.Join(tmp(t), "units"))
 	if got.code == 0 {
-		t.Fatal("activation succeeded with a PENDING pin")
+		t.Fatal("activation succeeded with an unpinned CLI")
 	}
-	if !strings.Contains(got.stderr, "PENDING") {
+	if !strings.Contains(got.stderr, "does not match the pin") {
 		t.Fatalf("stderr = %q, want the pin refusal", got.stderr)
 	}
 
@@ -163,8 +280,8 @@ func TestVaultSyncActivateRefusesThePendingPinAndRecordsIt(t *testing.T) {
 	if st.Sync == nil || st.Sync.State != agent.StateDegraded {
 		t.Fatalf("recorded sync state = %+v, want degraded", st.Sync)
 	}
-	// The vault itself stays readable and recorded — a refused activation must
-	// not look like a lost vault.
+	// The vault stays readable and recorded — a refused activation must never
+	// look like a lost vault.
 	if st.VaultPath != v {
 		t.Fatalf("vault path = %q, want %q", st.VaultPath, v)
 	}
@@ -174,7 +291,7 @@ func TestVaultSyncActivateRefusesThePendingPinAndRecordsIt(t *testing.T) {
 }
 
 func TestVaultSyncActivateRequiresARecordedVault(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
+	state := filepath.Join(tmp(t), "state")
 	got := invoke(t, "vault", "sync", "activate", "-state-dir", state)
 	if got.code == 0 {
 		t.Fatal("activation ran without a recorded vault")
@@ -184,22 +301,79 @@ func TestVaultSyncActivateRequiresARecordedVault(t *testing.T) {
 	}
 }
 
-func TestVaultSyncActivateRequiresACredential(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
+func TestVaultSyncActivateRequiresAnAuthToken(t *testing.T) {
+	state := filepath.Join(tmp(t), "state")
 	v := vaultDir(t, "Daniel-OS")
 	if got := invoke(t, "vault", "detect", "-state-dir", state, "-vault-path", v, "-record"); got.code != 0 {
 		t.Fatalf("detect: %s", got.stderr)
 	}
-	got := invoke(t, "vault", "sync", "activate", "-state-dir", state)
+	got := invoke(t, "vault", "sync", "activate", "-state-dir", state, "-ob", writeOB(t))
 	if got.code == 0 {
-		t.Fatal("activation ran without a sync credential")
+		t.Fatal("activation ran without an auth token")
 	}
-	st, _, err := agent.PeekState(state)
+	if !strings.Contains(got.stderr, "vault login") {
+		t.Fatalf("stderr = %q, want a pointer at `vault login`", got.stderr)
+	}
+}
+
+// The bug that made every installed service crash-loop: the supervision unit
+// omitted the resolved CLI path, so the supervised `vault sync run` refused
+// with "no obsidian-headless CLI path configured" on every launch.
+//
+// This drives the RENDERED UNIT'S EXACT ARGV back through the command surface.
+func TestSupervisedRunUsesTheUnitsOwnArgv(t *testing.T) {
+	state := filepath.Join(tmp(t), "state")
+	v := vaultDir(t, "Daniel-OS")
+	ob := writeOB(t)
+
+	// Stand in for what activation persists, without needing a matching pin.
+	if err := vault.SaveConfig(state, vault.Config{
+		VaultPath: v, OBPath: ob, UnitLabel: vault.SyncUnitLabel, PinVersion: "0.0.13",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SaveAuthToken(state, "tok"); err != nil {
+		t.Fatal(err)
+	}
+
+	unit, err := vault.SyncUnit("/opt/homeplane/bin/homeplane-agent", state, v, ob)
+	if err != nil {
+		t.Fatalf("SyncUnit: %v", err)
+	}
+	// Exactly what launchd/systemd would exec, minus the program itself.
+	got := invoke(t, append(unit.Args, "-once")...)
+	if strings.Contains(got.stderr, "no obsidian-headless CLI path configured") {
+		t.Fatalf("the supervised argv cannot find the CLI:\n%s", got.stderr)
+	}
+	// The stub is not the pinned build, so a pin refusal is the expected
+	// outcome — what matters is that it got as far as verifying a real path.
+	if got.code == 0 && !strings.Contains(got.stdout, "exited cleanly") {
+		t.Fatalf("unexpected output: %q / %q", got.stdout, got.stderr)
+	}
+	if got.code != 0 && !strings.Contains(got.stderr, "does not match the pin") {
+		t.Fatalf("supervised run failed for the wrong reason: %s", got.stderr)
+	}
+}
+
+func TestSupervisedUnitArgvCarriesTheCLIPath(t *testing.T) {
+	state := filepath.Join(tmp(t), "state")
+	ob := writeOB(t)
+	unit, err := vault.SyncUnit("/opt/homeplane/bin/homeplane-agent", state, "/vaults/Daniel-OS", ob)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Sync == nil || st.Sync.State != agent.StateDegraded {
-		t.Fatalf("recorded sync state = %+v, want degraded", st.Sync)
+	argv := strings.Join(unit.Args, " ")
+	for _, want := range []string{"vault", "sync", "run", "-state-dir " + state, "-ob " + ob} {
+		if !strings.Contains(argv, want) {
+			t.Fatalf("unit argv %q is missing %q", argv, want)
+		}
+	}
+	rendered, err := unit.Render(supervise.Launchd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rendered, ob) {
+		t.Fatalf("the rendered unit omits the CLI path:\n%s", rendered)
 	}
 }
 
@@ -227,12 +401,13 @@ func TestSyncComponentForClassifiesFailures(t *testing.T) {
 		{"destructive", &vault.DestructiveDiffError{Reason: "too many", SnapshotPath: "/snap"}, "destructive diff refused"},
 		{"pin pending", vault.ErrPinUnset, "PENDING"},
 		{"pin mismatch", vault.ErrPinMismatch, "does not match the pinned build"},
+		{"no token", vault.ErrNoAuthToken, "vault login"},
 		{"auth", &vault.AuthError{Detail: "401"}, "authentication failed"},
 		{"network", &vault.NetworkError{Detail: "refused"}, "network failure"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := syncComponentFor(tc.err, vault.ActivateResult{})
+			got := syncComponentFor(tc.err, vault.PrepareResult{})
 			if got.State != agent.StateDegraded {
 				t.Fatalf("state = %q, want degraded", got.State)
 			}
@@ -241,11 +416,30 @@ func TestSyncComponentForClassifiesFailures(t *testing.T) {
 			}
 		})
 	}
-	// Every failure must read as retryable rather than terminal.
 	for _, tc := range cases[3:] {
-		if got := syncComponentFor(tc.err, vault.ActivateResult{}); !strings.Contains(got.Detail, "retryable") {
+		if got := syncComponentFor(tc.err, vault.PrepareResult{}); !strings.Contains(got.Detail, "retryable") {
 			t.Fatalf("%s detail = %q, want it to say retryable", tc.name, got.Detail)
 		}
+	}
+}
+
+// An installed-but-unloaded unit must NOT project as ok. This is the exact
+// conflation that let a machine report a healthy sync while nothing ran.
+func TestSyncComponentForResultSeparatesInstalledFromActive(t *testing.T) {
+	cfg := vault.Config{VaultPath: "/v", UnitPath: "/u/com.homeplane.vault-sync.plist", PinVersion: "0.0.13"}
+
+	installed := syncComponentForResult(cfg, vault.PrepareResult{})
+	if installed.State != agent.StateInstalled {
+		t.Fatalf("unapplied state = %q, want %q", installed.State, agent.StateInstalled)
+	}
+	if !strings.Contains(installed.Detail, "not loaded") {
+		t.Fatalf("detail = %q", installed.Detail)
+	}
+
+	cfg.Applied = true
+	applied := syncComponentForResult(cfg, vault.PrepareResult{})
+	if applied.State != agent.StateOK {
+		t.Fatalf("applied state = %q, want ok", applied.State)
 	}
 }
 

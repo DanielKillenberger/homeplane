@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/DanielKillenberger/homeplane/internal/agent/supervise"
 )
 
 // Component states. `unknown` is the load-bearing one: it is what the agent
@@ -163,7 +165,7 @@ func Status(ctx context.Context, opts StatusOptions) (Report, error) {
 
 	report.Components = append(report.Components, enrolmentComponent(hasState, state, credential))
 	report.Components = append(report.Components, vaultComponent(state))
-	report.Components = append(report.Components, localComponent(ComponentSync, state.Sync, "vault sync is not configured yet"))
+	report.Components = append(report.Components, syncComponent(dir, state))
 	report.Components = append(report.Components, localComponent(ComponentGNO, state.GNO, "GNO is not configured yet"))
 	report.Components = append(report.Components, listComponent(ComponentHarnesses, state.Harnesses, "no harness is configured yet"))
 	report.Components = append(report.Components, listComponent(ComponentSkills, state.Skills, "no skills are provisioned yet"))
@@ -234,6 +236,66 @@ func vaultComponent(state State) ComponentReport {
 	default:
 		c.State = StateOK
 		c.Detail = state.VaultPath
+	}
+	return c
+}
+
+// Sync component states beyond the shared vocabulary.
+const (
+	// StateInstalled means the supervision unit exists on disk but has not been
+	// loaded into launchd/systemd. The vault is NOT syncing, and saying `ok`
+	// here would be the exact lie R14 forbids.
+	StateInstalled = "installed"
+)
+
+// syncComponent reports whether the vault is ACTUALLY syncing.
+//
+// The recorded state in state.json is a claim made at activation time; the
+// restart ledger is what the supervised process has done since. A machine can
+// record `ok` and then be SIGKILLed, crash-loop, or exit — and a status that
+// only echoed the recorded claim would keep reporting a healthy sync through
+// all three. So the ledger is authoritative for liveness, and the recorded
+// state only supplies the reason when there is nothing running to ask.
+func syncComponent(stateDir string, state State) ComponentReport {
+	c := localComponent(ComponentSync, state.Sync, "vault sync is not configured yet")
+	if state.Sync == nil || strings.TrimSpace(state.Sync.State) == "" {
+		return c
+	}
+	// A recorded failure (bad pin, destructive diff, auth failure) is the whole
+	// story: nothing was supervised, so there is no ledger to consult.
+	if c.State != StateOK && c.State != StateInstalled {
+		return c
+	}
+	ledger, err := (supervise.Tracker{Dir: stateDir, Label: supervise.VaultSyncLabel}).Load()
+	if err != nil {
+		return ComponentReport{Name: ComponentSync, State: StateUnknown,
+			Detail: "restart history unreadable: " + err.Error()}
+	}
+	now := time.Now()
+	switch {
+	case c.State == StateInstalled:
+		// Installed but never loaded. If the ledger shows starts anyway, the
+		// supervisor did pick it up and the recorded claim is simply stale.
+		if ledger.TotalStarts == 0 {
+			c.State = StateDegraded
+			c.Detail = "supervision unit installed but not loaded — vault is NOT syncing; " + c.Detail
+			return c
+		}
+	case ledger.TotalStarts == 0:
+		c.State = StateDegraded
+		c.Detail = "supervised but never started — vault is NOT syncing; " + c.Detail
+		return c
+	}
+	switch {
+	case ledger.CrashLooping(now, supervise.DefaultCrashLoopWindow, supervise.DefaultCrashLoopThreshold):
+		c.State = StateDegraded
+		c.Detail = "crash-looping (retryable; the vault remains readable locally) — " + ledger.Summary(now)
+	case !ledger.Running():
+		c.State = StateDegraded
+		c.Detail = "not running (retryable; the vault remains readable locally) — " + ledger.Summary(now)
+	default:
+		c.State = StateOK
+		c.Detail = ledger.Summary(now) + "; " + c.Detail
 	}
 	return c
 }

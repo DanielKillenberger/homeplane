@@ -1,0 +1,149 @@
+# obsidian-headless 0.0.13 — captured verbatim from the pinned build.
+# Regenerate with: scripts/capture-ob-contract.sh <path-to-ob>
+# internal/agent/vault asserts every argv it emits against this file.
+
+=== ob --help ===
+Usage: ob [options] [command]
+
+Headless client for Obsidian services
+
+Options:
+  -V, --version                   output the version number
+  -h, --help                      display help for command
+
+Commands:
+  login [options]                 Login to Obsidian account or display login
+                                  status
+  logout                          Logout from Obsidian account
+  sync-list-remote                List available remote vaults
+  sync-list-local                 List locally configured vaults
+  sync-create-remote [options]    Create a new remote vault
+  sync-setup [options]            Setup sync from a local path to a remote vault
+  sync-config [options]           Change sync configuration for a vault
+  sync-status [options]           Show sync status for a vault
+  sync-unlink [options]           Disconnect a vault from sync and remove stored
+                                  credentials
+  sync [options]                  Sync a vault
+  publish-list-sites              List publish sites
+  publish-create-site [options]   Create a new Publish site
+  publish-setup [options]         Connect a local vault to a Publish site
+  publish [options]               Publish vault changes to site
+  publish-config [options]        Configure publish settings for a vault
+  publish-site-options [options]  View or update publish site options
+  publish-unlink [options]        Disconnect a vault from a publish site
+  help [command]                  display help for command
+
+=== ob login --help ===
+Usage: ob login [options]
+
+Login to Obsidian account or display login status
+
+Options:
+  --email <email>        Email address (prompted if omitted)
+  --password <password>  Password (prompted if omitted)
+  --mfa <code>           MFA code (prompted if omitted)
+  -h, --help             display help for command
+
+=== ob logout --help ===
+Usage: ob logout [options]
+
+Logout from Obsidian account
+
+Options:
+  -h, --help  display help for command
+
+=== ob sync-list-remote --help ===
+Usage: ob sync-list-remote [options]
+
+List available remote vaults
+
+Options:
+  -h, --help  display help for command
+
+=== ob sync-list-local --help ===
+Usage: ob sync-list-local [options]
+
+List locally configured vaults
+
+Options:
+  -h, --help  display help for command
+
+=== ob sync-create-remote --help ===
+Usage: ob sync-create-remote [options]
+
+Create a new remote vault
+
+Options:
+  --name <name>                     Vault name
+  --encryption <standard|e2ee>      Encryption
+  --password <encryption-password>  End-to-end encryption password (prompt if
+                                    omitted)
+  --region <region>                 Vault region (leave empty for automatic)
+  -h, --help                        display help for command
+
+=== ob sync-setup --help ===
+Usage: ob sync-setup [options]
+
+Setup sync from a local path to a remote vault
+
+Options:
+  --vault <vault>                   Remote vault ID or name
+  --path <local-path>               Local vault path (use current directory if
+                                    omitted)
+  --password <encryption-password>  End-to-end encryption password (prompted if
+                                    omitted)
+  --device-name <name>              Device name to identify this client in the
+                                    sync version history
+  --config-dir <name>               Config directory name (default: .obsidian)
+  -h, --help                        display help for command
+
+=== ob sync-config --help ===
+Usage: ob sync-config [options]
+
+Change sync configuration for a vault
+
+Options:
+  --path <local-path>             Local vault path (use current directory if
+                                  omitted)
+  --conflict-strategy <strategy>  Conflict resolution strategy (merge or
+                                  conflict)
+  --excluded-folders <folders>    Folders to exclude, comma-separated (empty
+                                  string to clear)
+  --file-types <types>            Attachment types to sync, comma-separated:
+                                  image, audio, video, pdf, unsupported (empty
+                                  to clear)
+  --configs <settings>            Config categories to sync, comma-separated:
+                                  app, appearance, appearance-data, hotkey,
+                                  core-plugin, core-plugin-data,
+                                  community-plugin, community-plugin-data (empty
+                                  to clear)
+  --device-name <name>            Device name to identify this client in the
+                                  sync version history
+  --mode <mode>                   Sync mode: bidirectional (default), pull-only
+                                  (only download, ignore local changes), or
+                                  mirror-remote (only download, revert local
+                                  changes)
+  --config-dir <name>             Config directory name (default: .obsidian)
+  -h, --help                      display help for command
+
+=== ob sync-status --help ===
+Usage: ob sync-status [options]
+
+Show sync status for a vault
+
+Options:
+  --path <local-path>  Local vault path (use current directory if omitted)
+  -h, --help           display help for command
+
+=== ob sync --help ===
+Usage: ob sync [options]
+
+Sync a vault
+
+Options:
+  --path <local-path>  Local vault path (use current directory if omitted)
+  --continuous         Run in continuous sync mode
+  -h, --help           display help for command
+
+=== ob --version ===
+0.0.13

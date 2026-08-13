@@ -95,14 +95,19 @@ type DetectOptions struct {
 // Detect finds the vault, or explains precisely why it cannot.
 func Detect(opts DetectOptions) (Candidate, error) {
 	if p := strings.TrimSpace(opts.ExplicitPath); p != "" {
-		abs, err := filepath.Abs(p)
+		// Canonicalize BEFORE validating or recording. A symlinked vault root
+		// is the dangerous case: filepath.WalkDir does not follow a symlink
+		// root, so an uncanonicalized path would snapshot NOTHING while the
+		// real CLI resolves the link and syncs the target — a guard comparing
+		// two empty manifests would wave a wipe straight through.
+		canonical, err := Canonicalize(p)
 		if err != nil {
-			return Candidate{}, fmt.Errorf("vault: resolve %s: %w", p, err)
+			return Candidate{}, err
 		}
-		if !IsVault(abs) {
-			return Candidate{}, fmt.Errorf("%w: %s (no %s directory)", ErrNotAVault, abs, ConfigDirName)
+		if !IsVault(canonical) {
+			return Candidate{}, fmt.Errorf("%w: %s (no %s directory)", ErrNotAVault, canonical, ConfigDirName)
 		}
-		return Candidate{Path: abs, Name: filepath.Base(abs), Source: SourceExplicit}, nil
+		return Candidate{Path: canonical, Name: filepath.Base(canonical), Source: SourceExplicit}, nil
 	}
 
 	candidates, err := Candidates(opts)
@@ -167,6 +172,28 @@ func Candidates(opts DetectOptions) ([]Candidate, error) {
 
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, nil
+}
+
+// Canonicalize resolves a vault path to its real location: absolute, with every
+// symlink resolved. Everything downstream — snapshot, scans, guard, sync, and
+// the recorded state — must use this one path, or they can silently disagree
+// about which directory is the vault.
+func Canonicalize(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", errors.New("vault: path is required")
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("vault: resolve %s: %w", path, err)
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("vault: %s does not exist", abs)
+		}
+		return "", fmt.Errorf("vault: resolve %s: %w", abs, err)
+	}
+	return resolved, nil
 }
 
 // IsVault reports whether dir carries an Obsidian configuration directory.
@@ -261,23 +288,31 @@ func scanChildren(root string) []string {
 	return out
 }
 
-// ValidatePath checks a recorded vault path is still usable, phrasing each
-// failure the way `status` should report it.
-func ValidatePath(path string) error {
+// ValidatePath checks a recorded vault path is still usable and returns its
+// canonical form, phrasing each failure the way `status` should report it.
+func ValidatePath(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
-		return errors.New("vault: no vault path recorded")
+		return "", errors.New("vault: no vault path recorded")
 	}
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return fmt.Errorf("vault: %s does not exist", path)
+		return "", fmt.Errorf("vault: %s does not exist", path)
 	case err != nil:
-		return fmt.Errorf("vault: %s is unreadable: %w", path, err)
-	case !info.IsDir():
-		return fmt.Errorf("vault: %s is not a directory", path)
+		return "", fmt.Errorf("vault: %s is unreadable: %w", path, err)
 	}
-	if !IsVault(path) {
-		return fmt.Errorf("%w: %s (no %s directory)", ErrNotAVault, path, ConfigDirName)
+	canonical, err := Canonicalize(path)
+	if err != nil {
+		return "", err
 	}
-	return nil
+	if info, err = os.Stat(canonical); err != nil {
+		return "", fmt.Errorf("vault: %s is unreadable: %w", canonical, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("vault: %s is not a directory", canonical)
+	}
+	if !IsVault(canonical) {
+		return "", fmt.Errorf("%w: %s (no %s directory)", ErrNotAVault, canonical, ConfigDirName)
+	}
+	return canonical, nil
 }

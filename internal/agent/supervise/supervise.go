@@ -60,6 +60,16 @@ func DetectPlatform(goos string) (Platform, error) {
 	}
 }
 
+// Canonical unit labels. They live here rather than in each owning package so
+// that `status` can read a unit's restart ledger without importing the package
+// that installs it.
+const (
+	// VaultSyncLabel is the continuous Obsidian Sync process (task .5).
+	VaultSyncLabel = "com.homeplane.vault-sync"
+	// GNOLabel is the supervised GNO process (task .11).
+	GNOLabel = "com.homeplane.gno"
+)
+
 // Unit is one supervised process, expressed independently of the platform.
 type Unit struct {
 	// Label is the reverse-DNS identifier (launchd Label; systemd unit stem).
