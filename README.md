@@ -161,7 +161,16 @@ The flow is an asynchronous state machine (`pending` → `completed` | `denied` 
   or `http://[::1]:<port>` and uses the identical URI when building the
   authorization URL and again at token exchange.
 - The authorization outcome is relayed **once** (a replay is refused with 409),
-  with PKCE and the state parameter verified server-side.
+  with PKCE and the state parameter verified server-side. The relay returns as
+  soon as the outcome is consumed: redeeming the code is a **server-owned job**
+  that no request can cancel, and the machine learns what came of it by polling.
+  A relay response lost in transit therefore costs one more poll rather than
+  leaving the CLI reporting failure for a credential that was actually stored.
+- The flow's window bounds how long the HUMAN has to consent, not how long the
+  exchange may take: once an outcome is relayed, the exchange job alone decides
+  the ending, so a slow provider can never produce two conflicting outcomes.
+- A terminal state is never shown before its audit row is written, and open
+  flows are bounded per machine and forgotten after a retention window.
 - Replacement is an atomic swap: the existing credential stays active until the
   new one is durably stored, so a declined, expired, failed, or abandoned flow
   leaves it exactly as it was. Two flows racing for the same provider produce

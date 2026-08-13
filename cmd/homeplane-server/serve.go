@@ -191,7 +191,16 @@ token, the WhoIs machine binding and the manifest apply.`)
 		log.Info("shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return httpSrv.Shutdown(shutdownCtx)
+		err := httpSrv.Shutdown(shutdownCtx)
+		// Credential exchanges deliberately outlive their request, so the
+		// server waits for one in flight rather than abandoning a credential
+		// the provider has already issued.
+		if broker != nil {
+			if waitErr := broker.Shutdown(shutdownCtx); waitErr != nil {
+				log.Warn("credential exchange still running at shutdown", "error", waitErr)
+			}
+		}
+		return err
 	}
 }
 

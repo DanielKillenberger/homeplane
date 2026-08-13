@@ -39,6 +39,10 @@ type fakeProvider struct {
 	// what the server put in the URL.
 	authorizeCalls []authRequest
 
+	// tokenGate, when non-nil, holds the token endpoint until it is closed —
+	// the provider taking its time, on demand.
+	tokenGate chan struct{}
+
 	// Failure switches, all off by default.
 	denyConsent   bool
 	tokenStatus   int
@@ -74,6 +78,15 @@ func newFakeProvider(t *testing.T, name string) *fakeProvider {
 	p.server = httptest.NewTLSServer(mux)
 	t.Cleanup(p.server.Close)
 	return p
+}
+
+// hold makes the token endpoint block until the returned func is called.
+func (p *fakeProvider) hold() func() {
+	gate := make(chan struct{})
+	p.mu.Lock()
+	p.tokenGate = gate
+	p.mu.Unlock()
+	return func() { close(gate) }
 }
 
 func (p *fakeProvider) authEndpoint() string  { return p.server.URL + "/authorize" }
@@ -120,8 +133,15 @@ func (p *fakeProvider) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 func (p *fakeProvider) handleToken(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
-	status, body := p.tokenStatus, p.tokenBody
+	status, body, gate := p.tokenStatus, p.tokenBody, p.tokenGate
 	p.mu.Unlock()
+	if gate != nil {
+		select {
+		case <-gate:
+		case <-r.Context().Done():
+			return
+		}
+	}
 	if status != 0 {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)

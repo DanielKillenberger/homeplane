@@ -21,14 +21,11 @@ func TestCompletedFlowStoresCredentialServerSide(t *testing.T) {
 	p := newFakeProvider(t, "alpha")
 	h := newHarness(t, harnessOptions{providers: []*fakeProvider{p}})
 
-	flowID, relay := h.runFlow(machineA, p, false)
-	if relay.status != http.StatusAccepted {
-		t.Fatalf("relay: status %d body %s", relay.status, relay.raw)
-	}
-	poll := h.poll(machineA, flowID)
+	flowID, poll := h.runFlow(machineA, p, false)
 	if got := poll.str("state"); got != string(credflow.StateCompleted) {
 		t.Fatalf("flow state = %q, want completed (body %s)", got, poll.raw)
 	}
+	_ = flowID
 
 	cred, generation, err := h.credential(p.name)
 	if err != nil {
@@ -45,7 +42,7 @@ func TestCompletedFlowStoresCredentialServerSide(t *testing.T) {
 	}
 
 	// Custody: nothing the machine ever saw contains token material.
-	for _, seen := range []string{relay.raw, poll.raw} {
+	for _, seen := range []string{poll.raw} {
 		for _, secret := range []string{cred.Access, cred.Refresh, p.secret} {
 			if strings.Contains(seen, secret) {
 				t.Fatalf("a response returned to the machine contained credential material: %s", seen)
@@ -68,9 +65,11 @@ func TestAuthorizationRequestUsesTheClientsRedirectURI(t *testing.T) {
 		t.Fatalf("start: status %d body %s", start.status, start.raw)
 	}
 	code, _, state := p.consent(t, h.client, start.str("authorization_url"))
-	relay := h.relay(machineA, start.str("flow_id"), map[string]string{"code": code, "state": state})
-	if relay.status != http.StatusAccepted || relay.str("state") != string(credflow.StateCompleted) {
+	if relay := h.relay(machineA, start.str("flow_id"), map[string]string{"code": code, "state": state}); relay.status != http.StatusAccepted {
 		t.Fatalf("relay: status %d body %s", relay.status, relay.raw)
+	}
+	if final := h.awaitTerminal(machineA, start.str("flow_id")); final.str("state") != string(credflow.StateCompleted) {
+		t.Fatalf("flow state = %q, want completed (body %s)", final.str("state"), final.raw)
 	}
 
 	p.mu.Lock()
@@ -176,9 +175,9 @@ func TestAlreadyConfiguredProviderRequiresReplace(t *testing.T) {
 		t.Fatalf("existing credential disturbed by a refused start: %+v (%v)", cred, err)
 	}
 
-	_, relay := h.runFlow(machineA, p, true)
-	if relay.str("state") != string(credflow.StateCompleted) {
-		t.Fatalf("replace flow state = %q, want completed (body %s)", relay.str("state"), relay.raw)
+	_, final := h.runFlow(machineA, p, true)
+	if final.str("state") != string(credflow.StateCompleted) {
+		t.Fatalf("replace flow state = %q, want completed (body %s)", final.str("state"), final.raw)
 	}
 	cred, generation, err := h.credential(p.name)
 	if err != nil {
@@ -252,6 +251,9 @@ func TestUnsuccessfulTerminalStatesPreserveTheExistingCredential(t *testing.T) {
 
 			flowID := tc.run(t, h, p)
 			poll := h.poll(machineA, flowID)
+			if tc.wantState != credflow.StatePending {
+				poll = h.awaitTerminal(machineA, flowID)
+			}
 			if got := poll.str("state"); got != string(tc.wantState) {
 				t.Fatalf("state = %q, want %q (body %s)", got, tc.wantState, poll.raw)
 			}
@@ -292,8 +294,7 @@ func TestStoreFailureLeavesNothingPartial(t *testing.T) {
 	failing.delegate = h.st
 	failing.failWrites = true
 
-	flowID, _ := h.runFlow(machineA, p, true)
-	poll := h.poll(machineA, flowID)
+	_, poll := h.runFlow(machineA, p, true)
 	if poll.str("state") != string(credflow.StateFailed) {
 		t.Fatalf("state = %q, want failed (body %s)", poll.str("state"), poll.raw)
 	}
@@ -308,9 +309,9 @@ func TestStoreFailureLeavesNothingPartial(t *testing.T) {
 	if cred, generation, err := h.credential(p.name); err != nil || cred.Access != "existing-access-token" || generation != 1 {
 		t.Fatalf("credential after store failure = %+v gen %d (%v)", cred, generation, err)
 	}
-	_, relay := h.runFlow(machineA, p, true)
-	if relay.str("state") != string(credflow.StateCompleted) {
-		t.Fatalf("retry after store failure = %q, want completed", relay.str("state"))
+	_, final := h.runFlow(machineA, p, true)
+	if final.str("state") != string(credflow.StateCompleted) {
+		t.Fatalf("retry after store failure = %q, want completed", final.str("state"))
 	}
 }
 
@@ -326,6 +327,9 @@ func TestCodeRelayIsOneShot(t *testing.T) {
 	first := h.relay(machineA, flowID, map[string]string{"code": code, "state": state})
 	if first.status != http.StatusAccepted {
 		t.Fatalf("first relay: status %d body %s", first.status, first.raw)
+	}
+	if final := h.awaitTerminal(machineA, flowID); final.str("state") != string(credflow.StateCompleted) {
+		t.Fatalf("first relay ended as %q, want completed", final.str("state"))
 	}
 	second := h.relay(machineA, flowID, map[string]string{"code": code, "state": state})
 	if second.status != http.StatusConflict {
@@ -353,9 +357,11 @@ func TestStateMismatchIsRefusedWithoutBurningTheFlow(t *testing.T) {
 	}
 
 	code, _, state := p.consent(t, h.client, start.str("authorization_url"))
-	good := h.relay(machineA, flowID, map[string]string{"code": code, "state": state})
-	if good.str("state") != string(credflow.StateCompleted) {
-		t.Fatalf("legitimate relay after a rejected one = %q, want completed (body %s)", good.str("state"), good.raw)
+	if good := h.relay(machineA, flowID, map[string]string{"code": code, "state": state}); good.status != http.StatusAccepted {
+		t.Fatalf("legitimate relay after a rejected one: status %d body %s", good.status, good.raw)
+	}
+	if final := h.awaitTerminal(machineA, flowID); final.str("state") != string(credflow.StateCompleted) {
+		t.Fatalf("legitimate relay after a rejected one = %q, want completed (body %s)", final.str("state"), final.raw)
 	}
 }
 
@@ -416,17 +422,21 @@ func TestConcurrentFlowsFromTwoMachinesCommitExactlyOnce(t *testing.T) {
 	codeB, _, stateB := p.consent(t, h.client, startB.str("authorization_url"))
 
 	var wg sync.WaitGroup
-	results := make([]response, 2)
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		results[0] = h.relay(machineA, startA.str("flow_id"), map[string]string{"code": codeA, "state": stateA})
+		h.relay(machineA, startA.str("flow_id"), map[string]string{"code": codeA, "state": stateA})
 	}()
 	go func() {
 		defer wg.Done()
-		results[1] = h.relay(machineB, startB.str("flow_id"), map[string]string{"code": codeB, "state": stateB})
+		h.relay(machineB, startB.str("flow_id"), map[string]string{"code": codeB, "state": stateB})
 	}()
 	wg.Wait()
+
+	results := []response{
+		h.awaitTerminal(machineA, startA.str("flow_id")),
+		h.awaitTerminal(machineB, startB.str("flow_id")),
+	}
 
 	var completed, lost int
 	for _, res := range results {
@@ -489,7 +499,7 @@ func TestDiagnosticsNeverCarryProviderBodies(t *testing.T) {
 	p.mu.Unlock()
 
 	relay := h.relay(machineA, start.str("flow_id"), map[string]string{"code": code, "state": state})
-	poll := h.poll(machineA, start.str("flow_id"))
+	poll := h.awaitTerminal(machineA, start.str("flow_id"))
 	for _, body := range []string{relay.raw, poll.raw} {
 		if strings.Contains(body, leak) || strings.Contains(body, "invalid_grant") {
 			t.Fatalf("provider response leaked into a machine-visible body: %s", body)
@@ -509,8 +519,9 @@ func TestProviderDenialReasonIsSanitized(t *testing.T) {
 	flowID := start.str("flow_id")
 
 	// A well-formed denial keeps its code.
-	relay := h.relay(machineA, flowID, map[string]string{
+	h.relay(machineA, flowID, map[string]string{
 		"error": "access_denied", "state": oauthStateFrom(t, start.str("authorization_url"))})
+	relay := h.awaitTerminal(machineA, flowID)
 	if relay.str("state") != string(credflow.StateDenied) {
 		t.Fatalf("state = %q, want denied (body %s)", relay.str("state"), relay.raw)
 	}
@@ -520,8 +531,9 @@ func TestProviderDenialReasonIsSanitized(t *testing.T) {
 
 	// An abusive one does not.
 	start2 := h.start(machineA, p.name, false)
-	relay2 := h.relay(machineA, start2.str("flow_id"), map[string]string{
+	h.relay(machineA, start2.str("flow_id"), map[string]string{
 		"error": "<script>alert(1)</script> ya29.TOKEN", "state": oauthStateFrom(t, start2.str("authorization_url"))})
+	relay2 := h.awaitTerminal(machineA, start2.str("flow_id"))
 	msg, _ := relay2.diagnostic()["message"].(string)
 	if strings.Contains(msg, "script") || strings.Contains(msg, "ya29") {
 		t.Fatalf("unsanitized provider error reached the diagnostic: %q", msg)

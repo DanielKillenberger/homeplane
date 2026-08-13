@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,9 +30,9 @@ func TestSecondProviderOnboardsThroughTheManifestAlone(t *testing.T) {
 
 	for _, p := range []*fakeProvider{alpha, beta} {
 		t.Run(p.name, func(t *testing.T) {
-			_, relay := h.runFlow(machineA, p, false)
-			if relay.status != http.StatusAccepted || relay.str("state") != string(credflow.StateCompleted) {
-				t.Fatalf("flow for %s: status %d body %s", p.name, relay.status, relay.raw)
+			_, final := h.runFlow(machineA, p, false)
+			if final.str("state") != string(credflow.StateCompleted) {
+				t.Fatalf("flow for %s: status %d body %s", p.name, final.status, final.raw)
 			}
 			cred, generation, err := h.credential(p.name)
 			if err != nil {

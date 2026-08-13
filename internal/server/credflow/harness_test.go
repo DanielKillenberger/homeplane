@@ -92,8 +92,10 @@ type harnessOptions struct {
 	sealer      credflow.Sealer
 	audit       credflow.AuditSink
 	// clock, when set, replaces the broker's wall clock so expiry is testable.
-	clock *testClock
-	ttl   time.Duration
+	clock             *testClock
+	ttl               time.Duration
+	terminalRetention time.Duration
+	maxActiveFlows    int
 	// manifestJSON overrides the generated manifest entirely.
 	manifestJSON string
 	// skipClientSecrets leaves the provider's client credentials unimported.
@@ -154,10 +156,12 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		now = opts.clock.now
 	}
 	svc, err := credflow.New(engine, secretStore, sealer, audit, credflow.Config{
-		TTL:        opts.ttl,
-		HTTPClient: h.client,
-		Now:        now,
-		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		TTL:                      opts.ttl,
+		TerminalRetention:        opts.terminalRetention,
+		MaxActiveFlowsPerMachine: opts.maxActiveFlows,
+		HTTPClient:               h.client,
+		Now:                      now,
+		Logger:                   slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	if err != nil {
 		t.Fatalf("credflow.New: %v", err)
@@ -175,6 +179,15 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		svc.HandlePoll(w, r, callerMachine(r))
 	})
 	h.handler = mux
+	// Exchange jobs outlive their request by design, so every test waits for
+	// them rather than leaving goroutines to trip the race detector.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := svc.Shutdown(ctx); err != nil {
+			t.Errorf("credential exchange jobs still running at test end: %v", err)
+		}
+	})
 	return h
 }
 
@@ -319,9 +332,21 @@ func (h *harness) poll(machine, flowID string) response {
 	return h.do(http.MethodGet, "/credentials/flows/"+flowID, machine, nil)
 }
 
-// runFlow drives a whole successful-shaped flow: start, consent in the
-// "browser", relay the outcome. It returns the flow id and the relay response.
+// runFlow drives a whole flow: start, consent in the "browser", relay the
+// outcome, then wait for the server's exchange job to reach a terminal state.
+// It returns the flow id and the TERMINAL poll response — the relay's own
+// answer says only that the outcome was received.
 func (h *harness) runFlow(machine string, p *fakeProvider, replace bool) (string, response) {
+	h.t.Helper()
+	flowID, relay := h.relayFlow(machine, p, replace)
+	if relay.status != http.StatusAccepted {
+		h.t.Fatalf("relay: status %d body %s", relay.status, relay.raw)
+	}
+	return flowID, h.awaitTerminal(machine, flowID)
+}
+
+// relayFlow runs a flow up to and including the relay, without waiting.
+func (h *harness) relayFlow(machine string, p *fakeProvider, replace bool) (string, response) {
 	h.t.Helper()
 	start := h.start(machine, p.name, replace)
 	if start.status != http.StatusCreated {
@@ -337,6 +362,24 @@ func (h *harness) runFlow(machine string, p *fakeProvider, replace bool) (string
 		body["error"] = providerErr
 	}
 	return flowID, h.relay(machine, flowID, body)
+}
+
+// awaitTerminal polls until the flow finishes, exactly as the agent does. The
+// exchange is a server-owned job now, so a terminal state is something a test
+// waits for rather than something a response hands it.
+func (h *harness) awaitTerminal(machine, flowID string) response {
+	h.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		res := h.poll(machine, flowID)
+		if res.status == http.StatusOK && res.str("state") != string(credflow.StatePending) {
+			return res
+		}
+		if time.Now().After(deadline) {
+			h.t.Fatalf("flow %s never reached a terminal state (last: status %d body %s)", flowID, res.status, res.raw)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
 }
 
 // credential reads what the broker stored, the way a grant-holding connector
