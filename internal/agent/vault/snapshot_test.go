@@ -19,11 +19,11 @@ func TestSnapshotCopiesAndManifestsTheVault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Snapshot: %v", err)
 	}
-	// .obsidian/app.json plus three notes.
-	if len(m.Files) != 4 {
-		t.Fatalf("manifest has %d files, want 4: %v", len(m.Files), m.Paths())
+	// .obsidian/{app.json,sync-config} plus three notes.
+	if len(m.Files) != 5 {
+		t.Fatalf("manifest has %d files, want 5: %v", len(m.Files), m.Paths())
 	}
-	for _, rel := range []string{"a.md", "nested/b.md", "nested/deep/c.md", ".obsidian/app.json"} {
+	for _, rel := range []string{"a.md", "nested/b.md", "nested/deep/c.md", ".obsidian/app.json", ".obsidian/sync-config"} {
 		if _, ok := m.Files[rel]; !ok {
 			t.Fatalf("manifest is missing %s: %v", rel, m.Paths())
 		}
@@ -78,6 +78,31 @@ func TestSnapshotRefusesANonEmptyDestination(t *testing.T) {
 func TestSnapshotRefusesANonVault(t *testing.T) {
 	if _, err := Snapshot(tempDir(t), filepath.Join(tempDir(t), "snap")); err == nil {
 		t.Fatal("a non-vault directory was snapshotted")
+	}
+}
+
+// The symlink-root hazard, at the snapshot layer: WalkDir does not follow a
+// symlink root, so an uncanonicalized path produces an EMPTY backup while the
+// real CLI syncs the target. An empty backup is worse than no backup: it looks
+// like one.
+func TestSnapshotThroughASymlinkedRootCapturesRealContent(t *testing.T) {
+	real := makeVault(t, map[string]string{"a.md": "alpha\n", "nested/b.md": "beta\n"})
+	link := filepath.Join(tempDir(t), "vault-link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	dest := filepath.Join(tempDir(t), "snap")
+
+	m, err := Snapshot(link, dest)
+	if err != nil {
+		t.Fatalf("Snapshot through a symlink: %v", err)
+	}
+	if len(m.Files) != 4 {
+		t.Fatalf("manifest has %d files through a symlink, want 4: %v", len(m.Files), m.Paths())
+	}
+	body, err := os.ReadFile(filepath.Join(dest, SnapshotTreeDirName, "a.md"))
+	if err != nil || string(body) != "alpha\n" {
+		t.Fatalf("snapshot through a symlink is empty or wrong (%v, %q)", err, body)
 	}
 }
 

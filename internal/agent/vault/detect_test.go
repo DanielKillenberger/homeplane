@@ -193,25 +193,50 @@ func TestDetectSurvivesMalformedRegistry(t *testing.T) {
 
 func TestValidatePath(t *testing.T) {
 	v := makeVault(t, nil)
-	if err := ValidatePath(v); err != nil {
+	got, err := ValidatePath(v)
+	if err != nil {
 		t.Fatalf("ValidatePath(vault): %v", err)
 	}
-	if err := ValidatePath(""); err == nil {
+	if got != v {
+		t.Fatalf("ValidatePath returned %q, want the canonical %q", got, v)
+	}
+	if _, err := ValidatePath(""); err == nil {
 		t.Fatal("ValidatePath(\"\") = nil, want an error")
 	}
-	if err := ValidatePath(filepath.Join(v, "nope")); err == nil {
+	if _, err := ValidatePath(filepath.Join(v, "nope")); err == nil {
 		t.Fatal("ValidatePath(missing) = nil, want an error")
 	}
 	plain := tempDir(t)
-	if err := ValidatePath(plain); !errors.Is(err, ErrNotAVault) {
+	if _, err := ValidatePath(plain); !errors.Is(err, ErrNotAVault) {
 		t.Fatalf("ValidatePath(non-vault) = %v, want ErrNotAVault", err)
 	}
 	file := filepath.Join(plain, "f")
 	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidatePath(file); err == nil {
+	if _, err := ValidatePath(file); err == nil {
 		t.Fatal("ValidatePath(file) = nil, want an error")
+	}
+}
+
+func TestCanonicalize(t *testing.T) {
+	v := makeVault(t, nil)
+	link := filepath.Join(tempDir(t), "link")
+	if err := os.Symlink(v, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	got, err := Canonicalize(link)
+	if err != nil {
+		t.Fatalf("Canonicalize: %v", err)
+	}
+	if got != v {
+		t.Fatalf("Canonicalize(%q) = %q, want %q", link, got, v)
+	}
+	if _, err := Canonicalize(""); err == nil {
+		t.Fatal("an empty path was canonicalized")
+	}
+	if _, err := Canonicalize(filepath.Join(v, "absent")); err == nil {
+		t.Fatal("a missing path was canonicalized")
 	}
 }
 

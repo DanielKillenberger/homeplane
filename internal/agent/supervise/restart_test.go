@@ -12,7 +12,7 @@ func TestLedgerStartsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if l.TotalStarts != 0 || l.Running() {
+	if l.TotalStarts != 0 || l.SelfReportedRunning() {
 		t.Fatalf("ledger = %+v, want empty and not running", l)
 	}
 	if l.Summary(time.Now()) != "never started" {
@@ -32,7 +32,7 @@ func TestRecordStartAndExit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !l.Running() {
+	if !l.SelfReportedRunning() {
 		t.Fatal("ledger says not running after a start")
 	}
 	if start, _ := l.LastStart(); start.PID != 4242 {
@@ -43,7 +43,7 @@ func TestRecordStartAndExit(t *testing.T) {
 		t.Fatalf("RecordExit: %v", err)
 	}
 	l, _ = tr.Load()
-	if l.Running() {
+	if l.SelfReportedRunning() {
 		t.Fatal("ledger says running after an exit")
 	}
 	if exit, _ := l.LastExit(); exit.Code != 3 {
@@ -164,6 +164,26 @@ func TestTrackerNeedsDirAndLabel(t *testing.T) {
 	}
 	if _, err := (Tracker{Dir: t.TempDir()}).RecordStart(time.Now(), 1, ""); err == nil {
 		t.Fatal("a tracker without a label was accepted")
+	}
+}
+
+// SelfReportedRunning is belief, not liveness — a SIGKILLed process records no
+// exit, so this stays true forever. supervise.ProcessProbe is what answers the
+// real question; this test pins the distinction so nobody re-conflates them.
+func TestSelfReportedRunningIsNotLiveness(t *testing.T) {
+	tr := Tracker{Dir: t.TempDir(), Label: "unit"}
+	if _, err := tr.RecordStart(time.Unix(1, 0), 999999, "start"); err != nil {
+		t.Fatal(err)
+	}
+	l, err := tr.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !l.SelfReportedRunning() {
+		t.Fatal("a start with no exit should be BELIEVED running")
+	}
+	if live := ProcessProbe(l); live.Known && live.Alive {
+		t.Fatalf("the probe agreed a bogus pid was alive: %+v", live)
 	}
 }
 

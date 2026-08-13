@@ -61,13 +61,21 @@ func (m Manifest) Paths() []string {
 // it. Symlinks are recorded as skipped rather than followed — a vault that
 // links outside itself must not drag unrelated trees into a snapshot.
 func Scan(root string) (Manifest, error) {
+	// A symlink root walks as a single non-directory entry and yields an empty
+	// manifest. Resolving it here means every caller — snapshot, guard, and the
+	// post-sync rescan — agrees on which directory the vault actually is.
+	resolved, err := Canonicalize(root)
+	if err != nil {
+		return Manifest{}, err
+	}
+	root = resolved
 	m := Manifest{
 		SchemaVersion: ManifestSchemaVersion,
 		Root:          root,
 		TakenAt:       time.Now().UTC(),
 		Files:         map[string]FileEntry{},
 	}
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -108,7 +116,11 @@ func Scan(root string) (Manifest, error) {
 // would be synced to every other machine and would then be compared against
 // itself on the next pass.
 func Snapshot(vaultDir, destDir string) (Manifest, error) {
-	if err := ValidatePath(vaultDir); err != nil {
+	// Canonicalize first: WalkDir does not follow a symlink root, so a
+	// symlinked vault would otherwise produce an empty snapshot AND an empty
+	// manifest, and the guard would then compare nothing against nothing.
+	vaultDir, err := ValidatePath(vaultDir)
+	if err != nil {
 		return Manifest{}, err
 	}
 	inside, err := isInside(destDir, vaultDir)

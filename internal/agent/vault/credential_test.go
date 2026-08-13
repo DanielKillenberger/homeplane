@@ -6,72 +6,141 @@ import (
 	"testing"
 )
 
-func TestCredentialRoundTripIs0600(t *testing.T) {
-	dir := tempDir(t)
-	const secret = "obsidian-sync-password"
+// The two credentials are distinct and must stay distinct: the account token
+// authenticates to Obsidian and is revocable server-side; the E2E password
+// decrypts vault content and cannot be recovered from the account.
 
-	if err := SaveCredential(dir, secret); err != nil {
-		t.Fatalf("SaveCredential: %v", err)
+func TestAuthTokenRoundTripIs0600(t *testing.T) {
+	dir := tempDir(t)
+	const token = "tok-abcdef"
+
+	if err := SaveAuthToken(dir, token); err != nil {
+		t.Fatalf("SaveAuthToken: %v", err)
 	}
-	info, err := os.Stat(CredentialPath(dir))
+	info, err := os.Stat(AuthTokenPath(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Fatalf("credential mode = %o, want 0600", perm)
+		t.Fatalf("token mode = %o, want 0600", perm)
 	}
-	got, err := LoadCredential(dir)
+	got, err := LoadAuthToken(dir)
 	if err != nil {
-		t.Fatalf("LoadCredential: %v", err)
+		t.Fatalf("LoadAuthToken: %v", err)
 	}
-	if got != secret {
-		t.Fatalf("credential = %q, want %q", got, secret)
+	if got != token {
+		t.Fatalf("token = %q, want %q", got, token)
 	}
 }
 
-func TestLoadCredentialDistinguishesAbsentFromUnreadable(t *testing.T) {
+func TestE2EPasswordRoundTripIs0600(t *testing.T) {
 	dir := tempDir(t)
-	if _, err := LoadCredential(dir); !errors.Is(err, ErrNoCredential) {
-		t.Fatalf("err = %v, want ErrNoCredential", err)
+	const pw = "correct horse battery staple"
+
+	if err := SaveE2EPassword(dir, pw); err != nil {
+		t.Fatalf("SaveE2EPassword: %v", err)
+	}
+	info, err := os.Stat(E2EPasswordPath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("password mode = %o, want 0600", perm)
+	}
+	got, err := LoadE2EPassword(dir)
+	if err != nil {
+		t.Fatalf("LoadE2EPassword: %v", err)
+	}
+	if got != pw {
+		t.Fatalf("password = %q", got)
+	}
+}
+
+// The two secrets live in different files: storing one must never be mistaken
+// for storing the other.
+func TestTheTwoSecretsAreSeparate(t *testing.T) {
+	dir := tempDir(t)
+	if err := SaveAuthToken(dir, "tok"); err != nil {
+		t.Fatal(err)
+	}
+	if AuthTokenPath(dir) == E2EPasswordPath(dir) {
+		t.Fatal("both credentials share a path")
+	}
+	if _, err := LoadE2EPassword(dir); !errors.Is(err, ErrNoE2EPassword) {
+		t.Fatalf("storing the token also produced an E2E password: %v", err)
+	}
+}
+
+func TestLoadSecretsRequiresTheTokenButToleratesNoE2EPassword(t *testing.T) {
+	dir := tempDir(t)
+	if _, err := LoadSecrets(dir); !errors.Is(err, ErrNoAuthToken) {
+		t.Fatalf("err = %v, want ErrNoAuthToken", err)
+	}
+	if err := SaveAuthToken(dir, "tok"); err != nil {
+		t.Fatal(err)
+	}
+	// A standard-encryption vault has no E2E password, and that is fine.
+	s, err := LoadSecrets(dir)
+	if err != nil {
+		t.Fatalf("LoadSecrets: %v", err)
+	}
+	if s.AuthToken != "tok" || s.E2EPassword != "" {
+		t.Fatalf("secrets = %+v", s)
+	}
+	if err := SaveE2EPassword(dir, "pw"); err != nil {
+		t.Fatal(err)
+	}
+	if s, err = LoadSecrets(dir); err != nil || s.E2EPassword != "pw" {
+		t.Fatalf("secrets = %+v, err = %v", s, err)
 	}
 }
 
 // A credential whose permissions loosened is refused rather than used: the
 // custody exception is only acceptable while the file is actually protected.
-func TestLoadCredentialRefusesLoosePermissions(t *testing.T) {
+func TestLoadRefusesLoosePermissions(t *testing.T) {
 	dir := tempDir(t)
-	if err := SaveCredential(dir, "pw"); err != nil {
+	if err := SaveAuthToken(dir, "tok"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(CredentialPath(dir), 0o644); err != nil {
+	if err := os.Chmod(AuthTokenPath(dir), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadCredential(dir); err == nil {
-		t.Fatal("a world-readable credential was accepted")
+	if _, err := LoadAuthToken(dir); err == nil {
+		t.Fatal("a world-readable token was accepted")
 	}
 }
 
-func TestSaveCredentialRefusesEmpty(t *testing.T) {
-	if err := SaveCredential(tempDir(t), "   "); err == nil {
-		t.Fatal("an empty credential was stored")
+func TestSaveRefusesEmptySecrets(t *testing.T) {
+	dir := tempDir(t)
+	if err := SaveAuthToken(dir, "  "); err == nil {
+		t.Fatal("an empty token was stored")
+	}
+	if err := SaveE2EPassword(dir, ""); err == nil {
+		t.Fatal("an empty password was stored")
 	}
 }
 
-// Rewriting the credential must replace it atomically, never append or leave a
-// half-written secret behind.
-func TestSaveCredentialReplaces(t *testing.T) {
+func TestSaveReplacesAtomically(t *testing.T) {
 	dir := tempDir(t)
-	if err := SaveCredential(dir, "first"); err != nil {
+	if err := SaveAuthToken(dir, "first"); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveCredential(dir, "second"); err != nil {
+	if err := SaveAuthToken(dir, "second"); err != nil {
 		t.Fatal(err)
 	}
-	got, err := LoadCredential(dir)
+	got, err := LoadAuthToken(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != "second" {
-		t.Fatalf("credential = %q, want %q", got, "second")
+		t.Fatalf("token = %q, want %q", got, "second")
+	}
+}
+
+func TestSecretsAll(t *testing.T) {
+	s := Secrets{AuthToken: "a", E2EPassword: "", AccountPassword: "c", MFACode: " "}
+	got := s.all()
+	if len(got) != 2 {
+		t.Fatalf("all() = %v, want the two non-empty secrets", got)
 	}
 }
