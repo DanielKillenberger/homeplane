@@ -153,6 +153,75 @@ func (c *Client) ListGrants(ctx context.Context) ([]Grant, error) {
 	return out.Grants, nil
 }
 
+// CredentialFlow is the server's non-secret view of a credential flow. Note
+// what the machine side never has a field for: a provider token. The agent's
+// whole part in R13 is relaying consent — it is structurally unable to receive
+// a credential, because there is nothing here to decode one into.
+type CredentialFlow struct {
+	FlowID     string `json:"flow_id"`
+	Provider   string `json:"provider"`
+	State      string `json:"state"`
+	CreatedAt  string `json:"created_at"`
+	ExpiresAt  string `json:"expires_at"`
+	Diagnostic *struct {
+		ErrorCode string `json:"error_code"`
+		Message   string `json:"message"`
+		Retryable bool   `json:"retryable"`
+	} `json:"diagnostic,omitempty"`
+}
+
+// CredentialFlowStart is the server's answer to starting a flow.
+type CredentialFlowStart struct {
+	FlowID           string `json:"flow_id"`
+	AuthorizationURL string `json:"authorization_url"`
+	ExpiresAt        string `json:"expires_at"`
+}
+
+// StartCredentialFlow asks the server to begin an OAuth flow for provider,
+// redirecting to this machine's already-bound loopback listener.
+func (c *Client) StartCredentialFlow(ctx context.Context, provider, redirectURI string, replace bool) (CredentialFlowStart, error) {
+	body := map[string]any{"provider": provider, "replace": replace, "redirect_uri": redirectURI}
+	var out CredentialFlowStart
+	if err := c.do(ctx, "start credential flow", http.MethodPost, "/credentials/flows", body, &out); err != nil {
+		return CredentialFlowStart{}, err
+	}
+	if out.FlowID == "" || out.AuthorizationURL == "" {
+		return CredentialFlowStart{}, errors.New("start credential flow: server response is missing the flow or its authorization URL")
+	}
+	return out, nil
+}
+
+// RelayCredentialOutcome relays what landed on the loopback listener — exactly
+// once per flow. Exactly one of code and providerError must be set.
+func (c *Client) RelayCredentialOutcome(ctx context.Context, flowID, code, providerError, state string) (CredentialFlow, error) {
+	body := map[string]string{"state": state}
+	if code != "" {
+		body["code"] = code
+	}
+	if providerError != "" {
+		body["error"] = providerError
+	}
+	var out CredentialFlow
+	// The path segment is an id this server just minted, but it is escaped
+	// anyway: an id that traveled through a response is untrusted input on the
+	// way back out.
+	path := "/credentials/flows/" + url.PathEscape(flowID) + "/code"
+	if err := c.do(ctx, "relay authorization outcome", http.MethodPost, path, body, &out); err != nil {
+		return CredentialFlow{}, err
+	}
+	return out, nil
+}
+
+// PollCredentialFlow reads a flow's current state.
+func (c *Client) PollCredentialFlow(ctx context.Context, flowID string) (CredentialFlow, error) {
+	var out CredentialFlow
+	path := "/credentials/flows/" + url.PathEscape(flowID)
+	if err := c.do(ctx, "poll credential flow", http.MethodGet, path, nil, &out); err != nil {
+		return CredentialFlow{}, err
+	}
+	return out, nil
+}
+
 // HealthReport is the server's /healthz payload.
 type HealthReport struct {
 	Status     string `json:"status"`

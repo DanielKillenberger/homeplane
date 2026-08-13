@@ -14,8 +14,10 @@ Architecture, decisions, and scope live in `STRATEGY.md`,
 | Path | What it is |
 |---|---|
 | `cmd/homeplane-server` | Control plane: tsnet-embedded HTTP server + server-local admin CLI |
-| `cmd/homeplane-agent` | Machine agent: `enrol`, `status` |
+| `cmd/homeplane-agent` | Machine agent: `enrol`, `status`, `add-credentials` |
 | `internal/agent` | Agent state directory, control-plane client, enrolment, status |
+| `internal/agent/credflow` | Machine half of the credential flow: loopback listener, browser, relay |
+| `internal/server/credflow` | Credential broker: the OAuth flow state machine and credential swap |
 | `install.sh` | Installer: platform gating, checksummed artifacts, Node 22 provisioning |
 | `internal/store` | SQLite persistence (machines, grants, audit, encrypted secrets) |
 | `internal/server` | Enrolment, grant lifecycle, audit, health handlers |
@@ -95,6 +97,39 @@ discarded rather than written over the live credential.
 run: a revoked grant reads `revoked`, and a server that cannot be reached makes
 grant state `unknown` rather than a stale `active`. Exit codes are `0` ok, `1`
 a named component is degraded, `2` this machine is not enrolled.
+
+## Authorizing a provider
+
+```bash
+homeplane-agent add-credentials google-drive            # first time
+homeplane-agent add-credentials google-drive -replace   # re-authorize
+```
+
+The provider's consent screen opens on the machine where you run it, and the
+credential is stored **only on the server** — this machine never receives,
+writes, or logs a provider token, and every enrolled machine's grants can use
+the credential the moment it lands.
+
+The flow is an asynchronous state machine (`pending` → `completed` | `denied` |
+`expired` | `failed`), driven from the machine but decided by the server:
+
+- The agent binds a loopback listener **first** and passes that exact address as
+  the redirect URI; the server validates it is genuinely `http://127.0.0.1:<port>`
+  or `http://[::1]:<port>` and uses the identical URI when building the
+  authorization URL and again at token exchange.
+- The authorization outcome is relayed **once** (a replay is refused with 409),
+  with PKCE and the state parameter verified server-side.
+- Replacement is an atomic swap: the existing credential stays active until the
+  new one is durably stored, so a declined, expired, failed, or abandoned flow
+  leaves it exactly as it was. Two flows racing for the same provider produce
+  one commit and one clear "nothing was overwritten, re-run to retry".
+- A terminal failure returns a safe diagnostic — `{error_code, message,
+  retryable}` from a closed vocabulary — that can never carry a provider
+  response body or token.
+
+Providers come from the connector manifest (`homeplane-server serve
+-connector-manifest …`): onboarding another OAuth provider is a manifest entry
+plus its client credentials, with no code change.
 
 ## Audit guarantees
 

@@ -633,7 +633,35 @@ func (s *SQLite) QueryAudit(ctx context.Context, q AuditQuery) ([]AuditEvent, er
 //
 // audit builds the events for the import/replacement; they are written inside
 // the same transaction and must not be nil.
+//
+// This is the LAST-WRITER-WINS form, used by the operator CLI where the
+// operator is by definition the only actor. Concurrent brokered writes (R13's
+// add-credentials flow) must use PutSecretCAS instead.
 func (s *SQLite) PutSecret(ctx context.Context, ref string, ciphertext []byte, audit func(generation int64) []AuditEvent) (int64, error) {
+	return s.putSecret(ctx, ref, ciphertext, nil, audit)
+}
+
+// ErrGenerationConflict means the secret at ref did not hold the generation the
+// caller observed: something else replaced it in between. It is the loser's
+// signal in R13's concurrent-credential-flow race, and the reason a losing flow
+// can report "retry" honestly — nothing of its own was written.
+var ErrGenerationConflict = errors.New("store: secret generation conflict")
+
+// PutSecretCAS replaces the secret at ref only if its current generation is
+// still expectedGeneration, returning ErrGenerationConflict otherwise.
+// expectedGeneration 0 means "no secret is stored at this ref yet".
+//
+// This is what makes R13's credential replacement an ATOMIC SWAP: the existing
+// credential stays live and untouched through the whole flow, and the new one
+// lands in a single transaction that fails outright if another flow committed
+// first. There is no window in which the ref holds neither credential.
+func (s *SQLite) PutSecretCAS(ctx context.Context, ref string, ciphertext []byte, expectedGeneration int64,
+	audit func(generation int64) []AuditEvent) (int64, error) {
+	return s.putSecret(ctx, ref, ciphertext, &expectedGeneration, audit)
+}
+
+func (s *SQLite) putSecret(ctx context.Context, ref string, ciphertext []byte, expectedGeneration *int64,
+	audit func(generation int64) []AuditEvent) (int64, error) {
 	if audit == nil {
 		return 0, errAuditCallbackRequired
 	}
@@ -652,6 +680,19 @@ func (s *SQLite) PutSecret(ctx context.Context, ref string, ciphertext []byte, a
 		Scan(&prevGen, &createdAt)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("store: put secret lookup: %w", err)
+	}
+
+	// The compare happens INSIDE the transaction, against the row this
+	// transaction reads — not against a value the caller re-read a moment ago.
+	if expectedGeneration != nil {
+		current := int64(0)
+		if !errors.Is(err, sql.ErrNoRows) {
+			current = prevGen.Int64
+		}
+		if current != *expectedGeneration {
+			return 0, fmt.Errorf("%w: secret %q is at generation %d, caller observed %d",
+				ErrGenerationConflict, ref, current, *expectedGeneration)
+		}
 	}
 
 	var generation int64 = 1
