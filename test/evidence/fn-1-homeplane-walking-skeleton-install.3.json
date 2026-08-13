@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "fn-1-homeplane-walking-skeleton-install.3",
-  "commit": "d0e9db54a67533df1002de64dd157a91921334be",
+  "commit": "0bde55b158b9deaa105dcc0497bd9ea05acb6d0f",
   "working_tree_dirty": false,
   "platform": {
     "go_version": "go version go1.26.5 darwin/arm64",
@@ -9,8 +9,8 @@
     "goarch": "arm64",
     "uname": "Darwin 25.5.0 arm64"
   },
-  "started_at": "2026-08-13T20:21:14Z",
-  "finished_at": "2026-08-13T20:21:20Z",
+  "started_at": "2026-08-13T20:35:16Z",
+  "finished_at": "2026-08-13T20:35:22Z",
   "gates": [
     {
       "gate": "build",
@@ -29,8 +29,8 @@
     }
   ],
   "assertion_counts": {
-    "total": 163,
-    "passed": 163,
+    "total": 174,
+    "passed": 174,
     "failed": 0
   },
   "assertions": [
@@ -38,13 +38,13 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminAuditReadsTheLogAndRecordsTheRead",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminRevokeCrossesMachineBoundaries",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
@@ -212,7 +212,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/secrets",
       "test": "TestGenerateKeyFileRefusesToClobber",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/secrets",
@@ -338,7 +338,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestHealthzReportsServerComponentsOnly",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
@@ -432,7 +432,19 @@
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestAMalformedNameDoesNotPreventPersistingTheDenial",
+      "result": "pass",
+      "elapsed_seconds": 0.01
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
       "test": "TestAllowedCallIsForwardedAndAuditedFromTheManifest",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestArgsDigestIsRecordedOnlyWhenTheArtifactStaysUnknown",
       "result": "pass",
       "elapsed_seconds": 0
     },
@@ -445,6 +457,12 @@
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
       "test": "TestAuthorizeDeniesAnUnknownConnector",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestAuthorizeDerivesAuthorityFromTheClassNotTheMappingField",
       "result": "pass",
       "elapsed_seconds": 0
     },
@@ -528,9 +546,15 @@
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestCapabilityMayNotDivergeFromTheActionClass",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
       "test": "TestConnectorRowsPersistThroughTheRealAuditLog",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
@@ -684,6 +708,12 @@
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestLargeIntegerIdentitiesAreNotRoundedByJSONDecoding",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
       "test": "TestLoadFileReportsAMissingManifest",
       "result": "pass",
       "elapsed_seconds": 0
@@ -691,6 +721,30 @@
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
       "test": "TestManifestLoadsAndIndexesTheDeclaredConnectors",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestManifestRefusesUnboundedOrMalformedToolNames",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestManifestRefusesUnboundedOrMalformedToolNames/oversized_tool_name",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestManifestRefusesUnboundedOrMalformedToolNames/tool_name_with_newline",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestManifestRefusesUnboundedOrMalformedToolNames/tool_name_with_whitespace",
       "result": "pass",
       "elapsed_seconds": 0
     },
@@ -804,6 +858,12 @@
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestOversizedCallerSuppliedNamesAreReducedAndStillAudited",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
       "test": "TestParseRejectsTrailingContent",
       "result": "pass",
       "elapsed_seconds": 0
@@ -823,6 +883,12 @@
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
       "test": "TestResponseExtractorRecordsTheCreatedArtifact",
+      "result": "pass",
+      "elapsed_seconds": 0
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
+      "test": "TestResultRowSurvivesCallerCancellation",
       "result": "pass",
       "elapsed_seconds": 0
     },
@@ -890,7 +956,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
       "test": "TestAuditSchemaIsMetadataOnly",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
