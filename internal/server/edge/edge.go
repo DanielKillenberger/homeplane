@@ -76,7 +76,9 @@ type Config struct {
 	// verbatim.
 	Upstream *url.URL
 	// UpstreamTransport optionally overrides the transport used for forwarded
-	// (non-tool-call) frames.
+	// (non-tool-call) frames. Nil uses NewUpstreamTransport, whose bounded
+	// response-header deadline is what stops a silent gateway from pinning a
+	// forwarded request forever.
 	UpstreamTransport http.RoundTripper
 	// MaxRequestBytes bounds a client request body. Zero uses the default.
 	MaxRequestBytes int64
@@ -154,8 +156,16 @@ func New(cfg Config) (*Edge, error) {
 			writeErrorJSON(w, http.StatusBadGateway, "gateway_unreachable", "the connector gateway is unreachable")
 		},
 	}
-	if cfg.UpstreamTransport != nil {
-		proxy.Transport = cfg.UpstreamTransport
+	proxy.Transport = cfg.UpstreamTransport
+	if proxy.Transport == nil {
+		proxy.Transport = NewUpstreamTransport()
+	}
+
+	if ambiguous := router.ambiguousTools(); len(ambiguous) > 0 {
+		// Reachable only by their qualified name. An operator learns this at
+		// startup rather than from a denial.
+		log.Warn("tool names claimed by more than one connector; only their qualified form routes",
+			"tools", strings.Join(ambiguous, ","), "qualifier", QualifierSeparator)
 	}
 
 	return &Edge{cfg: cfg, router: router, proxy: proxy, log: log}, nil

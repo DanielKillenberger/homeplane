@@ -153,11 +153,40 @@ const DefaultMaxUpstreamResponseBytes = 8 << 20
 // DefaultUpstreamTimeout bounds one gateway call.
 const DefaultUpstreamTimeout = 60 * time.Second
 
+// Bounds on the transport used to reach the gateway. They exist because the
+// listener's write deadline is lifted for long-lived SSE streams: without a
+// response-header deadline, a gateway that accepts a connection and never
+// answers would pin a request goroutine (and the harness) indefinitely.
+//
+// Only the wait for RESPONSE HEADERS is bounded. Once headers arrive the body
+// is unbounded, which is what keeps an established SSE stream — the whole point
+// of the streamable-HTTP transport — valid for as long as the session lasts.
+const (
+	UpstreamDialTimeout           = 5 * time.Second
+	UpstreamTLSHandshakeTimeout   = 5 * time.Second
+	UpstreamResponseHeaderTimeout = 30 * time.Second
+)
+
+// NewUpstreamTransport is the transport both the forwarding proxy and the tool
+// runtime use to reach the gateway.
+func NewUpstreamTransport() *http.Transport {
+	t, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		t = &http.Transport{}
+	}
+	tr := t.Clone()
+	tr.DialContext = (&net.Dialer{Timeout: UpstreamDialTimeout, KeepAlive: 30 * time.Second}).DialContext
+	tr.TLSHandshakeTimeout = UpstreamTLSHandshakeTimeout
+	tr.ResponseHeaderTimeout = UpstreamResponseHeaderTimeout
+	tr.ExpectContinueTimeout = 1 * time.Second
+	return tr
+}
+
 // NewHTTPRuntime builds a runtime against an already-validated loopback
 // endpoint. Pass a nil client for the default.
 func NewHTTPRuntime(endpoint *url.URL, client *http.Client) *HTTPRuntime {
 	if client == nil {
-		client = &http.Client{Timeout: DefaultUpstreamTimeout}
+		client = &http.Client{Timeout: DefaultUpstreamTimeout, Transport: NewUpstreamTransport()}
 	}
 	return &HTTPRuntime{
 		endpoint:         endpoint,

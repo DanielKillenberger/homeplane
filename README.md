@@ -89,6 +89,13 @@ What the edge adds, and nothing else (D6's adopted shape — see
   `tools/call`, via `internal/server/connectors` — unmapped and excluded tools
   fail closed, and a call that cannot be recorded is not forwarded.
 
+When the edge is wired, `--connector-endpoint-url` is required and its path
+must match `--connector-edge-path` (a URL with no path is completed from it):
+that URL is handed to every harness with its grant, so a mismatch would issue
+working grants pointing at an endpoint that answers 404. A mount path that
+would shadow a control-plane route (`/enrol`, `/grants`, `/healthz`) or that
+is not a literal path is refused at startup.
+
 `--gateway-mcp-url` must be a **loopback** address and is refused otherwise:
 the isolation guarantee is that the only route to the gateway from another
 tailnet node runs through the edge. Every other MCP frame (initialize,

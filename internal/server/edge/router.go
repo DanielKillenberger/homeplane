@@ -2,6 +2,7 @@ package edge
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/DanielKillenberger/homeplane/internal/server/connectors"
@@ -16,6 +17,23 @@ import (
 // says plainly "this tool belongs to no connector we declare" instead of an
 // empty provider column.
 const UnroutedProvider = "unrouted"
+
+// AmbiguousProvider is the provider name recorded when a BARE tool name is
+// claimed by more than one declared connector.
+//
+// Like UnroutedProvider it names no connector, so the call is denied and
+// audited; it exists so the row distinguishes "no connector claims this tool"
+// from "two do, and the caller did not say which". The qualified form
+// (`<provider>__<tool>`) of the same tool keeps working — a composition that
+// namespaces its tools is exactly the case this must not break (R12).
+const AmbiguousProvider = "ambiguous"
+
+// reservedProviderNames are the markers above. A connector may not take one:
+// that would turn "belongs to no connector" into a reachable connector.
+var reservedProviderNames = map[string]bool{
+	UnroutedProvider:  true,
+	AmbiguousProvider: true,
+}
 
 // QualifierSeparator is how a composed gateway namespaces a tool it re-exports
 // (`<provider>__<tool>`). A qualified name routes on its prefix when that
@@ -34,26 +52,33 @@ type toolRouter struct {
 	providers map[string]bool
 	// unqualified maps a bare tool name to its sole declaring connector.
 	unqualified map[string]string
+	// ambiguous holds the bare names more than one connector claims. Their
+	// UNQUALIFIED form is denied; their qualified form still routes.
+	ambiguous map[string]bool
 }
 
-// newToolRouter indexes a manifest, refusing two configurations that would make
-// routing ambiguous or spoofable:
+// newToolRouter indexes a manifest.
 //
-//   - a connector literally named `unrouted`, which would turn the marker for
-//     "belongs to nothing" into a real, reachable connector;
-//   - the same bare tool name declared by two connectors, which would leave the
-//     edge guessing whose policy applies to an unqualified call.
+// Only one configuration is refused outright: a connector using a reserved
+// provider name, which would make the marker for "belongs to no connector" a
+// reachable connector.
 //
-// Both are refused at construction. A gateway composition the edge cannot route
-// deterministically must not serve traffic.
+// A bare tool name claimed by two connectors is NOT a startup failure — a
+// composed gateway that namespaces its tools (`<provider>__<tool>`) is a normal
+// and supported deployment, and refusing it would mean common multi-connector
+// manifests could not run at all (R12). Such a name is marked ambiguous
+// instead: the unqualified form is denied, because guessing whose policy
+// applies is how one connector's read-only rules end up applied to another's
+// delete tool, while the qualified form routes deterministically.
 func newToolRouter(m connectors.Manifest) (*toolRouter, error) {
 	r := &toolRouter{
 		providers:   make(map[string]bool, len(m.Connectors)),
 		unqualified: make(map[string]string),
+		ambiguous:   make(map[string]bool),
 	}
 	for _, c := range m.Connectors {
-		if c.Provider == UnroutedProvider {
-			return nil, fmt.Errorf("edge: connector %q uses the reserved provider name", c.Provider)
+		if reservedProviderNames[c.Provider] {
+			return nil, fmt.Errorf("edge: connector %q uses a reserved provider name", c.Provider)
 		}
 		r.providers[c.Provider] = true
 	}
@@ -74,9 +99,12 @@ func newToolRouter(m connectors.Manifest) (*toolRouter, error) {
 		for _, name := range names {
 			owner, seen := r.unqualified[name]
 			if seen && owner != c.Provider {
-				return nil, fmt.Errorf(
-					"edge: tool %q is declared by both %q and %q; qualify it as <provider>%s<tool> in the gateway composition",
-					name, owner, c.Provider, QualifierSeparator)
+				delete(r.unqualified, name)
+				r.ambiguous[name] = true
+				continue
+			}
+			if r.ambiguous[name] {
+				continue
 			}
 			r.unqualified[name] = c.Provider
 		}
@@ -85,8 +113,9 @@ func newToolRouter(m connectors.Manifest) (*toolRouter, error) {
 }
 
 // route resolves a wire tool name to the provider and tool the engine judges.
-// An unroutable name yields UnroutedProvider and the name as received, so the
-// denial that follows names what was actually attempted.
+// A name that routes nowhere yields a marker provider and the name as
+// received, so the denial that follows names what was actually attempted and
+// says which kind of unroutable it was.
 func (r *toolRouter) route(wire string) (provider, tool string) {
 	if prefix, rest, ok := strings.Cut(wire, QualifierSeparator); ok && rest != "" && r.providers[prefix] {
 		return prefix, rest
@@ -94,5 +123,23 @@ func (r *toolRouter) route(wire string) (provider, tool string) {
 	if p, ok := r.unqualified[wire]; ok {
 		return p, wire
 	}
+	if r.ambiguous[wire] {
+		return AmbiguousProvider, wire
+	}
 	return UnroutedProvider, wire
+}
+
+// ambiguousTools lists the bare names whose unqualified form is denied. The
+// edge logs it at startup: an operator must be able to see that a tool is only
+// reachable by its qualified name without discovering it from a denial.
+func (r *toolRouter) ambiguousTools() []string {
+	if len(r.ambiguous) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(r.ambiguous))
+	for name := range r.ambiguous {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
