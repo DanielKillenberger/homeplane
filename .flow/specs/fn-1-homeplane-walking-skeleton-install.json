@@ -10,6 +10,7 @@
   "id": "fn-1-homeplane-walking-skeleton-install",
   "impl_review_rounds": {
     "fn-1-homeplane-walking-skeleton-install.1": 0,
+    "fn-1-homeplane-walking-skeleton-install.16": 2,
     "fn-1-homeplane-walking-skeleton-install.2": 0,
     "fn-1-homeplane-walking-skeleton-install.3": 1,
     "fn-1-homeplane-walking-skeleton-install.4": 1
@@ -3680,11 +3681,46 @@
         "backend": "codex",
         "digest_truncated": false,
         "items": [
-          {"chainRoot": "finding-afce9f6442e4d55a925e1582343ce91b", "classification": "introduced", "findingId": "finding-afce9f6442e4d55a925e1582343ce91b", "firstSeenThisRound": true, "severity": "P1", "status": "open"},
-          {"chainRoot": "finding-a646f69ac8ab6115facd3d0c486d0049", "classification": "introduced", "findingId": "finding-a646f69ac8ab6115facd3d0c486d0049", "firstSeenThisRound": true, "severity": "P1", "status": "open"},
-          {"chainRoot": "finding-cfb980079afce30e7db1a3170da3ed82", "classification": "introduced", "findingId": "finding-cfb980079afce30e7db1a3170da3ed82", "firstSeenThisRound": true, "severity": "P2", "status": "open"},
-          {"chainRoot": "finding-1e504949dc77fb029a40376c0b54b38f", "classification": "introduced", "findingId": "finding-1e504949dc77fb029a40376c0b54b38f", "firstSeenThisRound": true, "severity": "P2", "status": "open"},
-          {"chainRoot": "finding-cb91a460c7beff3c805c909c80382bd0", "classification": "introduced", "findingId": "finding-cb91a460c7beff3c805c909c80382bd0", "firstSeenThisRound": true, "severity": "P2", "status": "open"}
+          {
+            "chainRoot": "finding-afce9f6442e4d55a925e1582343ce91b",
+            "classification": "introduced",
+            "findingId": "finding-afce9f6442e4d55a925e1582343ce91b",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a646f69ac8ab6115facd3d0c486d0049",
+            "classification": "introduced",
+            "findingId": "finding-a646f69ac8ab6115facd3d0c486d0049",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-cfb980079afce30e7db1a3170da3ed82",
+            "classification": "introduced",
+            "findingId": "finding-cfb980079afce30e7db1a3170da3ed82",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1e504949dc77fb029a40376c0b54b38f",
+            "classification": "introduced",
+            "findingId": "finding-1e504949dc77fb029a40376c0b54b38f",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-cb91a460c7beff3c805c909c80382bd0",
+            "classification": "introduced",
+            "findingId": "finding-cb91a460c7beff3c805c909c80382bd0",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          }
         ],
         "reviewKind": "implementation"
       },
@@ -3716,9 +3752,30 @@
         "backend": "codex",
         "digest_truncated": false,
         "items": [
-          {"chainRoot": "finding-032e84d3b731eb2e0489ca19c099d6c3", "classification": "introduced", "findingId": "finding-032e84d3b731eb2e0489ca19c099d6c3", "firstSeenThisRound": true, "severity": "P1", "status": "open"},
-          {"chainRoot": "finding-7eb4d79058fd11f3a0b830f0d725efaa", "classification": "introduced", "findingId": "finding-7eb4d79058fd11f3a0b830f0d725efaa", "firstSeenThisRound": true, "severity": "P2", "status": "open"},
-          {"chainRoot": "finding-db3b05e64eb0228fe480a964e7cafa12", "classification": "introduced", "findingId": "finding-db3b05e64eb0228fe480a964e7cafa12", "firstSeenThisRound": true, "severity": "P2", "status": "open"}
+          {
+            "chainRoot": "finding-032e84d3b731eb2e0489ca19c099d6c3",
+            "classification": "introduced",
+            "findingId": "finding-032e84d3b731eb2e0489ca19c099d6c3",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7eb4d79058fd11f3a0b830f0d725efaa",
+            "classification": "introduced",
+            "findingId": "finding-7eb4d79058fd11f3a0b830f0d725efaa",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-db3b05e64eb0228fe480a964e7cafa12",
+            "classification": "introduced",
+            "findingId": "finding-db3b05e64eb0228fe480a964e7cafa12",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          }
         ],
         "reviewKind": "implementation"
       },
@@ -3735,6 +3792,77 @@
       "task": "fn-1-homeplane-walking-skeleton-install.4",
       "timestamp": "2026-08-13T20:34:40.780031Z",
       "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "9af0801f4ac85bc2c42eea8d0e2d95885793bdf4d5b015fcf0103a6d966b8807",
+      "backend": "codex",
+      "counter_kind": "impl",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "not_applicable"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-aa0d8ea40d84488c26970b0d2b15188c",
+            "classification": "introduced",
+            "findingId": "finding-aa0d8ea40d84488c26970b0d2b15188c",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0d8de4905f5da8003c3bab5ac7dd7dde",
+            "classification": "introduced",
+            "findingId": "finding-0d8de4905f5da8003c3bab5ac7dd7dde",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-2676888b0566e1559418f4631b0e00a2",
+            "classification": "introduced",
+            "findingId": "finding-2676888b0566e1559418f4631b0e00a2",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-bb2503fd4470d3e4dcd3996af919cd6b",
+            "classification": "introduced",
+            "findingId": "finding-bb2503fd4470d3e4dcd3996af919cd6b",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a770909dce656ec52102a39a194ba3ea",
+            "classification": "introduced",
+            "findingId": "finding-a770909dce656ec52102a39a194ba3ea",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "implementation"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "dd3d0860710f6c1b022bc4dcd4fd3638e2c7f95b",
+      "kind": "impl",
+      "outcome": "verdict",
+      "output_sha256": "59f1bd98b2774b048973208af70f17c930fa26dc68ab507f4cc08822af8f7d5f",
+      "reservation_id": "8191e21794a14a0495e1ce3bdeb09e53",
+      "round_consumed": true,
+      "scope": "impl:fn-1-homeplane-walking-skeleton-install.16",
+      "superseded_by": null,
+      "task": "fn-1-homeplane-walking-skeleton-install.16",
+      "timestamp": "2026-08-13T21:29:09.642400Z",
+      "verdict": "NEEDS_WORK"
     }
   ],
   "review_hash_epoch": {
@@ -3743,10 +3871,21 @@
     "plan": 8,
     "plan#completion": 7
   },
-  "review_pending_rounds": {},
-  "review_reservations": {},
+  "review_pending_rounds": {
+    "impl:fn-1-homeplane-walking-skeleton-install.16": 1
+  },
+  "review_reservations": {
+    "001cc463662f4c58807f998ada87fb84": {
+      "artifact_sha256": "9af0801f4ac85bc2c42eea8d0e2d95885793bdf4d5b015fcf0103a6d966b8807",
+      "counter_scope": "impl:fn-1-homeplane-walking-skeleton-install.16",
+      "epoch": 0,
+      "forced": false,
+      "review_type": "impl"
+    }
+  },
   "review_transport_failures": {
     "impl:fn-1-homeplane-walking-skeleton-install.1": 0,
+    "impl:fn-1-homeplane-walking-skeleton-install.16": 0,
     "impl:fn-1-homeplane-walking-skeleton-install.2": 0,
     "impl:fn-1-homeplane-walking-skeleton-install.3": 0,
     "impl:fn-1-homeplane-walking-skeleton-install.4": 0,
@@ -3766,5 +3905,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-08-13T20:34:40.788203Z"
+  "updated_at": "2026-08-13T21:29:09.651876Z"
 }

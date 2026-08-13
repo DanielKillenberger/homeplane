@@ -22,6 +22,7 @@ import (
 	"github.com/DanielKillenberger/homeplane/internal/secrets"
 	"github.com/DanielKillenberger/homeplane/internal/server"
 	"github.com/DanielKillenberger/homeplane/internal/server/connectors"
+	"github.com/DanielKillenberger/homeplane/internal/server/credflow"
 	"github.com/DanielKillenberger/homeplane/internal/server/edge"
 	"github.com/DanielKillenberger/homeplane/internal/store"
 	"github.com/DanielKillenberger/homeplane/internal/tsnetid"
@@ -85,8 +86,29 @@ token, the WhoIs machine binding and the manifest apply.`)
 	defer st.Close()
 
 	keyPath := keyFilePath(f.stateDir)
-	if _, err := secrets.LoadKeyFile(keyPath); err != nil {
+	keyring, err := secrets.LoadKeyFile(keyPath)
+	if err != nil {
 		return fmt.Errorf("credential store unusable: %w (run `homeplane-server admin secret init-key`)", err)
+	}
+
+	// The credential broker exists only when there is a manifest to broker
+	// credentials against: without one there is no provider to name, and a
+	// route that can only ever answer "unknown provider" is worse than no route.
+	var broker *credflow.Service
+	if f.manifestPath != "" {
+		manifest, err := connectors.LoadFile(f.manifestPath)
+		if err != nil {
+			return fmt.Errorf("connector manifest: %w", err)
+		}
+		engine, err := connectors.Register(manifest)
+		if err != nil {
+			return fmt.Errorf("connector manifest: %w", err)
+		}
+		broker, err = credflow.New(engine, st, keyring, st, credflow.Config{Logger: log})
+		if err != nil {
+			return fmt.Errorf("credential broker: %w", err)
+		}
+		log.Info("credential broker enabled", "providers", engine.Providers())
 	}
 
 	ts := &tsnet.Server{
@@ -117,6 +139,7 @@ token, the WhoIs machine binding and the manifest apply.`)
 	srv, err := server.New(st, tsnetid.New(localClient), checker, server.Config{
 		ConnectorEndpointURL: f.endpointURL,
 		Policy:               policy.Default(),
+		Credentials:          broker,
 		Logger:               log,
 	})
 	if err != nil {

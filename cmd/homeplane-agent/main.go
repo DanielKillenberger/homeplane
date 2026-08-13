@@ -25,6 +25,9 @@ Usage:
   homeplane-agent enrol [flags]    register this machine with the control plane
   homeplane-agent status [flags]   report machine-side state (live-reconciled)
   homeplane-agent vault <cmd>      find the vault; supervise continuous sync
+  homeplane-agent add-credentials <provider> [flags]
+                                   authorize a provider; the credential is
+                                   stored on the server, never on this machine
   homeplane-agent version          print the installed agent version
 
 Run any subcommand with -h for its flags.
@@ -66,6 +69,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return runStatus(ctx, args[1:], stdout, stderr)
 	case "vault":
 		return runVault(ctx, args[1:], stdout, stderr)
+	case "add-credentials":
+		return runAddCredentials(ctx, args[1:], stdout, stderr)
 	case "version", "--version":
 		fmt.Fprintln(stdout, "homeplane-agent "+version)
 		return 0

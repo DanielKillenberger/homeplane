@@ -104,6 +104,17 @@ const (
 	EventSecretImported     = "secret_imported"
 	EventAuditQueried       = "audit_queried"
 
+	// Credential-broker events (R13). A flow's whole life is on the record:
+	// started, and exactly one terminal event. EventCredentialFlowCommitted is
+	// written in the SAME transaction as the credential swap, so a provider
+	// credential cannot appear in the store without the record of which machine
+	// brokered it. Terminal failures are recorded with their safe error_code as
+	// Reason — never with a provider response body, which the schema could not
+	// hold anyway.
+	EventCredentialFlowStarted   = "credential_flow_started"
+	EventCredentialFlowCommitted = "credential_flow_committed"
+	EventCredentialFlowFailed    = "credential_flow_failed"
+
 	// Connector-plane events, written by the manifest-driven policy/audit
 	// engine (task .3) and by the edge that hosts it (task .16).
 	//
@@ -179,6 +190,9 @@ var allowedDetailKeys = map[string]bool{
 	"bound_machine_id":       true,
 	"secret_ref":             true,
 	"secret_generation":      true,
+	// Credential-broker metadata. flow_id correlates a flow's start with its
+	// terminal row; note that no key here can carry a provider response.
+	"flow_id": true,
 	"credential_version":     true,
 	"source":                 true,
 	"since":                  true,

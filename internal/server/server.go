@@ -21,6 +21,7 @@ import (
 
 	"github.com/DanielKillenberger/homeplane/internal/health"
 	"github.com/DanielKillenberger/homeplane/internal/policy"
+	"github.com/DanielKillenberger/homeplane/internal/server/credflow"
 	"github.com/DanielKillenberger/homeplane/internal/store"
 )
 
@@ -58,6 +59,11 @@ type Config struct {
 	ConnectorEndpointURL string
 	// Policy is the server-side per-harness capability policy.
 	Policy policy.Policy
+	// Credentials is the credential broker (R13). Nil disables the
+	// credential-flow endpoints entirely — a server with no connector manifest
+	// has no provider to broker a credential for, and answering 404 on a route
+	// that exists but cannot work would be a worse answer than not routing it.
+	Credentials *credflow.Service
 	// MaxRequestBytes bounds any request body. Zero uses DefaultMaxRequestBytes.
 	MaxRequestBytes int64
 	// Logger receives operational logs. Nil uses slog.Default().
@@ -102,7 +108,27 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /grants", s.handleListGrants)
 	mux.HandleFunc("DELETE /grants/{id}", s.handleRevokeGrant)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
+	if s.cfg.Credentials != nil {
+		mux.HandleFunc("POST /credentials/flows", s.machineScoped(s.cfg.Credentials.HandleStart))
+		mux.HandleFunc("POST /credentials/flows/{flow_id}/code", s.machineScoped(s.cfg.Credentials.HandleRelay))
+		mux.HandleFunc("GET /credentials/flows/{flow_id}", s.machineScoped(s.cfg.Credentials.HandlePoll))
+	}
 	return mux
+}
+
+// machineScoped adapts a handler that acts on behalf of an authenticated
+// machine. Authentication — WhoIs plus machine credential, with the denial
+// audited — happens here and only here, so a delegated surface such as the
+// credential broker cannot accidentally ship a second, weaker notion of who is
+// calling.
+func (s *Server) machineScoped(h func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		c, ok := s.authenticate(w, r)
+		if !ok {
+			return
+		}
+		h(w, r, c.Machine.ID)
+	}
 }
 
 // errorCode is a stable machine-readable error identifier returned to clients.
