@@ -449,3 +449,126 @@ func TestARelayedFlowIsNotExpiredByTheConsentWindow(t *testing.T) {
 		})
 	}
 }
+
+// TestARelayLandingInsideTheExpiryWindowProducesOneOutcome forces the exact
+// interleaving that made the previous expiry guard insufficient.
+//
+// Excluding relayed flows from expiry is not enough on its own, because the
+// exclusion was CHECKED under the lock and then acted on after releasing it. A
+// relay arriving in that gap left both paths believing they owned the flow: the
+// expiry got audited while the exchange stored the credential, so the audit log
+// and the credential store disagreed about what happened.
+//
+// The barrier drops a real relay into that window. Whichever side claims the
+// flow first must win completely, and the other must find the flow taken.
+func TestARelayLandingInsideTheExpiryWindowProducesOneOutcome(t *testing.T) {
+	p := newFakeProvider(t, "alpha")
+	h := newHarness(t, harnessOptions{providers: []*fakeProvider{p}, clock: newClock()})
+
+	// The provider is held so the exchange cannot resolve while the race is
+	// still being set up.
+	release := p.hold()
+	start := h.start(machineA, p.name, false)
+	flowID := start.str("flow_id")
+	code, _, state := p.consent(t, h.client, start.str("authorization_url"))
+
+	var (
+		once     sync.Once
+		relayErr error
+	)
+	credflow.SetExpiryClaimBarrier(func() {
+		once.Do(func() {
+			// A relay whose own settle already passed, landing after the
+			// expiry's eligibility check and before its claim.
+			relayErr = h.svc.RelayForTest(context.Background(), flowID, machineA, state, code)
+		})
+	})
+	t.Cleanup(func() { credflow.SetExpiryClaimBarrier(nil) })
+
+	// The consent window closes, and a poll goes looking for expired flows.
+	h.advance(2 * time.Hour)
+	poll := h.poll(machineA, flowID)
+	if poll.status != http.StatusOK {
+		release()
+		t.Fatalf("poll: status %d body %s", poll.status, poll.raw)
+	}
+	if relayErr != nil {
+		release()
+		t.Fatalf("the relay inside the expiry window was refused: %v", relayErr)
+	}
+	// The relay won the lock first, so expiry must have abandoned its attempt.
+	if poll.str("state") != string(credflow.StatePending) {
+		release()
+		t.Fatalf("state = %q, want pending: a consumed relay must not be expired underneath", poll.str("state"))
+	}
+
+	release()
+	final := h.awaitTerminal(machineA, flowID)
+	if final.str("state") != string(credflow.StateCompleted) {
+		t.Fatalf("final state = %q, want completed (body %s)", final.str("state"), final.raw)
+	}
+
+	// One outcome, one row, and the store agrees with the log.
+	committed, failed := 0, 0
+	for _, e := range h.auditEvents() {
+		if e.Detail["flow_id"] != flowID {
+			continue
+		}
+		switch e.Event {
+		case store.EventCredentialFlowCommitted:
+			committed++
+		case store.EventCredentialFlowFailed:
+			failed++
+		}
+	}
+	if committed != 1 || failed != 0 {
+		t.Fatalf("audit rows for the flow: committed=%d failed=%d, want 1 and 0", committed, failed)
+	}
+	if cred, _, err := h.credential(p.name); err != nil || cred.Access != "alpha-access-token" {
+		t.Fatalf("credential = %+v (%v), want the one the exchange stored", cred, err)
+	}
+}
+
+// TestARelayAfterExpiryHasClaimedTheFlowIsRefused is the same race resolved the
+// other way: expiry got there first, so the late relay must be told the window
+// closed rather than starting an exchange whose result nobody would believe.
+func TestARelayAfterExpiryHasClaimedTheFlowIsRefused(t *testing.T) {
+	p := newFakeProvider(t, "alpha")
+	h := newHarness(t, harnessOptions{providers: []*fakeProvider{p}, clock: newClock()})
+
+	start := h.start(machineA, p.name, false)
+	flowID := start.str("flow_id")
+	code, _, state := p.consent(t, h.client, start.str("authorization_url"))
+
+	h.advance(2 * time.Hour)
+	if got := h.awaitTerminal(machineA, flowID).str("state"); got != string(credflow.StateExpired) {
+		t.Fatalf("state = %q, want expired", got)
+	}
+
+	// The human's browser finally comes back with a code.
+	late := h.relay(machineA, flowID, map[string]string{"code": code, "state": state})
+	if late.status != http.StatusConflict {
+		t.Fatalf("late relay: status %d, want 409 (body %s)", late.status, late.raw)
+	}
+	if !strings.Contains(late.str("message"), string(credflow.StateExpired)) {
+		t.Errorf("the refusal does not say the flow expired: %q", late.str("message"))
+	}
+
+	// Nothing was exchanged or stored, and the flow still has exactly one row.
+	if _, _, err := h.credential(p.name); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("a credential was stored after expiry: %v", err)
+	}
+	if got := h.poll(machineA, flowID).str("state"); got != string(credflow.StateExpired) {
+		t.Fatalf("state after the late relay = %q, want expired", got)
+	}
+	rows := 0
+	for _, e := range h.auditEvents() {
+		if e.Detail["flow_id"] == flowID &&
+			(e.Event == store.EventCredentialFlowFailed || e.Event == store.EventCredentialFlowCommitted) {
+			rows++
+		}
+	}
+	if rows != 1 {
+		t.Fatalf("terminal audit rows for the flow = %d, want exactly 1", rows)
+	}
+}

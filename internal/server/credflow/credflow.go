@@ -504,12 +504,61 @@ func (s *Service) expirableLocked(f *flow, now time.Time) bool {
 
 // expire moves a pending flow past its deadline to expired. The existing
 // credential was never touched, so there is nothing to undo.
+//
+// Eligibility and the decision are ONE atomic step (claimExpiry), not a check
+// followed by a transition. Callers reach here from a check they made earlier —
+// a sweep pass, a poll — and between that check and this call a relay can
+// arrive. Re-deciding under the same lock the relay competes for is what makes
+// the two mutually exclusive: either the relay is consumed first and expiry
+// finds a relayed flow and abandons it, or expiry claims the flow first and the
+// relay is refused as too late. Never both.
 func (s *Service) expire(ctx context.Context, f *flow) error {
-	return s.terminate(ctx, f, StateExpired, store.ActorSystem, &Diagnostic{
-		ErrorCode: CodeFlowExpired,
-		Message:   "the authorization window closed before consent was relayed; re-run add-credentials to start a new flow",
-		Retryable: true,
-	})
+	expiryClaimBarrier()
+	if !s.claimExpiry(f) {
+		return nil
+	}
+	return s.commitTerminal(ctx, f)
+}
+
+// claimExpiry atomically re-tests eligibility and records the decision.
+//
+// Setting f.decided inside the lock is the claim: consumeRelay refuses any flow
+// that already carries a decision, so once this returns true no relay can be
+// consumed for this flow, and while a relay holds the lock this cannot succeed.
+func (s *Service) claimExpiry(f *flow) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.expirableLocked(f, s.cfg.Now().UTC()) {
+		return false
+	}
+	f.decided = &pendingTerminal{
+		state: StateExpired,
+		actor: store.ActorSystem,
+		diag: &Diagnostic{
+			ErrorCode: CodeFlowExpired,
+			Message:   "the authorization window closed before consent was relayed; re-run add-credentials to start a new flow",
+			Retryable: true,
+		},
+	}
+	return true
+}
+
+// expiryClaimBarrier runs between an expiry's eligibility check and its claim.
+// It is a TEST HOOK: it exists so a test can force the one interleaving that
+// cannot otherwise be scheduled reliably — a relay landing inside that window —
+// and it is a no-op in every build that does not set it (see export_test.go).
+var (
+	expiryBarrierMu sync.Mutex
+	expiryBarrierFn func()
+)
+
+func expiryClaimBarrier() {
+	expiryBarrierMu.Lock()
+	fn := expiryBarrierFn
+	expiryBarrierMu.Unlock()
+	if fn != nil {
+		fn()
+	}
 }
 
 // lookup returns the caller's flow.
@@ -612,8 +661,16 @@ func (s *Service) consumeRelay(f *flow, out relayOutcome) (string, error) {
 		return "", &flowError{status: http.StatusConflict, code: "conflict",
 			message: "this flow's outcome has already been relayed; a code may be relayed exactly once"}
 	case f.state.Terminal() || f.decided != nil:
+		// Including a DECIDED-but-unrecorded outcome is what makes expiry and
+		// relay mutually exclusive: an expiry that claimed this flow a moment
+		// ago has already written its decision here, so a late relay is
+		// refused rather than starting an exchange nobody will believe.
+		ended := f.state
+		if f.decided != nil {
+			ended = f.decided.state
+		}
 		return "", &flowError{status: http.StatusConflict, code: "conflict",
-			message: "this flow has already finished"}
+			message: fmt.Sprintf("this flow has already finished (%s); start a new one", ended)}
 	}
 	// The state parameter is verified before anything else is believed: it is
 	// what binds this redirect to the flow this server started. A mismatch is
