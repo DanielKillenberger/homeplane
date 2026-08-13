@@ -33,6 +33,7 @@ package edge
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -251,14 +252,39 @@ func (h *liveHarness) call(tool string, args map[string]any) (edgeResponse, stri
 		HeaderProtocolVersion: ProtocolVersion,
 		HeaderSessionID:       h.session,
 	})
-	return res, toolText(res)
+	text, _ := toolText(res)
+	return res, text
 }
 
-// toolText pulls the text content out of an MCP tool result, and returns the
-// raw body when the answer is not a tool result at all (a denial, an error).
-func toolText(res edgeResponse) string {
+// mustCall invokes a tool and fails the test unless it genuinely SUCCEEDED.
+//
+// "Succeeded" is deliberately three checks, not one. An MCP tool that fails
+// answers with an ordinary JSON-RPC RESULT carrying `isError: true` and the
+// failure as text — so a test that only looked at the HTTP status and the
+// JSON-RPC error would pass on a tool that reached nothing at all. That is not
+// hypothetical: the first live run of this file reported a green Drive read
+// while the connector's container could not open a socket.
+func (h *liveHarness) mustCall(tool string, args map[string]any) string {
+	h.t.Helper()
+	res, text := h.call(tool, args)
+	if res.status != http.StatusOK {
+		h.t.Fatalf("%s: HTTP %d: %s", tool, res.status, res.rawBody)
+	}
+	if res.rpc.Error != nil {
+		h.t.Fatalf("%s: JSON-RPC error %+v", tool, res.rpc.Error)
+	}
+	if _, isErr := toolText(res); isErr {
+		h.t.Fatalf("%s: the tool reported a failure:\n%s", tool, text)
+	}
+	return text
+}
+
+// toolText pulls the text content out of an MCP tool result and reports whether
+// the result was a tool-level FAILURE. It returns the raw body when the answer
+// is not a tool result at all (a denial, a transport error).
+func toolText(res edgeResponse) (string, bool) {
 	if len(res.rpc.Result) == 0 {
-		return res.rawBody
+		return res.rawBody, res.rpc.Error != nil
 	}
 	var result struct {
 		Content []struct {
@@ -268,17 +294,22 @@ func toolText(res edgeResponse) string {
 		IsError bool `json:"isError"`
 	}
 	if err := json.Unmarshal(res.rpc.Result, &result); err != nil {
-		return string(res.rpc.Result)
+		return string(res.rpc.Result), false
 	}
 	var b strings.Builder
 	for _, c := range result.Content {
 		b.WriteString(c.Text)
 		b.WriteString("\n")
 	}
-	if b.Len() == 0 {
-		return string(res.rpc.Result)
+	text := b.String()
+	if text == "" {
+		text = string(res.rpc.Result)
 	}
-	return b.String()
+	// Some connectors report a failure only in the text — `isError` is optional
+	// in the protocol and workspace-mcp does not always set it — so the
+	// connector's own error prefix counts as a failure too.
+	failed := result.IsError || strings.HasPrefix(strings.TrimSpace(text), "Error calling tool")
+	return text, failed
 }
 
 func (h *liveHarness) auditRows() []store.AuditEvent {
@@ -318,10 +349,7 @@ func (h *liveHarness) lastToolRow(tool string) store.AuditEvent {
 func TestLiveGoogleDriveReadThroughTheEdge(t *testing.T) {
 	h := newLiveHarness(t)
 
-	res, text := h.call("search_drive_files", map[string]any{"query": "trashed = false", "page_size": 3})
-	if res.status != http.StatusOK || res.rpc.Error != nil {
-		t.Fatalf("search_drive_files: HTTP %d, rpc error %+v, body %s", res.status, res.rpc.Error, res.rawBody)
-	}
+	text := h.mustCall("search_drive_files", map[string]any{"query": "trashed = false", "page_size": 3})
 	if strings.Contains(strings.ToLower(text), "insufficient authentication scopes") {
 		t.Fatalf("Drive read was refused at scope level; the grant is missing drive.readonly: %s", text)
 	}
@@ -334,10 +362,7 @@ func TestLiveGoogleDriveReadThroughTheEdge(t *testing.T) {
 
 	// A specific file read, when one was named — this is the artifact-id path.
 	if h.env.driveDoc != "" {
-		res, text := h.call("get_drive_file_content", map[string]any{"file_id": h.env.driveDoc})
-		if res.status != http.StatusOK || res.rpc.Error != nil {
-			t.Fatalf("get_drive_file_content: HTTP %d, %+v", res.status, res.rpc.Error)
-		}
+		text := h.mustCall("get_drive_file_content", map[string]any{"file_id": h.env.driveDoc})
 		t.Logf("get_drive_file_content returned %d bytes of text", len(text))
 		row := h.lastToolRow("get_drive_file_content")
 		if row.ArtifactID != h.env.driveDoc {
@@ -387,38 +412,53 @@ func TestLiveGoogleCalendarSixOp(t *testing.T) {
 	rfc := func(tm time.Time) string { return tm.Format("2006-01-02T15:04:05Z") }
 
 	// STEP 0 — isolation: nothing by this name exists yet.
-	_, before := h.call("get_events", map[string]any{
+	before := h.mustCall("get_events", map[string]any{
 		"calendar_id": h.env.calendar, "query": summary, "max_results": 5,
 	})
 	if strings.Contains(before, summary) {
 		t.Fatalf("an event named %q already exists; the proof refuses to touch it:\n%s", summary, before)
 	}
 
-	// The event is deleted no matter how this test ends. A leftover event on
-	// Daniel's real calendar is the one failure mode this proof must not have.
+	// The event is deleted no matter how this test ends. A leftover event on a
+	// real calendar is the one failure mode this proof must not have, so the
+	// cleanup is armed the moment the CREATE is attempted — not once the id has
+	// been parsed out of the connector's prose. Parsing is exactly the step that
+	// can fail while the event nevertheless exists, and when it does the cleanup
+	// finds the event by its unique summary instead.
 	var eventID string
+	cleanupNeeded := false
 	t.Cleanup(func() {
-		if eventID == "" {
+		if !cleanupNeeded {
+			return
+		}
+		id := eventID
+		if id == "" {
+			id = h.findEventBySummary(summary)
+		}
+		if id == "" {
+			t.Errorf("CLEANUP FAILED — an event named %q may exist on calendar %q and could not be located; "+
+				"DELETE IT BY HAND", summary, h.env.calendar)
 			return
 		}
 		res, text := h.call("manage_event", map[string]any{
-			"action": "delete", "event_id": eventID, "calendar_id": h.env.calendar,
+			"action": "delete", "event_id": id, "calendar_id": h.env.calendar,
 		})
-		if res.status != http.StatusOK || res.rpc.Error != nil {
+		_, failed := toolText(res)
+		if res.status != http.StatusOK || res.rpc.Error != nil || failed {
 			t.Errorf("CLEANUP FAILED — DELETE THIS EVENT BY HAND: calendar %q event %q (%s)",
-				h.env.calendar, eventID, strings.TrimSpace(text))
+				h.env.calendar, id, strings.TrimSpace(text))
 		}
 	})
 
-	// STEP 1 — create.
-	res, text := h.call("manage_event", map[string]any{
+	// STEP 1 — create. The cleanup is armed BEFORE the call that might create the
+	// event, so a failure anywhere after this point still deletes it. It is
+	// disarmed only once step 5 has verifiably deleted it.
+	cleanupNeeded = true
+	text := h.mustCall("manage_event", map[string]any{
 		"action": "create", "calendar_id": h.env.calendar, "summary": summary,
 		"start_time": rfc(start), "end_time": rfc(end),
 		"description": "v1 created by the Homeplane live connector proof (" + stamp + ")",
 	})
-	if res.status != http.StatusOK || res.rpc.Error != nil {
-		t.Fatalf("create: HTTP %d, %+v, %s", res.status, res.rpc.Error, text)
-	}
 	eventID = extractEventID(text)
 	if eventID == "" {
 		t.Fatalf("create returned no event id:\n%s", text)
@@ -429,10 +469,7 @@ func TestLiveGoogleCalendarSixOp(t *testing.T) {
 	}
 
 	// STEP 2 — read back.
-	res, text = h.call("get_events", map[string]any{"calendar_id": h.env.calendar, "event_id": eventID})
-	if res.status != http.StatusOK || res.rpc.Error != nil {
-		t.Fatalf("read back: HTTP %d, %+v, %s", res.status, res.rpc.Error, text)
-	}
+	text = h.mustCall("get_events", map[string]any{"calendar_id": h.env.calendar, "event_id": eventID})
 	if !strings.Contains(text, summary) {
 		t.Fatalf("read back did not return the created event:\n%s", text)
 	}
@@ -442,38 +479,29 @@ func TestLiveGoogleCalendarSixOp(t *testing.T) {
 	}
 
 	// STEP 3 — update.
-	res, text = h.call("manage_event", map[string]any{
+	text = h.mustCall("manage_event", map[string]any{
 		"action": "update", "event_id": eventID, "calendar_id": h.env.calendar,
 		"description": "v2 updated by the Homeplane live connector proof (" + stamp + ")",
 	})
-	if res.status != http.StatusOK || res.rpc.Error != nil {
-		t.Fatalf("update: HTTP %d, %+v, %s", res.status, res.rpc.Error, text)
-	}
-	t.Logf("STEP 3 update: ok")
+	t.Logf("STEP 3 update: ok (%s)", firstLine(text))
 	if row := h.lastToolRow("manage_event"); row.ActionClass != string(connectors.ActionWrite) || row.ArtifactID != eventID {
 		t.Errorf("update audited as %+v, want a write on %s", row, eventID)
 	}
 
 	// STEP 4 — verify the update landed.
-	res, text = h.call("get_events", map[string]any{
+	text = h.mustCall("get_events", map[string]any{
 		"calendar_id": h.env.calendar, "event_id": eventID, "detailed": true,
 	})
-	if res.status != http.StatusOK || res.rpc.Error != nil {
-		t.Fatalf("verify: HTTP %d, %+v", res.status, res.rpc.Error)
-	}
 	if !strings.Contains(text, "v2 updated") {
 		t.Fatalf("the update is not visible on the event:\n%s", text)
 	}
 	t.Logf("STEP 4 verify: v2 present")
 
 	// STEP 5 — delete, through the SAME tool, resolved to the delete class.
-	res, text = h.call("manage_event", map[string]any{
+	text = h.mustCall("manage_event", map[string]any{
 		"action": "delete", "event_id": eventID, "calendar_id": h.env.calendar,
 	})
-	if res.status != http.StatusOK || res.rpc.Error != nil {
-		t.Fatalf("delete: HTTP %d, %+v, %s", res.status, res.rpc.Error, text)
-	}
-	t.Logf("STEP 5 delete: ok")
+	t.Logf("STEP 5 delete: ok (%s)", firstLine(text))
 	deleteRow := h.lastToolRow("manage_event")
 	if deleteRow.ActionClass != string(connectors.ActionDelete) {
 		t.Fatalf("the delete was audited as %q, want delete-class", deleteRow.ActionClass)
@@ -482,10 +510,10 @@ func TestLiveGoogleCalendarSixOp(t *testing.T) {
 		t.Errorf("the delete audited artifact %q, want %q", deleteRow.ArtifactID, eventID)
 	}
 	deleted := eventID
-	eventID = "" // the cleanup has nothing left to do
+	cleanupNeeded = false // step 5 deleted it; the cleanup has nothing left to do
 
 	// STEP 6 — verify cleanup: the event is gone from the calendar's listing.
-	_, after := h.call("get_events", map[string]any{
+	after := h.mustCall("get_events", map[string]any{
 		"calendar_id": h.env.calendar, "query": summary, "max_results": 5,
 	})
 	if strings.Contains(after, deleted) {
@@ -513,9 +541,7 @@ func TestLiveGoogleCalendarSixOp(t *testing.T) {
 func TestLiveGoogleRevokedGrantIsRefusedImmediately(t *testing.T) {
 	h := newLiveHarness(t)
 
-	if res, _ := h.call("search_drive_files", map[string]any{"query": "trashed = false", "page_size": 1}); res.status != http.StatusOK {
-		t.Fatalf("the grant did not work before revocation: HTTP %d", res.status)
-	}
+	h.mustCall("search_drive_files", map[string]any{"query": "trashed = false", "page_size": 1})
 
 	revokedAt := time.Now()
 	if _, _, err := h.st.RevokeGrant(context.Background(), h.grant.ID, "revoked_by_operator",
@@ -540,38 +566,82 @@ func TestLiveGoogleRevokedGrantIsRefusedImmediately(t *testing.T) {
 	t.Logf("revoked grant refused %s after revocation (HTTP %d)", elapsed.Round(time.Millisecond), res.status)
 }
 
-// extractEventID finds the created event's id in the connector's text result.
+// extractEventID finds an event's id in the connector's text result.
 //
-// The manifest's declarative extractor cannot do this: workspace-mcp returns
+// The manifest's declarative extractor cannot do this: workspace-mcp answers in
 // prose, and the extractor addresses JSON. That is a recorded limitation, not a
 // silent one — the create call's audit row carries artifact id `unknown` plus an
 // args digest, and every later operation on the event names it in the request,
 // where the extractor does reach it.
+//
+// Two shapes appear, and the id is read from whichever is present rather than
+// from a guess: the `eid=` parameter of a calendar link, which is
+// base64url("<event id> <calendar id>"), and a literal `ID: <id>`.
 func extractEventID(text string) string {
+	if id := eventIDFromLink(text); id != "" {
+		return id
+	}
 	for _, line := range strings.Split(text, "\n") {
 		for _, marker := range []string{"Event ID:", "event_id:", "ID:"} {
-			if i := strings.Index(line, marker); i >= 0 {
-				candidate := strings.TrimSpace(line[i+len(marker):])
-				candidate = strings.Trim(candidate, "`'\"(),.")
-				if f := strings.Fields(candidate); len(f) > 0 {
-					candidate = strings.Trim(f[0], "`'\"(),.")
-				}
-				if isEventID(candidate) {
-					return candidate
+			i := strings.Index(line, marker)
+			if i < 0 {
+				continue
+			}
+			candidate := strings.TrimSpace(line[i+len(marker):])
+			if f := strings.Fields(candidate); len(f) > 0 {
+				candidate = f[0]
+			}
+			if candidate = strings.Trim(candidate, "`'\"(),.;:"); isEventID(candidate) {
+				return candidate
+			}
+		}
+	}
+	return ""
+}
+
+// eventIDFromLink decodes the `eid=` parameter Google puts in an event link.
+func eventIDFromLink(text string) string {
+	rest := text
+	for {
+		i := strings.Index(rest, "eid=")
+		if i < 0 {
+			return ""
+		}
+		rest = rest[i+len("eid="):]
+		raw := rest
+		if j := strings.IndexAny(raw, "\"'\n\t &)>"); j >= 0 {
+			raw = raw[:j]
+		}
+		if padded := raw + strings.Repeat("=", (4-len(raw)%4)%4); padded != "" {
+			if decoded, err := base64.URLEncoding.DecodeString(padded); err == nil {
+				if f := strings.Fields(string(decoded)); len(f) > 0 && isEventID(f[0]) {
+					return f[0]
 				}
 			}
 		}
 	}
-	// Fall back to the longest bare token that looks like a Google event id.
-	best := ""
-	for _, field := range strings.FieldsFunc(text, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && r != '_'
-	}) {
-		if isEventID(field) && len(field) > len(best) {
-			best = field
-		}
+}
+
+// findEventBySummary is the cleanup's last resort: ask the calendar for the
+// uniquely named event and read its id back out.
+func (h *liveHarness) findEventBySummary(summary string) string {
+	h.t.Helper()
+	_, text := h.call("get_events", map[string]any{
+		"calendar_id": h.env.calendar, "query": summary, "max_results": 5,
+	})
+	if !strings.Contains(text, summary) {
+		return ""
 	}
-	return best
+	return extractEventID(text)
+}
+
+// firstLine keeps a log line readable when a connector answers with prose.
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	if len(line) > 120 {
+		line = line[:120] + "…"
+	}
+	return line
 }
 
 func isEventID(s string) bool {

@@ -75,15 +75,27 @@ scheme. Two environment settings are load-bearing:
 - `WORKSPACE_MCP_CREDENTIALS_DIR=/creds` plus a volume — this is where
   Homeplane delivers the brokered credential (step 3).
 
+And one build-time dependency is equally load-bearing:
+
+- `--build-with PySocks` — ToolHive isolates the container's network and routes
+  its egress through a Squid proxy, advertised in `HTTP_PROXY`/`HTTPS_PROXY`.
+  The Google client libraries reach the network through `httplib2`, which reads
+  those variables **only when PySocks is importable** and otherwise silently
+  attempts a direct connection. Without it every Google call fails with
+  `[Errno 101] Network is unreachable` — a message that says nothing about
+  proxies. Adding it keeps egress control on, which is the point of the
+  isolation.
+
 ```bash
 thv run --name homeplane-google --transport streamable-http --target-port 8000 \
+  --build-with PySocks \
   -e WORKSPACE_MCP_HOST=0.0.0.0 \
   -e WORKSPACE_MCP_CREDENTIALS_DIR=/creds \
   -e MCP_SINGLE_USER_MODE=1 \
   --volume "$LIVE/workload-creds:/creds" \
   uvx://workspace-mcp@1.24.0 -- --transport streamable-http --tools drive calendar
 
-thv list   # note the loopback URL, e.g. http://127.0.0.1:26295/mcp
+thv list   # note the loopback URL, e.g. http://127.0.0.1:32017/mcp
 ```
 
 `--tools drive calendar` is what makes the manifest's `tool_inventory` complete.
@@ -142,9 +154,16 @@ The four tests are:
 | `TestLiveGoogleRevokedGrantIsRefusedImmediately` | a revoked grant is 401 on the next call, in well under a second |
 
 The Calendar test checks that its event does not already exist before creating
-it, and deletes it from a `t.Cleanup` that runs on every failure path. If the
-cleanup itself fails it prints
+it, and deletes it from a `t.Cleanup` armed BEFORE the create call and disarmed
+only once the delete is verified. If the event's id could not be parsed out of
+the connector's prose, the cleanup locates the event by its unique summary
+instead; only if that also fails does it print
 `CLEANUP FAILED — DELETE THIS EVENT BY HAND` with the calendar and event id.
+
+Last full run: 2026-08-14, all four green against real Google — a real Drive
+search and a 118 KB document read, a Drive write refused at the manifest, the
+six-op on `homeplane-test-20260813T230933Z` (created, read, updated, verified,
+deleted, verified gone), and a revoked grant refused 2 ms after revocation.
 
 ## 5. Tear down
 
