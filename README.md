@@ -14,6 +14,9 @@ Architecture, decisions, and scope live in `STRATEGY.md`,
 | Path | What it is |
 |---|---|
 | `cmd/homeplane-server` | Control plane: tsnet-embedded HTTP server + server-local admin CLI |
+| `cmd/homeplane-agent` | Machine agent: `enrol`, `status` |
+| `internal/agent` | Agent state directory, control-plane client, enrolment, status |
+| `install.sh` | Installer: platform gating, checksummed artifacts, Node 22 provisioning |
 | `internal/store` | SQLite persistence (machines, grants, audit, encrypted secrets) |
 | `internal/server` | Enrolment, grant lifecycle, audit, health handlers |
 | `internal/policy` | Server-side per-harness capability policy |
@@ -53,6 +56,35 @@ tsnet, credential store) and returns 503 with a component-level payload when
 any is degraded, so `curl -sf .../healthz` fails. Machine-side state
 (enrolment, vault, sync, GNO, harness config) belongs to `homeplane-agent
 status`.
+
+## Installing a machine
+
+```bash
+scripts/stage-release.sh dist        # build release-form artifacts + SHA256SUMS
+./install.sh --stage-dir dist        # verify checksums, provision Node 22, install
+
+~/.homeplane/bin/homeplane-agent enrol -server https://homeplane.<tailnet>.ts.net
+~/.homeplane/bin/homeplane-agent status
+```
+
+The installer supports macOS (launchd) and systemd-based Linux with
+`systemctl --user`; anything else is rejected **before** anything is written. A
+checksum mismatch aborts with nothing installed, and a re-run is an idempotent
+refresh that leaves enrolment state alone. Node 22 is provisioned
+deterministically — from a checksummed vendored tarball staged alongside the
+agent, or from the distribution's package manager with
+`HOMEPLANE_NODE_PACKAGE=1` — and a machine that cannot get it fails the install
+rather than ending up quietly unable to sync its vault.
+
+Enrolment is identity-preserving: re-running `enrol` rotates this machine's
+credential on the same server-side record and the previous credential stops
+working immediately. If the server cannot be reached, nothing is written to
+`~/.homeplane`.
+
+`homeplane-agent status` reconciles grants **live** against the server on every
+run: a revoked grant reads `revoked`, and a server that cannot be reached makes
+grant state `unknown` rather than a stale `active`. Exit codes are `0` ok, `1`
+a named component is degraded, `2` this machine is not enrolled.
 
 ## Audit guarantees
 
