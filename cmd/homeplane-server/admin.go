@@ -22,7 +22,7 @@ const adminUsage = `homeplane-server admin — server-local operator surface
   admin audit [flags]              read the append-only audit log
   admin revoke-grant <grant-id>    revoke any grant, on any machine
   admin secret init-key [flags]    create the age key protecting provider secrets
-  admin secret import <ref> [flags] import a provider app credential into the store
+  admin secret import [flags] <ref> import a provider app credential into the store
 
 These commands read and write the state directory directly. They are NOT
 reachable over HTTP: operator authority is shell access to this host.
@@ -223,7 +223,7 @@ func runAdminSecretImport(args []string) error {
 	stateDir := fs.String("state-dir", defaultStateDir(), "Homeplane state directory")
 	file := fs.String("file", "", "read the secret from this file (must be a regular 0600 file) instead of stdin")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "homeplane-server admin secret import <ref> [flags]\n\n")
+		fmt.Fprintf(fs.Output(), "homeplane-server admin secret import [flags] <ref>\n\n")
 		fs.PrintDefaults()
 		fmt.Fprintf(fs.Output(), "\nThe secret VALUE is never accepted as a command-line argument: argv is\nworld-readable via ps. Pipe it on stdin or point -file at a 0600 file.\n")
 	}
@@ -231,7 +231,10 @@ func runAdminSecretImport(args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: homeplane-server admin secret import <ref> [-file path]")
+		// Flags BEFORE the ref: Go's flag parser stops at the first
+		// positional argument, so `import <ref> -file x` silently leaves
+		// -file unparsed and looks like a usage error for no visible reason.
+		return errors.New("usage: homeplane-server admin secret import [-state-dir dir] [-file path] <ref>")
 	}
 	ref := strings.TrimSpace(fs.Arg(0))
 	if ref == "" {

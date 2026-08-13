@@ -117,6 +117,18 @@ token, the WhoIs machine binding and the manifest apply.`)
 		Hostname: f.hostname,
 		Dir:      filepath.Join(f.stateDir, "tsnet"),
 		Logf:     func(format string, args ...any) { log.Debug(fmt.Sprintf(format, args...)) },
+		// UserLogf carries the operator-facing lines — above all the login URL
+		// printed while the node is unauthenticated. It is deliberately NOT
+		// folded into Logf: that one is the verbose backend firehose and runs at
+		// Debug, so an unattended first boot would hide the single line the
+		// operator has to act on behind a log level nobody enables in
+		// production. tsnet's default for UserLogf is log.Printf, which bypasses
+		// the structured logger entirely.
+		//
+		// No auth key is ever printed here: tsnet's user-facing lines carry the
+		// login URL and status, never the key (which arrives via TS_AUTHKEY from
+		// a 0600 EnvironmentFile, never as an argv value).
+		UserLogf: func(format string, args ...any) { log.Info(fmt.Sprintf(format, args...)) },
 	}
 	defer ts.Close()
 

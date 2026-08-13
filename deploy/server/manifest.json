@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "connectors": [
+    {
+      "provider": "google-workspace",
+      "credential_ref": "google/oauth-session",
+      "credential_acquisition": {
+        "driver": "oauth2-authcode",
+        "params": {
+          "auth_endpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+          "token_endpoint": "https://oauth2.googleapis.com/token",
+          "client_id_ref": "google/client-id",
+          "client_secret_ref": "google/client-secret",
+          "access_type": "offline"
+        },
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.readonly",
+          "https://www.googleapis.com/auth/calendar.events"
+        ]
+      },
+      "mcp_server": {
+        "name": "workspace-mcp",
+        "transport": "streamable-http",
+        "source": "uvx://workspace-mcp@1.24.0"
+      },
+      "tool_inventory": [
+        "get_events",
+        "search_drive_files",
+        "get_drive_file_content",
+        "manage_event",
+        "create_drive_file",
+        "update_drive_file"
+      ],
+      "tools": [
+        { "tool": "get_events", "action_class": "read" },
+        { "tool": "search_drive_files", "action_class": "read" },
+        {
+          "tool": "get_drive_file_content",
+          "action_class": "read",
+          "artifact_id": { "source": "request", "pointer": "$.file_id" }
+        }
+      ],
+      "excluded_tools": [
+        {
+          "tool": "manage_event",
+          "reason": "Calendar write surface: fn-1.12 maps it and re-runs the R8 six-op proof through the edge"
+        },
+        {
+          "tool": "create_drive_file",
+          "reason": "D18: Drive is read-only in Homeplane"
+        },
+        {
+          "tool": "update_drive_file",
+          "reason": "D18: Drive is read-only in Homeplane"
+        }
+      ]
+    }
+  ]
+}

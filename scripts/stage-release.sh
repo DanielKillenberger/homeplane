@@ -2,9 +2,11 @@
 # stage-release.sh — build release-form artifacts and their checksum manifest
 # into a staging directory that install.sh can consume.
 #
-# It stages BOTH halves of an installable release:
+# It stages the halves of an installable release:
 #
 #   * the cross-compiled homeplane-agent binary for every supported platform;
+#   * the cross-compiled homeplane-server binary for every supported LINUX
+#     platform (the server is deployed on Linux only — deploy/server/README.md);
 #   * the pinned Node 22 runtime for every supported platform, verified against
 #     the upstream checksums in scripts/node-pinned.sha256.
 #
@@ -156,6 +158,16 @@ while read -r goos goarch; do
   info "building $out"
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
     go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$out" ./cmd/homeplane-agent
+
+  # The server ships for Linux only. Building it for darwin would stage an
+  # artifact no deployment path installs, and deploy/server/install-server.sh
+  # would have no way to tell a supported target from a decorative one.
+  if [[ "$goos" == "linux" ]]; then
+    srv="$OUT_DIR/homeplane-server-${goos}-${goarch}"
+    info "building $srv"
+    CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+      go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$srv" ./cmd/homeplane-server
+  fi
 done <<<"$PLATFORMS"
 
 if [[ $SKIP_NODE -eq 0 ]]; then
@@ -179,7 +191,7 @@ fi
 (
   cd "$OUT_DIR"
   artifacts=()
-  for f in homeplane-agent-* node-v*.tar.gz; do
+  for f in homeplane-agent-* homeplane-server-* node-v*.tar.gz; do
     # An unmatched glob comes through as its own literal pattern; skipping
     # non-files is what keeps `--skip-node` from manifesting a phantom archive.
     if [[ -f "$f" ]]; then

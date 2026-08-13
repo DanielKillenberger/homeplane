@@ -419,6 +419,40 @@ tsnet WhoIs + bypass re-run on the real deployment (.16/.15), and the through-th
 the Calendar six-op with the Homeplane-owned OAuth client + `add-credentials` consent (.8/.12,
 the real R8 proof).
 
+## Deployment note (fn-1.15, 2026-08-14) — how the real host differs from the spike
+
+The spike validated the CLI + **Docker** runtime headless in DinD. The production
+server (clawniel, Ubuntu, x86_64) runs **rootless Podman 5.7.0**. The adopted
+shape survived unchanged; four host-level differences are worth recording, and
+all four are handled in `deploy/server/` (runbook: `deploy/server/README.md`).
+
+1. **Podman socket, not a Docker daemon.** ToolHive reaches rootless Podman
+   through the user socket (`systemctl --user enable --now podman.socket`). No
+   `docker` binary, no shim, no configuration in ToolHive itself.
+2. **`XDG_RUNTIME_DIR` is the sharp edge.** ToolHive discovers that socket at
+   `$XDG_RUNTIME_DIR/podman/podman.sock`, and a non-interactive SSH command has
+   `XDG_RUNTIME_DIR` **unset** — so `ssh host thv run …` fails with *"no
+   container runtime available"* while the systemd units, which always have it,
+   work. This is a diagnosis trap, not a defect: the installer sets it, and the
+   runbook documents it.
+3. **systemd `--user`, not system units.** The host runs other people's
+   services; Homeplane installs under one prefix plus two user units and
+   `enable-linger`, touching nothing system-wide and needing no root. `thv run
+   --foreground` makes systemd the real supervisor (without it `thv` detaches
+   and systemd supervises a process that has already exited).
+4. **ToolHive secrets are not used at all**, so gate 4's per-boot keyring
+   seeding never applies to this deployment: Homeplane's own age-encrypted store
+   (D3) holds every credential, and the workload gets what it needs materialized
+   at `thv run` time.
+
+Verified live from a second tailnet node (this Mac → clawniel): both units
+supervised, the gateway bound to `127.0.0.1:44022` **only** and unreachable over
+the tailnet on either the host's address or the tsnet node's, the edge reachable
+and 401 without a grant token, `/healthz` green on all four components, and a
+re-deploy preserving the age key, the database file and the tsnet node identity
+(same tailnet IP). Evidence:
+`test/evidence/fn-1-homeplane-walking-skeleton-install.15.json`.
+
 ## Fallback ladder disposition
 
 - (a) ToolHive-direct: rejected (gate 2/3 native limitations above), not needed.

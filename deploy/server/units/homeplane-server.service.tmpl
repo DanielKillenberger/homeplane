@@ -1,0 +1,36 @@
+[Unit]
+Description=Homeplane control plane (tsnet node "@HOSTNAME@")
+Documentation=file://@PREFIX@/README-deploy.md
+# Ordered AFTER the gateway, and only Wants= it: the server must come up second
+# so the edge has something to proxy to, but a gateway that is briefly down must
+# not take the control plane with it — enrolment, grants and /healthz have to
+# keep answering precisely so an operator can see WHY the gateway is degraded.
+Wants=homeplane-gateway.service
+After=homeplane-gateway.service
+
+[Service]
+Type=exec
+# The tailnet auth key, when present, arrives as TS_AUTHKEY from a 0600 file
+# that only this user can read. It is never an argv value (argv is world
+# readable via ps) and never logged. `-` because the file is deleted once the
+# node is registered: tsnet's state under the state dir is what keeps it
+# authenticated across restarts, so a re-deploy must not require the key again.
+EnvironmentFile=-@PREFIX@/etc/authkey.env
+ExecStart=@PREFIX@/bin/homeplane-server serve \
+    -state-dir @STATE_DIR@ \
+    -hostname @HOSTNAME@ \
+    -addr @ADDR@ \
+    -connector-endpoint-url @ENDPOINT_URL@ \
+    -connector-manifest @PREFIX@/etc/manifest.json \
+    -gateway-mcp-url http://127.0.0.1:@GATEWAY_PORT@/mcp \
+    -gateway-health-url http://127.0.0.1:@GATEWAY_PORT@/health
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+# The state directory holds the SQLite store, the age key protecting every
+# provider secret, and the tsnet node identity. 0700 is enforced at creation;
+# this keeps a new file from being born group- or world-readable.
+UMask=0077
+
+[Install]
+WantedBy=default.target

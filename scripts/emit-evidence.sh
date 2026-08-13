@@ -13,13 +13,32 @@
 # itself is excluded from that check — this script is what changes it — so the
 # normal flow is: commit the implementation, run this, commit the artifact.
 #
-# Usage: scripts/emit-evidence.sh <task-id>
+# Some tasks assert things no Go gate can reach — a deployment on a real host,
+# checked from a second machine. --extra <file.json> merges such a run's own
+# JSON under an "extra" key, so one artifact still describes the whole task.
+# The repository gates stay exactly what they were: the extra file is recorded,
+# never interpreted, and never allowed to turn a red gate green.
+#
+# Usage: scripts/emit-evidence.sh <task-id> [--extra <file.json>]
 # Requires: go, git, python3.
 set -euo pipefail
 
 TASK_ID="${1:-}"
 if [[ -z "$TASK_ID" ]]; then
-  echo "usage: scripts/emit-evidence.sh <task-id>" >&2
+  echo "usage: scripts/emit-evidence.sh <task-id> [--extra file.json]" >&2
+  exit 2
+fi
+shift
+
+EXTRA_FILE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --extra) EXTRA_FILE="$2"; shift 2 ;;
+    *) echo "emit-evidence.sh: unknown option $1" >&2; exit 2 ;;
+  esac
+done
+if [[ -n "$EXTRA_FILE" && ! -f "$EXTRA_FILE" ]]; then
+  echo "emit-evidence.sh: --extra file $EXTRA_FILE not found" >&2
   exit 2
 fi
 
@@ -67,6 +86,7 @@ GOARCH="$(go env GOARCH)" \
 UNAME="$(uname -srm)" \
 WORK="$WORK" \
 FAILED="$FAILED" \
+EXTRA_FILE="$EXTRA_FILE" \
 python3 - "$OUT_FILE" <<'PY'
 import json, os, sys
 
@@ -124,6 +144,11 @@ artifact = {
     "assertions": assertions,
     "result": "pass" if os.environ["FAILED"] == "0" else "fail",
 }
+
+extra_file = os.environ.get("EXTRA_FILE", "")
+if extra_file:
+    with open(extra_file, encoding="utf-8") as fh:
+        artifact["extra"] = json.load(fh)
 
 with open(out_file, "w", encoding="utf-8") as fh:
     json.dump(artifact, fh, indent=2, sort_keys=False)

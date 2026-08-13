@@ -1,0 +1,37 @@
+[Unit]
+# The composed gateway: ToolHive supervising the connector workload, per D6.
+# Homeplane does not build a gateway — it composes one, and this unit is where
+# that composition is supervised.
+Description=Homeplane composed gateway (ToolHive workload @GATEWAY_WORKLOAD@)
+Documentation=file://@PREFIX@/README-deploy.md
+# The container runtime on this host is rootless Podman, reached through its
+# user socket. Without the socket ToolHive reports "no container runtime
+# available", so the socket is a hard requirement rather than a nicety.
+Wants=podman.socket
+After=podman.socket
+
+[Service]
+Type=exec
+# --foreground makes systemd the supervisor: without it `thv run` detaches and
+# systemd would supervise a process that has already exited, so a crashed
+# workload would look like a healthy unit.
+#
+# --host 127.0.0.1 is the bypass boundary. It is ToolHive's default and it is
+# stated explicitly anyway: a deployment must not depend on a default staying
+# what it was for the guarantee that another tailnet node cannot reach the
+# gateway except through the Homeplane edge.
+#
+# --enable-audit turns on ToolHive's per-tool-call audit. It is SUPPLEMENTARY
+# diagnostics (tool outcome + latency); the authoritative, attributable audit is
+# the edge's AuditEvent log (D6 gate 3).
+ExecStart=@PREFIX@/bin/thv run --foreground --host 127.0.0.1 --proxy-port @GATEWAY_PORT@ --enable-audit --name @GATEWAY_NAME@ @GATEWAY_WORKLOAD@
+# A stopped unit must not leave a workload record behind, or the next start
+# fails on a name that is already taken. `-` so teardown of an already-absent
+# workload is not itself a failure.
+ExecStopPost=-@PREFIX@/bin/thv rm @GATEWAY_NAME@
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=default.target
