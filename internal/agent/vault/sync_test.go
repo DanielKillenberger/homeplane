@@ -128,15 +128,19 @@ func TestPrepareRefusesADestructiveSyncPass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan snapshot: %v", err)
 	}
-	if len(m.Files) != len(notes)+1 { // notes + .obsidian/app.json
-		t.Fatalf("snapshot holds %d files, want %d", len(m.Files), len(notes)+1)
+	if len(m.Files) != len(notes)+2 { // notes + .obsidian/{app.json,sync-config}
+		t.Fatalf("snapshot holds %d files, want %d", len(m.Files), len(notes)+2)
 	}
 }
 
 // A build that eats a DISPOSABLE vault never gets pointed at the real one.
-func TestPrepareRefusesWhenTheSmokeVaultIsDestroyed(t *testing.T) {
+// This is the LIFECYCLE rehearsal: sync-setup against a throwaway remote, then
+// a real sync pass, which is the only shape in which a build can demonstrate
+// what it does to a vault.
+func TestLifecycleSmokeRefusesWhenTheDisposableVaultIsDestroyed(t *testing.T) {
 	v := makeVault(t, map[string]string{"a.md": "alpha\n"})
 	opts := prepareOpts(t, v, pinnedFakeCLI(t))
+	opts.SmokeRemoteVault = "homeplane-smoke-disposable"
 	t.Setenv("FAKE_OB_MODE", "wipe")
 
 	prepared, err := Prepare(context.Background(), opts)
@@ -146,6 +150,9 @@ func TestPrepareRefusesWhenTheSmokeVaultIsDestroyed(t *testing.T) {
 	if !strings.Contains(err.Error(), "smoke") {
 		t.Fatalf("err = %v, want a smoke failure", err)
 	}
+	if prepared.SmokeMode != SmokeModeLifecycle {
+		t.Fatalf("smoke mode = %q, want %q", prepared.SmokeMode, SmokeModeLifecycle)
+	}
 	if prepared.SnapshotPath != "" {
 		t.Fatal("the real vault was snapshotted after the smoke failed")
 	}
@@ -154,23 +161,100 @@ func TestPrepareRefusesWhenTheSmokeVaultIsDestroyed(t *testing.T) {
 	}
 }
 
-// The smoke is UNAUTHENTICATED-safe: the pinned build refusing to log in proves
-// it ran and left the vault alone, which is what this stage is for. The
-// authenticated round-trip is task .7's, with Daniel present.
-func TestSmokeToleratesAnAuthFailureButNotDestruction(t *testing.T) {
+// The lifecycle rehearsal runs the GENUINE upstream sequence. Calling `sync` on
+// a directory that was merely scaffolded with a .obsidian folder is not a valid
+// lifecycle — upstream refuses it — so the rehearsal must bind the disposable
+// directory first.
+func TestLifecycleSmokeRunsSetupBeforeSync(t *testing.T) {
 	v := makeVault(t, map[string]string{"a.md": "alpha\n"})
 	opts := prepareOpts(t, v, pinnedFakeCLI(t))
-	t.Setenv("FAKE_OB_FAIL", "error: unauthorized - please log in")
+	opts.SmokeRemoteVault = "homeplane-smoke-disposable"
+	log := filepath.Join(tempDir(t), "ob.log")
+	t.Setenv("FAKE_OB_LOG", log)
 
-	// The smoke itself passes (build ran, vault intact) — the REAL pass then
-	// surfaces the auth failure honestly.
-	_, err := Prepare(context.Background(), opts)
-	var authErr *AuthError
-	if !errors.As(err, &authErr) {
-		t.Fatalf("err = %v, want the real pass to report *AuthError", err)
+	prepared, err := Prepare(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
 	}
-	if strings.Contains(err.Error(), "smoke") {
-		t.Fatalf("the smoke treated an auth refusal as destruction: %v", err)
+	if prepared.SmokeMode != SmokeModeLifecycle || !prepared.SmokePassed {
+		t.Fatalf("smoke = %q passed=%v", prepared.SmokeMode, prepared.SmokePassed)
+	}
+	// sync-setup must precede the smoke vault's sync, or the stateful stub
+	// (like upstream) would have refused it.
+	var setupAt, syncAt = -1, -1
+	for i, line := range readLog(t, log) {
+		if strings.HasPrefix(line, "argv:sync-setup") && setupAt < 0 {
+			setupAt = i
+		}
+		if strings.HasPrefix(line, "argv:sync --path") && syncAt < 0 {
+			syncAt = i
+		}
+	}
+	if setupAt < 0 || syncAt < 0 || setupAt > syncAt {
+		t.Fatalf("the smoke did not run sync-setup before sync (setup=%d sync=%d)", setupAt, syncAt)
+	}
+}
+
+// The default rehearsal is UNAUTHENTICATED and explicitly not a sync: it proves
+// the pinned build runs, refuses an unconfigured directory the way upstream
+// documents, and leaves that directory alone.
+func TestContractSmokeExpectsAnUnconfiguredRefusal(t *testing.T) {
+	v := makeVault(t, map[string]string{"a.md": "alpha\n"})
+	opts := prepareOpts(t, v, pinnedFakeCLI(t))
+
+	prepared, err := Prepare(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if prepared.SmokeMode != SmokeModeContract {
+		t.Fatalf("smoke mode = %q, want %q", prepared.SmokeMode, SmokeModeContract)
+	}
+	if !prepared.SmokePassed {
+		t.Fatal("the contract smoke did not pass")
+	}
+}
+
+// A binary that happily "syncs" a directory nobody ever set up is not behaving
+// like the pinned build, and must not be trusted with the real vault. This is
+// the exact accommodation that hid an invalid lifecycle before.
+func TestContractSmokeRejectsAnOverlyPermissiveBinary(t *testing.T) {
+	permissive := filepath.Join(tempDir(t), "ob")
+	if err := os.WriteFile(permissive, []byte("#!/bin/sh\ncase \"$1\" in --version|-V) echo 0.0.13;; esac\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum, err := fileSHA256(permissive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := makeVault(t, map[string]string{"a.md": "alpha\n"})
+	opts := prepareOpts(t, v, CLI{Bin: permissive, Pin: Pin{Version: "0.0.13", Checksum: sum}})
+
+	_, err = Prepare(context.Background(), opts)
+	if err == nil {
+		t.Fatal("a binary that accepts an unconfigured directory passed the smoke")
+	}
+	if !strings.Contains(err.Error(), "not behaving like the pinned build") {
+		t.Fatalf("err = %v, want the permissive-binary refusal", err)
+	}
+}
+
+// An unconfigured REAL vault is an actionable state, not a mystery failure.
+func TestPrepareSurfacesAnUnconfiguredVault(t *testing.T) {
+	bare := tempDir(t)
+	if err := os.MkdirAll(filepath.Join(bare, ConfigDirName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bare, "note.md"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	opts := prepareOpts(t, bare, pinnedFakeCLI(t))
+
+	_, err := Prepare(context.Background(), opts)
+	if !errors.Is(err, ErrNotConfigured) {
+		t.Fatalf("err = %v, want ErrNotConfigured", err)
+	}
+	if !strings.Contains(err.Error(), "vault retrieve") {
+		t.Fatalf("err = %v, want an actionable next step", err)
 	}
 }
 
@@ -237,8 +321,8 @@ func TestSymlinkedVaultRootIsCanonicalized(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Scan through a symlink: %v", err)
 	}
-	if len(m.Files) != 3 { // two notes + .obsidian/app.json
-		t.Fatalf("scan through a symlink found %d files, want 3: %v", len(m.Files), m.Paths())
+	if len(m.Files) != 4 { // two notes + .obsidian/{app.json,sync-config}
+		t.Fatalf("scan through a symlink found %d files, want 4: %v", len(m.Files), m.Paths())
 	}
 
 	// The full sequence, driven through the link, must snapshot real content.
@@ -250,8 +334,8 @@ func TestSymlinkedVaultRootIsCanonicalized(t *testing.T) {
 	if prepared.VaultPath != real {
 		t.Fatalf("prepared vault path = %q, want %q", prepared.VaultPath, real)
 	}
-	if prepared.FileCount != 3 {
-		t.Fatalf("snapshotted %d files through a symlink, want 3", prepared.FileCount)
+	if prepared.FileCount != 4 {
+		t.Fatalf("snapshotted %d files through a symlink, want 4", prepared.FileCount)
 	}
 	snapshot := filepath.Join(prepared.SnapshotPath, SnapshotTreeDirName, "a.md")
 	if body, err := os.ReadFile(snapshot); err != nil || string(body) != "alpha\n" {

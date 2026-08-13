@@ -34,9 +34,25 @@ func writeVaultState(t *testing.T, dir string, st agent.State) {
 	}
 }
 
+// aliveProbe / deadProbe stage liveness without killing real processes.
+func aliveProbe(l supervise.Ledger) supervise.Liveness {
+	return supervise.Liveness{Known: true, Alive: true, Detail: "pid is alive"}
+}
+
+func deadProbe(l supervise.Ledger) supervise.Liveness {
+	return supervise.Liveness{Known: true, Alive: false, Detail: "pid is gone and recorded no exit (killed)"}
+}
+
 func componentOf(t *testing.T, dir, name string) agent.ComponentReport {
 	t.Helper()
-	report, err := agent.Status(context.Background(), agent.StatusOptions{StateDir: dir, SkipServer: true})
+	return componentWithProbe(t, dir, name, aliveProbe)
+}
+
+func componentWithProbe(t *testing.T, dir, name string, probe supervise.Probe) agent.ComponentReport {
+	t.Helper()
+	report, err := agent.Status(context.Background(), agent.StatusOptions{
+		StateDir: dir, SkipServer: true, SyncLiveness: probe,
+	})
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -154,8 +170,63 @@ func TestStatusReportsARunningSyncAsOK(t *testing.T) {
 	}
 }
 
-// SIGKILL: the process died and the supervisor has not brought it back. A
-// status echoing the recorded claim would keep reporting a healthy sync.
+// THE case the ledger cannot see on its own: the process was SIGKILLed, so it
+// recorded NO exit, and the supervisor never restarted it. The ledger still
+// ends on a start event — believing itself healthy — and only an external probe
+// can tell the truth. No simulated RecordExit here on purpose.
+func TestStatusReportsAKilledSyncThatRecordedNoExit(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	writeVaultState(t, dir, agent.State{
+		Sync: &agent.ComponentState{State: agent.StateOK, Detail: "supervised"},
+	})
+	// One start, months ago. No exit. No restart.
+	if _, err := syncTracker(dir).RecordStart(time.Now().Add(-90*24*time.Hour), 4242, "supervised start"); err != nil {
+		t.Fatal(err)
+	}
+	ledger, err := syncTracker(dir).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ledger.SelfReportedRunning() {
+		t.Fatal("precondition: the ledger must still BELIEVE it is running")
+	}
+
+	c := componentWithProbe(t, dir, agent.ComponentSync, deadProbe)
+	if c.State != agent.StateDegraded {
+		t.Fatalf("sync component = %+v, want degraded for a killed process", c)
+	}
+	if !strings.Contains(c.Detail, "not running") {
+		t.Fatalf("detail = %q, want it to say the process is not running", c.Detail)
+	}
+	if !strings.Contains(c.Detail, "recorded no exit") {
+		t.Fatalf("detail = %q, want it to name why the ledger looked healthy", c.Detail)
+	}
+}
+
+// An unobservable process is `unknown`, not `ok` — the same truthfulness rule
+// the server-dependent components follow.
+func TestStatusReportsUnknownWhenLivenessCannotBeEstablished(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	writeVaultState(t, dir, agent.State{
+		Sync: &agent.ComponentState{State: agent.StateOK, Detail: "supervised"},
+	})
+	if _, err := syncTracker(dir).RecordStart(time.Now().Add(-time.Hour), 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	unknown := func(supervise.Ledger) supervise.Liveness {
+		return supervise.Liveness{Known: false, Detail: "the last start recorded no pid"}
+	}
+	c := componentWithProbe(t, dir, agent.ComponentSync, unknown)
+	if c.State != agent.StateUnknown {
+		t.Fatalf("sync component = %+v, want unknown", c)
+	}
+	if !strings.Contains(c.Detail, "cannot tell") {
+		t.Fatalf("detail = %q", c.Detail)
+	}
+}
+
+// SIGKILL followed by a recorded exit: the supervisor observed it and the
+// status must still be degraded.
 func TestStatusReportsAnExitedSyncAsDegraded(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state")
 	writeVaultState(t, dir, agent.State{
@@ -169,7 +240,7 @@ func TestStatusReportsAnExitedSyncAsDegraded(t *testing.T) {
 	if _, err := tr.RecordExit(base.Add(time.Minute), 137, "SIGKILL"); err != nil {
 		t.Fatal(err)
 	}
-	c := componentOf(t, dir, agent.ComponentSync)
+	c := componentWithProbe(t, dir, agent.ComponentSync, deadProbe)
 	if c.State != agent.StateDegraded || !strings.Contains(c.Detail, "not running") {
 		t.Fatalf("sync component = %+v", c)
 	}
@@ -193,7 +264,7 @@ func TestStatusClearsAfterASupervisorRestart(t *testing.T) {
 	if _, err := tr.RecordExit(base.Add(time.Minute), 137, "SIGKILL"); err != nil {
 		t.Fatal(err)
 	}
-	if c := componentOf(t, dir, agent.ComponentSync); c.State != agent.StateDegraded {
+	if c := componentWithProbe(t, dir, agent.ComponentSync, deadProbe); c.State != agent.StateDegraded {
 		t.Fatalf("component before restart = %+v", c)
 	}
 	// The supervisor brings it back an hour later — not a crash loop.

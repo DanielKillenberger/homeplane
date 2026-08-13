@@ -150,6 +150,9 @@ type RetrieveResult struct {
 	RemoteName string `json:"remote_name"`
 	FileCount  int    `json:"file_count"`
 	UsedFallba bool   `json:"used_fallback"`
+	// Mode is the sync mode the vault was LEFT in. Anything other than
+	// bidirectional means local edits will not reach the remote.
+	Mode string `json:"mode"`
 }
 
 // Retrieve fetches the vault via obsidian-headless, falling back to the
@@ -247,10 +250,33 @@ func Retrieve(ctx context.Context, opts RetrieveOptions) (RetrieveResult, error)
 	if err != nil {
 		return res, err
 	}
+	// The vault content is down. Record it BEFORE the mode restore, so a
+	// failure below is reported against a vault that demonstrably exists rather
+	// than losing the fact that retrieval worked.
 	res.VaultPath = local
 	res.FileCount = len(m.Files)
+
+	// Restore bidirectional. Pull-only was a safety measure for the FIRST pass
+	// only: leaving it on would mean continuous sync silently discards every
+	// edit Daniel makes on this machine, forever — a data-loss mode that looks
+	// exactly like a healthy sync from the outside.
+	if _, err := opts.CLI.Run(ctx, Invocation{
+		Args:       SyncConfigModeArgs(local, SyncModeBidirectional),
+		Secrets:    opts.Secrets,
+		WorkingDir: local,
+	}); err != nil {
+		return res, fmt.Errorf("%w: the vault was retrieved to %s, but sync is still in %s mode — "+
+			"local edits on this machine would NOT reach the remote. Re-run `homeplane-agent vault retrieve` "+
+			"or set the mode manually before activating sync: %w",
+			ErrModeNotRestored, local, SyncModePullOnly, err)
+	}
+	res.Mode = SyncModeBidirectional
 	return res, nil
 }
+
+// ErrModeNotRestored means retrieval pulled the vault down but could not put
+// sync back into bidirectional mode.
+var ErrModeNotRestored = errors.New("vault: sync mode was not restored to bidirectional")
 
 // selectRemote lists the account's remote vaults and picks one, or refuses.
 func selectRemote(ctx context.Context, opts RetrieveOptions, local string) (RemoteVault, error) {
@@ -305,6 +331,9 @@ func retrieveViaFallback(ctx context.Context, opts RetrieveOptions, local string
 	}
 	res.VaultPath = canonical
 	res.FileCount = len(m.Files)
+	// The desktop app owns its own sync configuration; this path never touched
+	// the mode, so it is whatever Obsidian set up.
+	res.Mode = "obsidian-app"
 	return res, nil
 }
 

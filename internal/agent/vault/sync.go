@@ -115,6 +115,12 @@ type PrepareOptions struct {
 	SnapshotDir string
 	// SmokeVaultDir overrides the disposable smoke vault.
 	SmokeVaultDir string
+	// SmokeRemoteVault names a DISPOSABLE remote vault to rehearse the full
+	// authenticated lifecycle against (`sync-setup` then `sync`). Empty runs the
+	// unauthenticated CONTRACT rehearsal instead — see smoke() for exactly what
+	// each one does and does not prove. Task .7 supplies this, with Daniel
+	// present and a throwaway remote vault created for the purpose.
+	SmokeRemoteVault string
 	// SkipSmoke skips the disposable-vault rehearsal. Only for a re-activation
 	// that already smoked this exact build in the same run.
 	SkipSmoke bool
@@ -129,9 +135,13 @@ type PrepareResult struct {
 	SnapshotPath string `json:"snapshot_path"`
 	SmokePassed  bool   `json:"smoke_passed"`
 	SmokeSkipped bool   `json:"smoke_skipped"`
-	Pin          Pin    `json:"pin"`
-	Diff         Diff   `json:"diff"`
-	FileCount    int    `json:"file_count"`
+	// SmokeMode is "lifecycle" (authenticated sync-setup + sync against a
+	// disposable remote), "contract" (unauthenticated), or "skipped". Recording
+	// it keeps the evidence honest about which rehearsal actually ran.
+	SmokeMode string `json:"smoke_mode"`
+	Pin       Pin    `json:"pin"`
+	Diff      Diff   `json:"diff"`
+	FileCount int    `json:"file_count"`
 }
 
 // Prepare runs every refusal that must happen before a machine is allowed to
@@ -174,8 +184,11 @@ func Prepare(ctx context.Context, opts PrepareOptions) (PrepareResult, error) {
 	// 4. disposable-vault rehearsal on this exact build, before the real vault.
 	if opts.SkipSmoke {
 		res.SmokeSkipped = true
+		res.SmokeMode = SmokeModeSkipped
 	} else {
-		if err := smoke(ctx, opts); err != nil {
+		mode, err := smoke(ctx, opts)
+		res.SmokeMode = mode
+		if err != nil {
 			return res, fmt.Errorf("vault: pre-activation smoke on a disposable vault failed (the real vault was not touched): %w", err)
 		}
 		res.SmokePassed = true
@@ -200,6 +213,11 @@ func Prepare(ctx context.Context, opts PrepareOptions) (PrepareResult, error) {
 		Stdin:      promptAnswers(opts.Secrets),
 		WorkingDir: vaultPath,
 	}); err != nil {
+		if errors.Is(err, ErrNotConfigured) {
+			return res, fmt.Errorf("%w — %s has never been bound to a remote vault; "+
+				"run `homeplane-agent vault retrieve` for a new machine, or `ob sync-setup` for an existing vault",
+				err, vaultPath)
+		}
 		return res, err
 	}
 	after, err := Scan(vaultPath)
@@ -233,62 +251,138 @@ func promptAnswers(s Secrets) string {
 	return sb.String()
 }
 
-// smoke rehearses the pinned CLI against a throwaway vault.
+// Smoke modes, recorded in the evidence so nobody has to guess which rehearsal
+// a given activation actually performed.
+const (
+	// SmokeModeLifecycle ran the real authenticated lifecycle — `sync-setup`
+	// against a DISPOSABLE remote vault, then a real `sync` pass.
+	SmokeModeLifecycle = "lifecycle"
+	// SmokeModeContract ran the unauthenticated contract rehearsal.
+	SmokeModeContract = "contract"
+	// SmokeModeSkipped means no rehearsal ran.
+	SmokeModeSkipped = "skipped"
+)
+
+// smoke rehearses the pinned CLI against a throwaway vault, and returns which
+// rehearsal it performed.
 //
-// SCOPE, stated honestly: this proves the pinned build runs, accepts the argv
-// this agent emits, and leaves a vault it was pointed at intact. It does NOT
-// prove a full authenticated round-trip against Obsidian's servers — that needs
-// Daniel's account and is gated to task .7. An auth failure here is therefore
-// tolerated (it means the build ran and refused), while a DESTROYED smoke vault
-// is fatal.
-func smoke(ctx context.Context, opts PrepareOptions) error {
+// There are two, because they prove different things and only one of them is
+// available without Daniel's account:
+//
+//	LIFECYCLE (opts.SmokeRemoteVault set) — the real thing. `sync-setup` binds
+//	  the disposable directory to a DISPOSABLE remote vault, then a real `sync`
+//	  pass runs. This is the rehearsal the spec asks for, and task .7 supplies
+//	  the throwaway remote to make it possible.
+//
+//	CONTRACT (default) — explicitly NOT a sync rehearsal. Calling `sync` on a
+//	  directory that was never `sync-setup`, just because it has a `.obsidian`
+//	  folder, is not a valid lifecycle: upstream refuses it with a missing-
+//	  configuration error, so a "successful" pass would only ever mean the fake
+//	  accepted something the real build rejects. Instead this asserts the pinned
+//	  build executes, that it REFUSES an unconfigured directory the way upstream
+//	  documents, and that it leaves that directory byte-identical.
+//
+// Both end in the same guard: a build that damages a throwaway vault must never
+// be pointed at the real one.
+func smoke(ctx context.Context, opts PrepareOptions) (string, error) {
+	mode := SmokeModeContract
+	if strings.TrimSpace(opts.SmokeRemoteVault) != "" {
+		mode = SmokeModeLifecycle
+	}
+
 	dir := opts.SmokeVaultDir
 	if dir == "" {
 		base, err := os.MkdirTemp(opts.StateDir, SmokeVaultName+"-")
 		if err != nil {
-			return fmt.Errorf("create disposable smoke vault: %w", err)
+			return mode, fmt.Errorf("create disposable smoke vault: %w", err)
 		}
 		defer os.RemoveAll(base)
 		dir = base
 	}
 	if err := scaffoldVault(dir); err != nil {
-		return err
+		return mode, err
 	}
 	canonical, err := Canonicalize(dir)
 	if err != nil {
-		return err
+		return mode, err
 	}
 	before, err := Scan(canonical)
 	if err != nil {
-		return err
+		return mode, err
 	}
-	_, runErr := opts.CLI.Run(ctx, Invocation{
-		Args:       SyncArgs(canonical),
-		Secrets:    opts.Secrets,
-		Stdin:      promptAnswers(opts.Secrets),
-		WorkingDir: canonical,
-	})
+
+	var runErr error
+	switch mode {
+	case SmokeModeLifecycle:
+		runErr = smokeLifecycle(ctx, opts, canonical)
+	default:
+		runErr = smokeContract(ctx, opts, canonical)
+	}
 
 	after, err := Scan(canonical)
 	if err != nil {
-		return err
+		return mode, err
 	}
-	// The smoke vault is judged by the SAME guard as the real one; a build that
-	// eats a throwaway vault must never be pointed at the real one. This check
-	// runs whether or not the CLI reported success — a destructive failure is
-	// still destructive.
+	// The guard runs whether or not the CLI reported success: a destructive
+	// failure is still destructive, and this is the check that matters most.
 	policy := opts.Policy
 	if policy == (GuardPolicy{}) {
 		policy = DefaultGuardPolicy()
 	}
 	if err := policy.Check(before, Compare(before, after), canonical); err != nil {
-		return err
+		return mode, err
 	}
-	var authErr *AuthError
-	if runErr != nil && !errors.As(runErr, &authErr) {
-		return runErr
+	return mode, runErr
+}
+
+// smokeLifecycle runs the genuine upstream sequence against a disposable pair.
+func smokeLifecycle(ctx context.Context, opts PrepareOptions, dir string) error {
+	if _, err := opts.CLI.Run(ctx, Invocation{
+		Args:       SyncSetupArgs(opts.SmokeRemoteVault, dir),
+		Secrets:    opts.Secrets,
+		Stdin:      promptAnswers(opts.Secrets),
+		WorkingDir: dir,
+	}); err != nil {
+		return fmt.Errorf("sync-setup on the disposable vault: %w", err)
+	}
+	if _, err := opts.CLI.Run(ctx, Invocation{
+		Args:       SyncArgs(dir),
+		Secrets:    opts.Secrets,
+		Stdin:      promptAnswers(opts.Secrets),
+		WorkingDir: dir,
+	}); err != nil {
+		return fmt.Errorf("sync on the disposable vault: %w", err)
 	}
 	return nil
+}
+
+// smokeContract proves the build runs and refuses an unconfigured directory.
+//
+// The refusal IS the assertion. `sync-status` on a directory that was never
+// bound to a remote vault must come back as ErrNotConfigured — if it comes back
+// as success, the binary is not behaving like the pinned build and nothing
+// further should be trusted to it.
+func smokeContract(ctx context.Context, opts PrepareOptions, dir string) error {
+	_, err := opts.CLI.Run(ctx, Invocation{
+		Args:       SyncStatusArgs(dir),
+		Secrets:    opts.Secrets,
+		WorkingDir: dir,
+	})
+	switch {
+	case errors.Is(err, ErrNotConfigured):
+		return nil // exactly what upstream documents for an unconfigured path
+	case err == nil:
+		return errors.New("the CLI reported success for a directory that was never `sync-setup` — " +
+			"the pinned build refuses that, so this binary is not behaving like the pinned build")
+	default:
+		// An auth failure here still means the build ran and declined; anything
+		// else is a build we should not point at the real vault.
+		var authErr *AuthError
+		if errors.As(err, &authErr) {
+			return nil
+		}
+		return err
+	}
 }
 
 // scaffoldVault makes a directory look like a real vault: a config directory

@@ -19,11 +19,11 @@ func TestSnapshotCopiesAndManifestsTheVault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Snapshot: %v", err)
 	}
-	// .obsidian/app.json plus three notes.
-	if len(m.Files) != 4 {
-		t.Fatalf("manifest has %d files, want 4: %v", len(m.Files), m.Paths())
+	// .obsidian/{app.json,sync-config} plus three notes.
+	if len(m.Files) != 5 {
+		t.Fatalf("manifest has %d files, want 5: %v", len(m.Files), m.Paths())
 	}
-	for _, rel := range []string{"a.md", "nested/b.md", "nested/deep/c.md", ".obsidian/app.json"} {
+	for _, rel := range []string{"a.md", "nested/b.md", "nested/deep/c.md", ".obsidian/app.json", ".obsidian/sync-config"} {
 		if _, ok := m.Files[rel]; !ok {
 			t.Fatalf("manifest is missing %s: %v", rel, m.Paths())
 		}
@@ -97,8 +97,8 @@ func TestSnapshotThroughASymlinkedRootCapturesRealContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Snapshot through a symlink: %v", err)
 	}
-	if len(m.Files) != 3 {
-		t.Fatalf("manifest has %d files through a symlink, want 3: %v", len(m.Files), m.Paths())
+	if len(m.Files) != 4 {
+		t.Fatalf("manifest has %d files through a symlink, want 4: %v", len(m.Files), m.Paths())
 	}
 	body, err := os.ReadFile(filepath.Join(dest, SnapshotTreeDirName, "a.md"))
 	if err != nil || string(body) != "alpha\n" {

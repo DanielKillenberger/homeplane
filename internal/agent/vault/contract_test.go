@@ -58,13 +58,14 @@ func TestArgvMatchesThePinnedContract(t *testing.T) {
 
 	// Every subcommand must exist in the top-level command list.
 	emitted := map[string][]string{
-		"login":            LoginArgs("d@example.com"),
-		"sync-list-remote": ListRemoteArgs(),
-		"sync-list-local":  ListLocalArgs(),
-		"sync-setup":       SyncSetupArgs("Daniel-OS", "/v"),
-		"sync-config":      SyncConfigModeArgs("/v", SyncModePullOnly),
-		"sync-status":      SyncStatusArgs("/v"),
-		"sync":             SyncArgs("/v"),
+		"login":              LoginArgs("d@example.com"),
+		"sync-list-remote":   ListRemoteArgs(),
+		"sync-list-local":    ListLocalArgs(),
+		"sync-setup":         SyncSetupArgs("Daniel-OS", "/v"),
+		"sync-create-remote": SyncCreateRemoteArgs("homeplane-smoke-disposable"),
+		"sync-config":        SyncConfigModeArgs("/v", SyncModePullOnly),
+		"sync-status":        SyncStatusArgs("/v"),
+		"sync":               SyncArgs("/v"),
 	}
 	for name, args := range emitted {
 		if args[0] != name {

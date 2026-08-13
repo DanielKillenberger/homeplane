@@ -80,16 +80,29 @@ Steps 4 and 5 are the point of the ordering: by the time the real vault is
 synced, the same build has been exercised against a throwaway vault and the real
 vault has already been copied aside.
 
-### What the smoke does and does not prove
+### The two rehearsals, and what each one proves
 
-The pre-activation smoke is **unauthenticated-safe**: it proves the pinned build
-runs, accepts the argv the agent emits, and leaves a vault it was pointed at
-intact. An auth refusal during the smoke is tolerated (the build ran and
-declined); a destroyed smoke vault is fatal.
+Upstream refuses `sync` on a directory that was never bound by `sync-setup`. A
+"smoke" that called `sync` on a scaffolded `.obsidian` folder was therefore not
+a lifecycle at all — it could only ever pass against an accommodating fake. So
+there are two explicit rehearsals, and the evidence records which one ran
+(`smoke_mode`):
 
-It does **not** prove a full authenticated round-trip against Obsidian's
-servers. That needs Daniel's account and is **deferred to task .7**, with him
-present — along with the first activation against the real vault.
+| Mode | When | What it proves |
+|---|---|---|
+| `contract` (default) | always available, unauthenticated | the pinned build executes; it **refuses** an unconfigured directory the way upstream documents; the directory is left byte-identical |
+| `lifecycle` | `SmokeRemoteVault` set — task .7, Daniel present | the genuine sequence: `sync-setup` against a **disposable remote vault**, then a real `sync` pass |
+
+The contract rehearsal treats a *success* on an unconfigured directory as a
+failure: a binary that syncs anything it is pointed at is not the pinned build,
+and must not be trusted with the real vault.
+
+Both end in the same guard — a build that damages a throwaway vault never gets
+pointed at the real one.
+
+The authenticated round-trip and the first real-vault activation stay **deferred
+to task .7**, with Daniel present and a throwaway remote created for the
+purpose.
 
 ## Retrieval (absent vault)
 
@@ -98,9 +111,13 @@ present — along with the first activation against the real vault.
 - refuses to run over an existing vault — `sync-setup` against a populated
   directory reconciles, and reconciling an unrelated vault has no undo
 - refuses to guess when the account has more than one matching remote vault
-- forces the first pass to `--mode pull-only`: a bidirectional first pass
-  against a freshly created empty directory is exactly how an empty local side
-  gets propagated to the remote
+- forces the first pass to `--mode pull-only`, then **restores
+  `--mode bidirectional`**. Pull-only protects a freshly created empty directory
+  from propagating its emptiness to the remote; leaving it on afterwards is its
+  own data-loss mode — continuous sync would run happily while discarding every
+  edit Daniel makes on that machine. If the restore fails, retrieval fails
+  loudly (`ErrModeNotRestored`) while still reporting where the vault landed, so
+  the fix is a mode change rather than a re-download.
 - reports an auth failure as an auth failure, never as "no vault" — they need
   different fixes, and R3 requires status to say which happened
 - `-app-fallback` launches Obsidian once and waits (bounded) for the vault to
@@ -165,17 +182,26 @@ One-shot calls (`--version`, `sync-list-remote`, `sync-setup`, a single pass)
 are bounded by a timeout. Captured output is a bounded tail, so a process that
 runs for months cannot grow a buffer without limit.
 
-**Status is derived from the ledger, not from a claim.** Activation records what
-it did; the ledger records what the process has done since. A machine can be
-SIGKILLed, crash-loop, or never load the unit at all — and a status that only
-echoed the recorded claim would report a healthy sync through all three.
+**Status is derived from an external probe, not from a claim and not from the
+ledger alone.** Activation records what it did; the ledger records what the
+process reported. But a SIGKILLed process records no exit, so the ledger ends on
+a start event *forever* — and anything reading "the last event was a start" as
+liveness reports a healthy sync for a process that died months ago.
+
+So liveness is observed: `supervise.ProcessProbe` (signal 0 to the recorded pid)
+by default, or `supervise.SupervisorProbe` to ask launchd/systemd directly
+through an injected runner. A probe that cannot establish the fact reports
+`unknown` rather than guessing — the same rule the server-dependent components
+follow.
 
 | Situation | `status` sync component |
 |---|---|
 | unit installed, not loaded | `degraded` — "installed but not loaded — vault is NOT syncing" |
 | loaded, never started | `degraded` — "supervised but never started" |
 | running | `ok` — with restart count and pid |
-| exited / SIGKILLed | `degraded` — "not running", retryable, vault still readable |
+| exited (recorded) | `degraded` — "not running", retryable, vault still readable |
+| SIGKILLed, **no exit recorded**, never restarted | `degraded` — the probe sees the pid is gone; the ledger alone would have said `ok` |
+| liveness unobservable | `unknown` — never `ok` |
 | >5 starts in 5 minutes | `degraded` — "crash-looping" |
 | restarted and healthy again | `ok` — the earlier degraded record does not stick |
 | activation refused | `degraded` — the refusal reason, unchanged |
@@ -202,7 +228,8 @@ propagate it.
 
 ## Deferred to task .7 (needs Daniel present)
 
-- the **authenticated** disposable-vault smoke against a real Obsidian account
+- the **lifecycle** rehearsal (`sync-setup` + `sync` against a disposable remote
+  vault) — needs a real Obsidian account
 - the first activation against the **real** Daniel-OS vault
 - the full conflict-rehearsal matrix (deferred per the spec's Boundaries)
 

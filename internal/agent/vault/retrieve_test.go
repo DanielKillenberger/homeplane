@@ -45,12 +45,28 @@ func TestRetrievePullsAnAbsentVault(t *testing.T) {
 		t.Fatal("the headless path reported using the fallback")
 	}
 
-	// The first pass MUST be pull-only: a bidirectional first pass against a
-	// freshly created empty directory is how an empty local side gets
-	// propagated to the remote.
+	// The first pass MUST be pull-only, and the mode MUST then be restored to
+	// bidirectional. Pull-only protects an empty local directory from being
+	// propagated to the remote; leaving it on afterwards silently discards
+	// every edit Daniel makes on this machine, forever.
 	lines := readLog(t, log)
-	if mode := lineWithPrefix(lines, "mode:"); mode != "mode:"+SyncModePullOnly {
-		t.Fatalf("first-pass sync mode = %q, want pull-only", mode)
+	var modes []string
+	for _, l := range lines {
+		if strings.HasPrefix(l, "mode:") && l != "mode:" {
+			modes = append(modes, strings.TrimPrefix(l, "mode:"))
+		}
+	}
+	want := []string{SyncModePullOnly, SyncModeBidirectional}
+	if len(modes) != len(want) {
+		t.Fatalf("sync-config mode sequence = %v, want %v", modes, want)
+	}
+	for i := range want {
+		if modes[i] != want[i] {
+			t.Fatalf("sync-config mode sequence = %v, want %v", modes, want)
+		}
+	}
+	if res.Mode != SyncModeBidirectional {
+		t.Fatalf("retrieval left the vault in %q, want bidirectional", res.Mode)
 	}
 	var sawSetup, sawSync bool
 	for _, l := range lines {
@@ -319,5 +335,66 @@ func TestLoginRequiresEmailAndPassword(t *testing.T) {
 	}
 	if err := Login(context.Background(), LoginOptions{StateDir: tempDir(t), CLI: cli, Email: "d@example.com"}); err == nil {
 		t.Fatal("login without a password was accepted")
+	}
+}
+
+// Retrieval that pulls the vault down but cannot restore bidirectional mode is
+// a data-loss trap dressed as success: continuous sync would run happily while
+// discarding every local edit. It must fail loudly, and still report where the
+// vault landed so the operator can fix the mode rather than re-download.
+func TestRetrieveFailsLoudlyIfBidirectionalCannotBeRestored(t *testing.T) {
+	cli := pinnedFakeCLI(t)
+	dest := filepath.Join(tempDir(t), "Daniel-OS")
+	t.Setenv("FAKE_OB_MODE", "pull")
+	t.Setenv("FAKE_OB_REMOTES", "Daniel-OS")
+	t.Setenv("FAKE_OB_BIDI_FAIL", "error: could not write sync configuration")
+
+	res, err := Retrieve(context.Background(), retrieveOpts(t, cli, dest))
+	if !errors.Is(err, ErrModeNotRestored) {
+		t.Fatalf("err = %v, want ErrModeNotRestored", err)
+	}
+	if !strings.Contains(err.Error(), "would NOT reach the remote") {
+		t.Fatalf("err = %v, want it to name the consequence", err)
+	}
+	// The vault IS on disk; losing that fact would send the operator into a
+	// pointless re-download.
+	if res.VaultPath == "" || !IsVault(res.VaultPath) {
+		t.Fatalf("result = %+v, want the retrieved vault path", res)
+	}
+	if res.Mode == SyncModeBidirectional {
+		t.Fatal("the result claims bidirectional after the restore failed")
+	}
+}
+
+// Both sync-config calls happen on a CONFIGURED directory: the stateful stub,
+// like upstream, refuses sync-config before sync-setup — so an implementation
+// that reordered them would fail here rather than silently working.
+func TestRetrieveConfiguresModeOnlyAfterSetup(t *testing.T) {
+	cli := pinnedFakeCLI(t)
+	dest := filepath.Join(tempDir(t), "Daniel-OS")
+	log := filepath.Join(tempDir(t), "ob.log")
+	t.Setenv("FAKE_OB_LOG", log)
+	t.Setenv("FAKE_OB_MODE", "pull")
+	t.Setenv("FAKE_OB_REMOTES", "Daniel-OS")
+
+	if _, err := Retrieve(context.Background(), retrieveOpts(t, cli, dest)); err != nil {
+		t.Fatalf("Retrieve: %v", err)
+	}
+	var order []string
+	for _, l := range readLog(t, log) {
+		switch {
+		case strings.HasPrefix(l, "argv:sync-setup"):
+			order = append(order, "setup")
+		case strings.HasPrefix(l, "argv:sync-config"):
+			order = append(order, "config")
+		case strings.HasPrefix(l, "argv:sync --path"):
+			order = append(order, "sync")
+		}
+	}
+	if len(order) < 4 || order[0] != "setup" {
+		t.Fatalf("lifecycle order = %v, want setup first", order)
+	}
+	if strings.Join(order, ",") != "setup,config,sync,config" {
+		t.Fatalf("lifecycle order = %v, want setup,config,sync,config", order)
 	}
 }

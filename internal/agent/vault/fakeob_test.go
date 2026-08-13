@@ -11,11 +11,19 @@ import (
 // configuration, or the real network.
 //
 // The stub implements the REAL 0.0.13 command surface — `login`,
-// `sync-list-remote`, `sync-setup`, `sync-config`, `sync [--path] [--continuous]`
-// — and TestArgvMatchesThePinnedContract independently asserts that the argv
-// this package emits is accepted by the real build's own parser, captured in
-// testdata/. A stub that agreed with the code but not with upstream is exactly
-// the failure mode that pair of checks exists to prevent.
+// `sync-list-remote`, `sync-setup`, `sync-config`, `sync-status`, and
+// `sync [--path] [--continuous]` — and TestArgvMatchesThePinnedContract
+// independently asserts that the argv this package emits is accepted by the
+// real build's own parser, captured in testdata/. A stub that agreed with the
+// code but not with upstream is exactly the failure mode that pair of checks
+// exists to prevent.
+//
+// The stub is also STATEFUL, and that is load-bearing rather than decorative:
+// upstream refuses `sync`, `sync-config`, and `sync-status` on a directory that
+// was never bound by `sync-setup`. An accommodating stub that synced any
+// directory with a `.obsidian` folder is precisely what let an invalid
+// lifecycle pass its tests once already, so this one refuses the same way
+// upstream does.
 
 const fakeOBScript = `#!/bin/sh
 set -e
@@ -62,6 +70,13 @@ case "$1" in
     printf '%s\n' ${FAKE_OB_REMOTES:-Daniel-OS}
     exit 0
     ;;
+  sync-create-remote)
+    if [ -z "$OBSIDIAN_AUTH_TOKEN" ]; then
+      echo "error: unauthorized - please log in" >&2
+      exit 1
+    fi
+    exit 0
+    ;;
   sync-setup)
     # sync-setup --vault NAME --path DIR [--device-name N]
     shift
@@ -75,17 +90,37 @@ case "$1" in
     done
     read -r E2E || E2E=""
     log "e2e:${E2E}"
+    if [ -z "$OBSIDIAN_AUTH_TOKEN" ] || [ -n "$FAKE_OB_AUTH_FAIL" ]; then
+      echo "error: unauthorized - please log in" >&2
+      exit 1
+    fi
     if [ -n "$FAKE_OB_SETUP_FAIL" ]; then
       echo "$FAKE_OB_SETUP_FAIL" >&2
       exit 1
     fi
     mkdir -p "$DIR/.obsidian"
     printf '{}\n' > "$DIR/.obsidian/app.json"
-    printf 'remote:%s\n' "$VAULT" > "$DIR/.obsidian-sync-remote"
+    # THE state marker: upstream stores a sync configuration here, and every
+    # command below refuses without it.
+    printf 'remote=%s\nmode=bidirectional\n' "$VAULT" > "$DIR/.obsidian/sync-config"
+    exit 0
+    ;;
+  sync-status)
+    shift
+    DIR="$PWD"
+    while [ $# -gt 0 ]; do
+      case "$1" in --path) DIR="$2"; shift 2 ;; *) shift ;; esac
+    done
+    if [ ! -f "$DIR/.obsidian/sync-config" ]; then
+      echo "error: this vault is not configured for sync - run sync-setup first" >&2
+      exit 1
+    fi
+    cat "$DIR/.obsidian/sync-config"
     exit 0
     ;;
   sync-config)
     shift
+    DIR="$PWD"; MODE=""
     while [ $# -gt 0 ]; do
       case "$1" in
         --path) DIR="$2"; shift 2 ;;
@@ -94,10 +129,19 @@ case "$1" in
       esac
     done
     log "mode:${MODE}"
+    if [ ! -f "$DIR/.obsidian/sync-config" ]; then
+      echo "error: this vault is not configured for sync - run sync-setup first" >&2
+      exit 1
+    fi
     if [ -n "$FAKE_OB_CONFIG_FAIL" ]; then
       echo "$FAKE_OB_CONFIG_FAIL" >&2
       exit 1
     fi
+    if [ -n "$FAKE_OB_BIDI_FAIL" ] && [ "$MODE" = "bidirectional" ]; then
+      echo "$FAKE_OB_BIDI_FAIL" >&2
+      exit 1
+    fi
+    printf 'remote=unknown\nmode=%s\n' "$MODE" > "$DIR/.obsidian/sync-config"
     exit 0
     ;;
   sync)
@@ -110,6 +154,12 @@ case "$1" in
         *) shift ;;
       esac
     done
+    # Upstream refuses to sync a directory that was never bound to a remote
+    # vault. An .obsidian folder alone is NOT a sync configuration.
+    if [ ! -f "$DIR/.obsidian/sync-config" ]; then
+      echo "error: this vault is not configured for sync - run sync-setup first" >&2
+      exit 1
+    fi
     if [ -n "$FAKE_OB_FAIL" ]; then
       echo "$FAKE_OB_FAIL" >&2
       exit 1
@@ -175,6 +225,10 @@ func tempDir(t *testing.T) string {
 }
 
 // makeVault scaffolds a vault directory with the given notes.
+//
+// It writes the sync-configuration marker too: an existing Daniel-OS vault on a
+// machine has already been bound to a remote vault, which is exactly why
+// `sync --path` is valid against it and NOT valid against a bare directory.
 func makeVault(t *testing.T, notes map[string]string) string {
 	t.Helper()
 	dir := tempDir(t)
@@ -183,6 +237,10 @@ func makeVault(t *testing.T, notes map[string]string) string {
 	}
 	if err := os.WriteFile(filepath.Join(dir, ConfigDirName, "app.json"), []byte("{}\n"), 0o600); err != nil {
 		t.Fatalf("write vault config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ConfigDirName, "sync-config"),
+		[]byte("remote=Daniel-OS\nmode=bidirectional\n"), 0o600); err != nil {
+		t.Fatalf("write sync config: %v", err)
 	}
 	for name, body := range notes {
 		full := filepath.Join(dir, name)

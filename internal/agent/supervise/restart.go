@@ -106,10 +106,14 @@ func (l Ledger) LastExit() (Exit, bool) {
 	return l.Exits[len(l.Exits)-1], true
 }
 
-// Running is a best-effort answer to "is it up": the last event was a start.
-// It is deliberately phrased against recorded events rather than a stored pid,
-// because a stored pid outlives the process that owned it.
-func (l Ledger) Running() bool {
+// SelfReportedRunning says only that the last recorded EVENT was a start.
+//
+// It is NOT liveness, and it must never be used as liveness. A process that is
+// SIGKILLed never records an exit, so this stays true forever for a process
+// that died months ago. Use a supervise.Probe (ProcessProbe by default) to find
+// out whether anything is actually running; this exists so a probe can tell
+// "believed up, and it is" from "believed up, but the pid is gone".
+func (l Ledger) SelfReportedRunning() bool {
 	last, ok := l.LastStart()
 	if !ok {
 		return false
@@ -122,13 +126,16 @@ func (l Ledger) Running() bool {
 }
 
 // Summary is the one-line detail `status` prints for a supervised component.
+//
+// It reports HISTORY only — counts, timestamps, the last exit. It deliberately
+// makes no claim about whether the process is up; that comes from a probe.
 func (l Ledger) Summary(now time.Time) string {
 	if l.TotalStarts == 0 {
 		return "never started"
 	}
 	last, _ := l.LastStart()
 	s := fmt.Sprintf("%d starts (last %s", l.TotalStarts, last.At.UTC().Format(time.RFC3339))
-	if last.PID > 0 && l.Running() {
+	if last.PID > 0 && l.SelfReportedRunning() {
 		s += fmt.Sprintf(", pid %d", last.PID)
 	}
 	s += ")"
@@ -136,7 +143,7 @@ func (l Ledger) Summary(now time.Time) string {
 		s += fmt.Sprintf(" — CRASH-LOOPING: %d starts in the last %s",
 			l.StartsWithin(now, DefaultCrashLoopWindow), DefaultCrashLoopWindow)
 	}
-	if exit, ok := l.LastExit(); ok && !l.Running() {
+	if exit, ok := l.LastExit(); ok && !l.SelfReportedRunning() {
 		s += fmt.Sprintf("; last exit code %d", exit.Code)
 	}
 	return s

@@ -116,6 +116,12 @@ type StatusOptions struct {
 	// SkipServer suppresses the two control-plane calls. Offline callers get a
 	// report whose server-dependent components read `unknown`, never `ok`.
 	SkipServer bool
+	// SyncLiveness observes whether the supervised sync process is ACTUALLY
+	// running. Nil means supervise.ProcessProbe. It is injectable because a
+	// SIGKILLed process records no exit, so the ledger alone cannot answer the
+	// question — and a test must be able to stage "the pid is gone" without
+	// killing a real process.
+	SyncLiveness supervise.Probe
 }
 
 // Status inspects the machine and reports what is actually true right now.
@@ -165,7 +171,7 @@ func Status(ctx context.Context, opts StatusOptions) (Report, error) {
 
 	report.Components = append(report.Components, enrolmentComponent(hasState, state, credential))
 	report.Components = append(report.Components, vaultComponent(state))
-	report.Components = append(report.Components, syncComponent(dir, state))
+	report.Components = append(report.Components, syncComponent(dir, state, opts.SyncLiveness))
 	report.Components = append(report.Components, localComponent(ComponentGNO, state.GNO, "GNO is not configured yet"))
 	report.Components = append(report.Components, listComponent(ComponentHarnesses, state.Harnesses, "no harness is configured yet"))
 	report.Components = append(report.Components, listComponent(ComponentSkills, state.Skills, "no skills are provisioned yet"))
@@ -256,7 +262,7 @@ const (
 // only echoed the recorded claim would keep reporting a healthy sync through
 // all three. So the ledger is authoritative for liveness, and the recorded
 // state only supplies the reason when there is nothing running to ask.
-func syncComponent(stateDir string, state State) ComponentReport {
+func syncComponent(stateDir string, state State, probe supervise.Probe) ComponentReport {
 	c := localComponent(ComponentSync, state.Sync, "vault sync is not configured yet")
 	if state.Sync == nil || strings.TrimSpace(state.Sync.State) == "" {
 		return c
@@ -266,7 +272,7 @@ func syncComponent(stateDir string, state State) ComponentReport {
 	if c.State != StateOK && c.State != StateInstalled {
 		return c
 	}
-	ledger, err := (supervise.Tracker{Dir: stateDir, Label: supervise.VaultSyncLabel}).Load()
+	ledger, live, err := (supervise.Tracker{Dir: stateDir, Label: supervise.VaultSyncLabel}).Observe(probe)
 	if err != nil {
 		return ComponentReport{Name: ComponentSync, State: StateUnknown,
 			Detail: "restart history unreadable: " + err.Error()}
@@ -286,16 +292,25 @@ func syncComponent(stateDir string, state State) ComponentReport {
 		c.Detail = "supervised but never started — vault is NOT syncing; " + c.Detail
 		return c
 	}
+	// Liveness comes from the PROBE, never from the ledger's last event. A
+	// SIGKILLed process records no exit, so a ledger ending on a start is
+	// exactly what a dead-and-never-restarted sync looks like.
 	switch {
 	case ledger.CrashLooping(now, supervise.DefaultCrashLoopWindow, supervise.DefaultCrashLoopThreshold):
 		c.State = StateDegraded
 		c.Detail = "crash-looping (retryable; the vault remains readable locally) — " + ledger.Summary(now)
-	case !ledger.Running():
+	case !live.Known:
+		// Truthfulness beats optimism: an unobservable process is `unknown`,
+		// which is the same rule the server-dependent components follow.
+		c.State = StateUnknown
+		c.Detail = "cannot tell whether sync is running (" + live.Detail + ") — " + ledger.Summary(now)
+	case !live.Alive:
 		c.State = StateDegraded
-		c.Detail = "not running (retryable; the vault remains readable locally) — " + ledger.Summary(now)
+		c.Detail = "not running: " + live.Detail +
+			" (retryable; the vault remains readable locally) — " + ledger.Summary(now)
 	default:
 		c.State = StateOK
-		c.Detail = ledger.Summary(now) + "; " + c.Detail
+		c.Detail = live.Detail + "; " + ledger.Summary(now) + "; " + c.Detail
 	}
 	return c
 }

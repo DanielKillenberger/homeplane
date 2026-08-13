@@ -137,9 +137,20 @@ func SyncStatusArgs(localPath string) []string {
 	return []string{"sync-status", "--path", localPath}
 }
 
-// SyncModePullOnly downloads without pushing local changes — the safe mode for
-// the FIRST pass of a retrieval into an empty directory.
-const SyncModePullOnly = "pull-only"
+// Sync modes. `pull-only` is the safe mode for the FIRST pass of a retrieval
+// into an empty directory; `bidirectional` is upstream's default and the ONLY
+// mode in which local edits ever reach the remote — a vault left in pull-only
+// silently discards everything Daniel writes on that machine.
+const (
+	SyncModePullOnly      = "pull-only"
+	SyncModeBidirectional = "bidirectional"
+)
+
+// SyncCreateRemoteArgs creates a remote vault. Used to stand up a DISPOSABLE
+// remote for the authenticated pre-activation rehearsal (task .7).
+func SyncCreateRemoteArgs(name string) []string {
+	return []string{"sync-create-remote", "--name", name}
+}
 
 // SyncConfigModeArgs sets a configured vault's sync mode.
 func SyncConfigModeArgs(localPath, mode string) []string {
@@ -426,6 +437,15 @@ func (e *NetworkError) Error() string { return "vault: Obsidian Sync network fai
 // distinct from an auth failure, which is what R3 requires status to tell apart.
 var ErrNoRemoteVault = errors.New("vault: no matching remote vault on this account")
 
+// ErrNotConfigured means the CLI was pointed at a directory that has never been
+// bound to a remote vault by `sync-setup`.
+//
+// This has its own error because it is the difference between "sync is broken"
+// and "this directory was never set up" — and because the pre-activation
+// rehearsal deliberately provokes it to prove the build runs without touching
+// anything.
+var ErrNotConfigured = errors.New("vault: this directory is not configured for sync (run `sync-setup`)")
+
 func classify(output string, err error) error {
 	lower := strings.ToLower(output)
 	switch {
@@ -433,6 +453,10 @@ func classify(output string, err error) error {
 		"unauthorized", "authentication failed", "invalid credentials", "401",
 		"not logged in", "login required", "please log in", "invalid token", "bad password"):
 		return &AuthError{Detail: firstLine(output)}
+	case containsAny(lower,
+		"not configured", "no sync configuration", "run sync-setup", "sync-setup first",
+		"vault is not set up", "no vault configuration"):
+		return fmt.Errorf("%w: %s", ErrNotConfigured, firstLine(output))
 	case containsAny(lower,
 		"network", "timeout", "timed out", "connection refused", "econnrefused",
 		"enotfound", "dns", "unreachable", "socket hang up", "temporary failure"):
