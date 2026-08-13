@@ -72,8 +72,13 @@ type State struct {
 	RotatedAt         *time.Time `json:"rotated_at,omitempty"`
 
 	// Owned by later tasks (.5 vault/sync, .11 GNO, .6 harnesses, .9 skills).
-	// They are read and reported by status; this task never populates them.
-	VaultPath string          `json:"vault_path,omitempty"`
+	VaultPath string `json:"vault_path,omitempty"`
+	// Vault records WHY there is no usable vault path when there isn't one —
+	// "no vault found on this machine" and "Obsidian Sync rejected the
+	// credential" are different machine states, and R3 requires status to tell
+	// them apart. When VaultPath is set and healthy, the path itself is the
+	// report and this field is only extra detail.
+	Vault     *ComponentState `json:"vault,omitempty"`
 	Sync      *ComponentState `json:"sync,omitempty"`
 	GNO       *ComponentState `json:"gno,omitempty"`
 	Harnesses []string        `json:"harnesses,omitempty"`
@@ -181,7 +186,7 @@ func (s *Store) Load() (State, bool, error) {
 var knownStateKeys = []string{
 	"schema_version", "server_url", "machine_id", "machine_name", "os",
 	"credential_version", "enroled_at", "rotated_at",
-	"vault_path", "sync", "gno", "harnesses", "skills",
+	"vault_path", "vault", "sync", "gno", "harnesses", "skills",
 }
 
 // Save writes state.json atomically, preserving unrecognised keys.
