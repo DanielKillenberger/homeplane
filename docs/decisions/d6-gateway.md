@@ -1,6 +1,6 @@
 # D6 — Gateway composition: ToolHive as bare-server Tailnet MCP gateway
 
-**Status:** Resolved — GO, adopted shape (b): **ToolHive CLI as connector runtime + Homeplane thin auth/audit edge proxy in front (the D13 shape)**. Gates 1–4 PASS; gate 5 is **CONDITIONAL** — the Drive tool surface is proven in source at a pinned version, but the strict `drive.file`-only six-operation run cannot complete in this spike environment (no Google OAuth app credentials exist yet) and is a named blocking obligation on task .12 (the spec's designated real-Google proof task) before any Drive-dependent work ships.
+**Status:** Resolved — GO, adopted shape (b): **ToolHive CLI as connector runtime + Homeplane thin auth/audit edge proxy in front (the D13 shape)**. Gates 1–4 PASS — gate 1 including a genuine cross-node run from a second tailnet machine with live WhoIs machine binding; gate 5 is **CONDITIONAL** — the Drive tool surface is proven in source at a pinned version, but the strict `drive.file`-only six-operation run cannot complete in this spike environment (no Google OAuth app credentials exist yet) and is a named blocking obligation on task .12 (the spec's designated real-Google proof task) before any Drive-dependent work ships.
 **Date:** 2026-08-13
 **Task:** fn-1-homeplane-walking-skeleton-install.1 (time-boxed spike)
 **Also resolves:** D3 (credential store), D10 (OAuth broker mechanics)
@@ -8,13 +8,13 @@
 ## Environment and honesty notes
 
 - Spike ran on macOS 26.5 (arm64), ToolHive **v0.42.1** (`thv`, Homebrew), Docker 28.0.1, real Tailscale
-  tailnet present (node IP `100.107.192.94`).
-- **No second physical machine was available.** "Remote client" was simulated by binding the Homeplane
-  edge prototype to the machine's *tailnet* interface (`100.107.192.94:9100`) and calling it via that
-  non-loopback address, while the ToolHive workload proxy stayed bound to `127.0.0.1` only. Every
-  network property claimed below (edge reachable on tailnet iface, gateway loopback-only) is verified
-  from listener bindings (`netstat`) and real traffic, but a genuine cross-node call and tsnet WhoIs
-  binding remain to be exercised on the real server (task .16/.15).
+  tailnet present (node IP `100.107.192.94`, `daniels-macbook-pro`).
+- **A real second tailnet node was used for the cross-node proof:** `clawniel`
+  (`vps-16936c35`, Ubuntu, tailnet IP `100.82.79.48`, direct WireGuard connection) — Daniel's actual
+  production server. The full path was exercised FROM that remote node against the edge on this
+  machine, with per-request WhoIs identity resolution and machine-binding enforcement at the edge
+  (evidence in gate 1). The ToolHive workload proxy stayed bound to `127.0.0.1` only, verified
+  unreachable from the remote node.
 - Linux-headless behavior for secrets (gate 4) was verified from ToolHive source AND empirically in
   a headless Debian bookworm (arm64) container running the official `toolhive_0.42.1_linux_arm64`
   release — no D-Bus, no desktop (evidence in gate 4). The Linux *workload* runtime was ALSO
@@ -62,7 +62,7 @@ and itself validated against all five gates below.
 
 ---
 
-## Gate 1 — Remote exposure, full path, real clients: **PASS**
+## Gate 1 — Remote exposure, full path, real clients, cross-node + WhoIs: **PASS**
 
 Workload: `thv run fetch` (registry server `ghcr.io/stackloklabs/gofetch/server:1.0.5`,
 streamable-http). ToolHive proxied it at `http://127.0.0.1:<port>/mcp`, **loopback-bound by
@@ -75,19 +75,43 @@ $ netstat -an | grep 9100
 tcp4  0  0  100.107.192.94.9100  *.*  LISTEN          # edge: tailnet iface only
 ```
 
-Full path (simulated-remote client → edge on tailnet IP, bearer token → loopback ToolHive →
-container → real fetch of example.com), speaking MCP protocol **2025-06-18**:
+**Genuine cross-node full path** — client on a REAL second tailnet machine (`clawniel` /
+`vps-16936c35`, Ubuntu, `100.82.79.48`, direct WireGuard) → edge on this machine's tailnet IP
+(bearer token) → loopback ToolHive → container → real fetch of example.com, MCP protocol
+**2025-06-18**:
 
 ```
-$ curl -si -X POST http://100.107.192.94:9100/mcp -H "Authorization: Bearer $TOK" \
+clawniel$ curl -si -X POST http://100.107.192.94:9100/mcp -H "Authorization: Bearer $TOK" \
     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18",...}}'
 HTTP/1.1 200 OK
-Mcp-Session-Id: USIGC4FG3772XFFM5YQ46VE7PX
-data: {"jsonrpc":"2.0","id":1,"result":{...,"protocolVersion":"2025-06-18","serverInfo":{"name":"fetch-server",...}}}
-
-tools/list  → fetch tool schema returned
-tools/call  → "This domain is for use in documentation examples..." (real fetch through container)
+Mcp-Session-Id: UQC6CWG3PJAD2EBXI7ELURIQI5
+data: {...,"protocolVersion":"2025-06-18","serverInfo":{"name":"fetch-server",...}}
+clawniel$ tools/call fetch → "This domain is for use in documentation examples..." (real fetch)
+clawniel$ tools/call delete_everything → 403 "tool not authorized by manifest" (cross-node denial)
+clawniel$ curl http://100.107.192.94:64335/mcp → connection refused/timeout
+          # direct gateway BYPASS from the remote node FAILS: workload proxy is loopback-only
 ```
+
+**WhoIs machine binding — demonstrated live against the real remote peer.** The edge (with
+`-whois`) resolves every connecting peer's tailnet identity via the local tailscaled
+(`tailscale whois --json <peer-ip>` — the same LocalAPI data tsnet's in-process WhoIs serves in the
+real edge) and enforces `client@machine` token bindings:
+
+```
+audit: {"client":"codex","machine":"clawniel","event":"forwarded","tool":"fetch","action_class":"read",
+        "remote":"100.82.79.48:48320",...}                      # remote node, identity resolved per request
+audit: {"event":"denied","reason":"machine_mismatch","bound_machine":"clawniel",
+        "observed_machine":"daniels-macbook-pro","token_fingerprint":"57300e05e25b",...}
+        # the clawniel-bound token REPLAYED from this Mac → 403, attributed to the OBSERVED machine
+audit: {"client":"claude-code","machine":"daniels-macbook-pro","event":"forwarded",...}
+        # correctly-bound local token keeps working
+$ tailscale whois 100.82.79.48
+Machine: Name: clawniel.tailab4e9b.ts.net  ID: nDBckRVpMa11CNTRL
+```
+
+A token exfiltrated to another tailnet node is rejected and audited as a violation carrying the
+observed machine — exactly the spec's machine-binding invariant (R7), now shown with genuine
+distinct tailnet machines rather than simulated interfaces.
 
 **Actual client compatibility (not spec text):**
 
@@ -127,14 +151,12 @@ audit: {"action_class":"read","client":"claude-code","event":"forwarded","tool":
 audit: {"client":"claude-code","event":"denied","reason":"unmapped_tool","tool":"delete_everything",...}
 ```
 
-so per-call audit rows carry (client, tool, action_class) and denials are attributed to the
-authenticated client — the full attribution tuple the real edge extends with (machine, grant).
-**Residual (named, not waved off):** WhoIs machine-binding requires tsnet on the real server (its
-listener yields the caller's tailnet node identity) and a genuine second node — neither exists in
-this spike environment; the network shape is identical to the spike's tailnet-iface listener, and
-the binding is exercised by tasks .16/.15 with a direct-access-fails test from a second node.
-Gateway bypass boundary holds here: the workload proxy is loopback-only, so only the edge is
-network-reachable.
+so per-call audit rows carry (client, machine, tool, action_class) and denials are attributed to
+the authenticated client (or, for machine-mismatch, to the observed machine + token fingerprint) —
+the attribution tuple the real edge extends with (grant). WhoIs machine binding and the
+direct-access-fails bypass test were both exercised against the genuine second node (above); the
+real edge (.16) re-implements the same checks in-process via tsnet WhoIs instead of shelling out
+to the tailscale CLI.
 
 ## Gate 2 — Per-client auth, revocation within seconds: **PASS**
 
@@ -328,15 +350,16 @@ Contracts; the composed gateway is NOT in the OAuth-dance loop.**
 
 ## Consequences / follow-ups for dependent tasks
 
-1. **.16 (edge):** real edge = spike shape + tsnet WhoIs binding + manifest authorization
-   (unmapped-tool denial by parsing `tools/call` at the edge) + SQLite-backed grant lookup +
-   AuditEvent writes. Keep the token-strip behavior. Keep ToolHive workloads loopback-bound
-   (default) — verify with the direct-access-fails test from a second node (spike limitation).
+1. **.16 (edge):** real edge = spike shape (bearer auth + manifest authorization + machine-bound
+   tokens + attribution audit, all demonstrated above) with tsnet WhoIs in-process instead of the
+   spike's `tailscale whois` shell-out, SQLite-backed grant lookup, and AuditEvent writes. Keep
+   the token-strip behavior. Keep ToolHive workloads loopback-bound (default); re-run the
+   direct-access-fails test on the production deployment.
 2. **.15 (deployment):** ToolHive CLI on the Linux server requires Docker/Podman (the CLI + Docker
-   runtime path is validated headless in DinD above; the real server adds systemd + tailnet).
-   `thv run --enable-audit` on every workload for supplementary diagnostics. If ToolHive secrets
-   end up used at all, document the per-boot keyring seeding or use the `environment` provider.
-   Owns the direct-access-fails test from a second tailnet node.
+   runtime path is validated headless in DinD above; the real server — clawniel — has podman and
+   adds systemd + tailnet specifics). `thv run --enable-audit` on every workload for supplementary
+   diagnostics. If ToolHive secrets end up used at all, document the per-boot keyring seeding or
+   use the `environment` provider.
 3. **.12 (Drive) — carries gate 5's blocking obligation:** build the pinned patched
    workspace-mcp ref (v1.24.0 + read-tools→`drive_file` scope remap), run the live six-operation
    proof with a `drive.file`-only credential, record file IDs + trash/cleanup evidence; use
@@ -351,22 +374,23 @@ Contracts; the composed gateway is NOT in the OAuth-dance loop.**
 
 ## Review disposition (codex impl-review, 2026-08-13)
 
-Two review rounds (gpt-5.6-sol @ xhigh) returned **NEEDS_HUMAN** — the task's own designed
-terminal for an adoption whose gates cannot all complete in the spike environment. Findings the
-spike RESOLVED in-round: manifest authorization / unmapped-tool denial now demonstrated live
-(gate 1), headless-Linux secrets validated empirically (gate 4), Linux workload runtime validated
-in DinD (environment note), gate 5 honestly downgraded to CONDITIONAL with a pinned single
-resolution and version pin. Findings that REMAIN and are Daniel-gated / environment-gated:
+Earlier review rounds (gpt-5.6-sol @ xhigh) returned **NEEDS_HUMAN** on three legs the spike had
+not yet exercised. Each was then closed with recorded evidence, in rounds:
 
-1. **Cross-node + tsnet WhoIs proof (gate 1):** requires a second tailnet node and the real tsnet
-   edge — neither exists in this environment (conductor-acknowledged limitation). Owner: .16/.15.
-2. **Live `drive.file`-only six-operation Drive run (gate 5):** requires a Google OAuth app +
-   Daniel's browser consent — credentials do not exist yet by design (server-side custody lands in
-   .8/.12). Owner: .12, blocking obligation recorded above.
+- **Manifest authorization / unmapped-tool denial** — demonstrated live (gate 1).
+- **Headless-Linux secrets** — validated empirically in a D-Bus-free Linux container (gate 4);
+  **Linux workload runtime** — validated in DinD (environment note).
+- **Cross-node + WhoIs machine binding (gate 1)** — after a real second tailnet node (`clawniel`)
+  became available: genuine remote full path, per-request WhoIs identity resolution,
+  machine-mismatch rejection of a replayed token, and the direct-access-fails bypass test, all
+  recorded above. Gate 1 is a full PASS.
+- **Gate 5 honesty** — downgraded from PASS to CONDITIONAL with a pinned single resolution and
+  version pin.
 
-Human decision requested: accept D6 = GO with these two named residuals (proceed to Wave 2, the
-residuals blocking .16/.15/.12 respectively), or hold D6 open until a second node and Google OAuth
-app are provisioned and re-run the spike's missing legs first.
+**The ONLY remaining residual is the live `drive.file`-only six-operation Drive run (gate 5):**
+it requires a Google OAuth app + Daniel's browser consent — credentials that do not exist yet by
+design (server-side custody lands in .8/.12). The task spec itself assigns the real-Google proof
+to task .12, where it is recorded above as a blocking obligation.
 
 ## Fallback ladder disposition
 
@@ -376,6 +400,7 @@ app are provisioned and re-run the spike's missing legs first.
   Drive-dependent work ships before its recorded live run).**
 - (c) MCPJungle: not reached — (b) carries the adoption. No bespoke gateway (forbidden by
   STRATEGY.md); the edge is auth/audit/policy only.
-- Residuals that intentionally survive this spike, each with a named owner: real cross-node call +
-  tsnet WhoIs binding + direct-access-fails test (.16/.15), Linux workload runtime on the real
-  server (.15), live `drive.file`-only six-op run (.12).
+- Residuals that intentionally survive this spike, each with a named owner: live
+  `drive.file`-only six-op run (.12 — the sole gate residual); production re-checks on the real
+  server deployment (.16/.15: in-process tsnet WhoIs, direct-access-fails re-run, systemd/podman
+  specifics).

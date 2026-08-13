@@ -16,8 +16,11 @@ thv list                               # note the http://127.0.0.1:<PORT>/mcp UR
 cd spike/edge-proxy && go build -o edge-proxy .
 echo '{"token-a":"claude-code","token-b":"codex"}' > /tmp/tokens.json
 echo '{"fetch":"read"}' > /tmp/manifest.json      # tool -> action class; unmapped tools/call -> 403
+# token values may be "<client>@<machine>" — with -whois the edge resolves the
+# connecting peer's tailnet identity (tailscale whois) and rejects a bound token
+# presented from any other node (403 machine_mismatch, audited).
 ./edge-proxy -listen <tailnet-ip>:9100 -upstream http://127.0.0.1:<PORT> \
-  -tokens /tmp/tokens.json -manifest /tmp/manifest.json -audit /tmp/audit.log
+  -tokens /tmp/tokens.json -manifest /tmp/manifest.json -whois -audit /tmp/audit.log
 
 # MCP through the edge (streamable HTTP, protocol 2025-06-18):
 curl -si -X POST http://<tailnet-ip>:9100/mcp \
