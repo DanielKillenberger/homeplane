@@ -47,6 +47,7 @@ type endToEnd struct {
 	broker     *servercredflow.Service
 	stateDir   string
 	browserLog *strings.Builder
+	dropRelay  *atomicBool
 }
 
 func newEndToEnd(t *testing.T) *endToEnd {
@@ -112,8 +113,28 @@ func newEndToEnd(t *testing.T) *endToEnd {
 	mux.HandleFunc("GET /credentials/flows/{flow_id}", func(w http.ResponseWriter, r *http.Request) {
 		broker.HandlePoll(w, r, testMachineID)
 	})
-	control := httptest.NewServer(mux)
+	// dropRelayResponse simulates the relay answer being lost on the way back:
+	// the server handles the call, and the machine never hears the outcome.
+	var dropRelay atomicBool
+	outer := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if dropRelay.get() && strings.HasSuffix(r.URL.Path, "/code") {
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, r)
+			// The request WAS processed; only the response goes missing.
+			http.Error(w, "simulated gateway failure", http.StatusBadGateway)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
+	control := httptest.NewServer(outer)
 	t.Cleanup(control.Close)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := broker.Shutdown(ctx); err != nil {
+			t.Errorf("credential exchange jobs still running at test end: %v", err)
+		}
+	})
 
 	client, err := agent.NewClient(control.URL, 10*time.Second)
 	if err != nil {
@@ -126,8 +147,27 @@ func newEndToEnd(t *testing.T) *endToEnd {
 	return &endToEnd{
 		t: t, provider: p, control: control, broker: broker,
 		client: client.WithCredential("machine-credential"), stateDir: stateDir,
-		browserLog: &strings.Builder{},
+		browserLog: &strings.Builder{}, dropRelay: &dropRelay,
 	}
+}
+
+// atomicBool is a tiny mutex-guarded flag; the test toggles it from one
+// goroutine while the server reads it from another.
+type atomicBool struct {
+	mu sync.Mutex
+	v  bool
+}
+
+func (b *atomicBool) set(v bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.v = v
+}
+
+func (b *atomicBool) get() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.v
 }
 
 // browser simulates the human's browser: it follows the authorization URL and
@@ -401,6 +441,9 @@ type fakeProvider struct {
 	redirects      map[string]string // code -> redirect_uri
 	authorizeCalls []authorizeCall
 	denyConsent    bool
+	// tokenDelay makes the provider take its time, so a test can outlast the
+	// agent's own request deadline.
+	tokenDelay time.Duration
 }
 
 type authorizeCall struct {
@@ -473,7 +516,15 @@ func (p *fakeProvider) token(w http.ResponseWriter, r *http.Request) {
 	challenge, ok := p.codes[code]
 	redirect := p.redirects[code]
 	delete(p.codes, code)
+	delay := p.tokenDelay
 	p.mu.Unlock()
+	if delay > 0 {
+		select {
+		case <-time.After(delay):
+		case <-r.Context().Done():
+			return
+		}
+	}
 
 	sum := sha256.Sum256([]byte(r.PostForm.Get("code_verifier")))
 	switch {
@@ -494,5 +545,87 @@ func (p *fakeProvider) token(w http.ResponseWriter, r *http.Request) {
 			"expires_in":    3600,
 			"scope":         "things.read",
 		})
+	}
+}
+
+// TestSlowProviderDoesNotBecomeAFalseFailure — the failure this whole
+// asynchronous design exists to prevent.
+//
+// The agent's per-request deadline here is far shorter than the provider takes.
+// Two things have to hold for that to be survivable: the server must not make
+// the relay wait for the exchange, and the agent must treat a request that did
+// not come back as a question for the server rather than a verdict. Otherwise
+// the CLI reports a transport error while the server goes on to store the
+// credential — a machine telling its operator the opposite of the truth.
+func TestSlowProviderDoesNotBecomeAFalseFailure(t *testing.T) {
+	e := newEndToEnd(t)
+	e.provider.mu.Lock()
+	e.provider.tokenDelay = 400 * time.Millisecond
+	e.provider.mu.Unlock()
+
+	// A client whose every request times out long before the provider answers.
+	impatient, err := agent.NewClient(e.control.URL, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("agent.NewClient: %v", err)
+	}
+
+	result, err := e.run(agentcredflow.Options{
+		Client:       impatient.WithCredential("machine-credential"),
+		PollInterval: 20 * time.Millisecond,
+		Timeout:      20 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("AddCredentials: %v", err)
+	}
+	if !result.Succeeded() {
+		t.Fatalf("result = %+v, want completed", result)
+	}
+	cred, _, err := e.broker.Credential(context.Background(), e.provider.name)
+	if err != nil || cred.Access != "acme-access-token" {
+		t.Fatalf("server-side credential = %+v (%v), want the provider's token", cred, err)
+	}
+}
+
+// TestLostRelayResponseStillConvergesOnTheServersOutcome — the relay is
+// one-shot, so a lost RESPONSE must not be read as a lost request. The agent
+// asks the server what happened instead of guessing.
+func TestLostRelayResponseStillConvergesOnTheServersOutcome(t *testing.T) {
+	e := newEndToEnd(t)
+	e.dropRelay.set(true)
+
+	out := &strings.Builder{}
+	result, err := e.run(agentcredflow.Options{Out: out, PollInterval: 20 * time.Millisecond})
+	if err != nil {
+		t.Fatalf("AddCredentials: %v", err)
+	}
+	if !result.Succeeded() {
+		t.Fatalf("result = %+v, want completed despite the lost relay response", result)
+	}
+	if !strings.Contains(out.String(), "asking the server what happened") {
+		t.Errorf("the operator was not told why the CLI kept waiting: %q", out.String())
+	}
+	if cred, _, err := e.broker.Credential(context.Background(), e.provider.name); err != nil || cred.Access == "" {
+		t.Fatalf("credential = %+v (%v), want it stored", cred, err)
+	}
+}
+
+// TestUnknownProviderErrorNamesTheKnownProviders — R13 requires the refusal to
+// list what IS configured; a CLI that drops the list leaves the operator
+// guessing at a name they already mistyped once.
+func TestUnknownProviderErrorNamesTheKnownProviders(t *testing.T) {
+	e := newEndToEnd(t)
+	_, err := e.run(agentcredflow.Options{Provider: "nonesuch"})
+	if err == nil {
+		t.Fatal("an unknown provider was accepted")
+	}
+	var apiErr *agent.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error = %v, want an APIError", err)
+	}
+	if len(apiErr.KnownProviders) != 1 || apiErr.KnownProviders[0] != e.provider.name {
+		t.Fatalf("known providers = %v, want [%s]", apiErr.KnownProviders, e.provider.name)
+	}
+	if !strings.Contains(err.Error(), e.provider.name) {
+		t.Fatalf("error text does not name the configured provider: %v", err)
 	}
 }

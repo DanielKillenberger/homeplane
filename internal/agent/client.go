@@ -96,12 +96,20 @@ type APIError struct {
 	Status  int
 	Code    string
 	Message string
+	// KnownProviders carries the server's list of configured providers on an
+	// unknown-provider refusal. R13 requires the operator to be told what IS
+	// known — dropping it here would turn actionable guidance into a dead end
+	// at the one moment they need it.
+	KnownProviders []string
 }
 
 func (e *APIError) Error() string {
 	msg := e.Message
 	if msg == "" {
 		msg = http.StatusText(e.Status)
+	}
+	if len(e.KnownProviders) > 0 {
+		msg += " (known providers: " + strings.Join(e.KnownProviders, ", ") + ")"
 	}
 	if e.Code != "" {
 		return fmt.Sprintf("%s: server refused the request (%d %s): %s", e.Op, e.Status, e.Code, msg)
@@ -291,11 +299,13 @@ func (c *Client) do(ctx context.Context, op, method, path string, body, out any)
 
 	if res.StatusCode/100 != 2 {
 		var errBody struct {
-			Error   string `json:"error"`
-			Message string `json:"message"`
+			Error          string   `json:"error"`
+			Message        string   `json:"message"`
+			KnownProviders []string `json:"known_providers"`
 		}
 		_ = json.Unmarshal(raw, &errBody)
-		return &APIError{Op: op, Status: res.StatusCode, Code: errBody.Error, Message: errBody.Message}
+		return &APIError{Op: op, Status: res.StatusCode, Code: errBody.Error,
+			Message: errBody.Message, KnownProviders: errBody.KnownProviders}
 	}
 	return nil
 }

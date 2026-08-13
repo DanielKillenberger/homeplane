@@ -143,19 +143,49 @@ func AddCredentials(ctx context.Context, opts Options) (Result, error) {
 	defer relayCancel()
 	flow, err := opts.Client.RelayCredentialOutcome(relayCtx, start.FlowID, outcome.Code, outcome.Error, outcome.State)
 	if err != nil {
-		return Result{Provider: opts.Provider, FlowID: start.FlowID}, err
+		// A REFUSAL is final: the server looked at the relay and said no.
+		var apiErr *agent.APIError
+		if errors.As(err, &apiErr) && apiErr.Status < 500 {
+			return Result{Provider: opts.Provider, FlowID: start.FlowID}, err
+		}
+		// A lost response is not. The server may well have consumed the code
+		// and be redeeming it right now; reporting failure here is how a CLI
+		// ends up contradicting a credential that was actually stored. Poll.
+		fmt.Fprintf(opts.Out, "(the relay response did not arrive: %v — asking the server what happened)\n", err)
 	}
 
+	return awaitTerminal(ctx, opts, start.FlowID, flow)
+}
+
+// awaitTerminal polls until the server reports a terminal state.
+//
+// Transient failures — an unreachable moment, or a 5xx while the server cannot
+// yet record the outcome — are retried until the deadline rather than reported,
+// because the flow's real state lives on the server and giving up early would
+// only guess at it.
+func awaitTerminal(ctx context.Context, opts Options, flowID string, flow agent.CredentialFlow) (Result, error) {
+	var lastErr error
 	for !terminal(flow.State) {
 		select {
 		case <-ctx.Done():
-			return result(opts.Provider, flow), fmt.Errorf("add-credentials: gave up waiting for the server to finish the flow: %w", ctx.Err())
+			if lastErr != nil {
+				return result(opts.Provider, flow), fmt.Errorf(
+					"add-credentials: gave up waiting for the server to finish the flow (last error: %v): %w", lastErr, ctx.Err())
+			}
+			return result(opts.Provider, flow), fmt.Errorf(
+				"add-credentials: gave up waiting for the server to finish the flow: %w", ctx.Err())
 		case <-time.After(opts.PollInterval):
 		}
-		flow, err = opts.Client.PollCredentialFlow(ctx, start.FlowID)
+		polled, err := opts.Client.PollCredentialFlow(ctx, flowID)
 		if err != nil {
-			return Result{Provider: opts.Provider, FlowID: start.FlowID}, err
+			var apiErr *agent.APIError
+			if errors.As(err, &apiErr) && apiErr.Status < 500 {
+				return Result{Provider: opts.Provider, FlowID: flowID}, err
+			}
+			lastErr = err
+			continue
 		}
+		flow, lastErr = polled, nil
 	}
 	return result(opts.Provider, flow), nil
 }

@@ -15,6 +15,10 @@ import (
 	"github.com/DanielKillenberger/homeplane/internal/agent/credflow"
 )
 
+// openBrowser is the platform browser opener, indirected so an end-to-end CLI
+// test can stand in for the human at the consent screen.
+var openBrowser = credflow.OpenBrowser
+
 // runAddCredentials brokers a provider credential through the server (R13).
 //
 // Exit codes follow the rest of the CLI: 0 only when the credential is stored
@@ -105,16 +109,27 @@ stored: a declined, expired, or failed flow leaves it exactly as it was.
 		return 1
 	}
 
+	// In JSON mode stdout carries exactly one JSON value and nothing else.
+	// Progress — including the authorization URL, which a human may need to
+	// paste — goes to stderr, where it stays visible to a person without
+	// breaking a parser.
+	progress := stdout
+	if *asJSON {
+		progress = stderr
+	}
+
 	opts := credflow.Options{
 		Client:       client.WithCredential(credential),
 		Provider:     provider,
 		Replace:      *replace,
 		PollInterval: *pollInterval,
 		Timeout:      *timeout,
-		Out:          stdout,
+		Out:          progress,
 	}
 	if *noBrowser {
 		opts.OpenBrowser = func(context.Context, string) error { return nil }
+	} else {
+		opts.OpenBrowser = openBrowser
 	}
 
 	result, err := credflow.AddCredentials(ctx, opts)
