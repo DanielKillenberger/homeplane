@@ -341,3 +341,80 @@ type stubResolver struct{}
 func (stubResolver) Resolve(context.Context, string) (store.Identity, error) {
 	return store.Identity{NodeID: "node-x", NodeName: "x"}, nil
 }
+
+// TestAdminSecretListReportsPresenceWithoutValues covers the operator question
+// the audit log cannot answer: not "was something imported at some point" but
+// "which credentials does this server hold RIGHT NOW, and are they encrypted?"
+// A deployment check that settles for the historical answer passes on a server
+// whose store has since been replaced or restored from an empty state.
+func TestAdminSecretListReportsPresenceWithoutValues(t *testing.T) {
+	dir, _, _ := seedState(t)
+
+	const value = "google-oauth-client-secret-value"
+	path := filepath.Join(t.TempDir(), "client-secret")
+	if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := captureStdout(t, func() error {
+		return runAdmin([]string{"secret", "import", "-state-dir", dir, "-file", path, "google/client-secret"})
+	}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	out, err := captureStdout(t, func() error {
+		return runAdmin([]string{"secret", "list", "-state-dir", dir, "-json"})
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+
+	var metas []store.SecretMeta
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		var m store.SecretMeta
+		if err := json.Unmarshal([]byte(line), &m); err != nil {
+			t.Fatalf("decode %q: %v", line, err)
+		}
+		metas = append(metas, m)
+	}
+	if len(metas) != 1 {
+		t.Fatalf("listed %d secrets, want 1", len(metas))
+	}
+	got := metas[0]
+	if got.Ref != "google/client-secret" {
+		t.Errorf("ref = %q, want google/client-secret", got.Ref)
+	}
+	if got.Generation != 1 {
+		t.Errorf("generation = %d, want 1", got.Generation)
+	}
+	if !got.Encrypted {
+		t.Error("Encrypted = false: the stored bytes are not an age message")
+	}
+	if got.CiphertextBytes <= len(value) {
+		t.Errorf("ciphertext_bytes = %d, not plausibly an age message over a %d-byte value",
+			got.CiphertextBytes, len(value))
+	}
+	// The whole point: this surface cannot leak a credential.
+	if strings.Contains(out, value) {
+		t.Error("secret list emitted the secret value")
+	}
+}
+
+// TestAdminSecretListDistinguishesMissingRefs is the property the deployment
+// check depends on: asking for a server's refs must reveal an ABSENT one, not
+// merely confirm the ones that happen to be there.
+func TestAdminSecretListDistinguishesMissingRefs(t *testing.T) {
+	dir, _, _ := seedState(t)
+
+	out, err := captureStdout(t, func() error {
+		return runAdmin([]string{"secret", "list", "-state-dir", dir, "-json"})
+	})
+	if err != nil {
+		t.Fatalf("list on an empty store: %v", err)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("empty store listed %q, want nothing", out)
+	}
+}

@@ -249,3 +249,22 @@ type Secret struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
+
+// SecretMeta describes a stored secret WITHOUT carrying its ciphertext, let
+// alone its value. It exists so an operator (or a deployment check) can ask
+// "which credentials does this server currently hold, and are they really
+// encrypted?" — a question that must be answerable without a code path capable
+// of returning the secret itself.
+//
+// CiphertextBytes is the stored length, and Encrypted reports whether those
+// bytes are an age message. A row that is somehow NOT age-encrypted is the one
+// thing worth screaming about here, and it is exactly what a length alone would
+// hide.
+type SecretMeta struct {
+	Ref             string    `json:"ref"`
+	Generation      int64     `json:"generation"`
+	CiphertextBytes int       `json:"ciphertext_bytes"`
+	Encrypted       bool      `json:"encrypted"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}

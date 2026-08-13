@@ -138,6 +138,20 @@ func (k *Keyring) Encrypt(plaintext []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// ageHeader begins every age message (binary format, which Encrypt produces).
+const ageHeader = "age-encryption.org/v1"
+
+// LooksEncrypted reports whether b is an age message.
+//
+// It is a STRUCTURAL check, not a cryptographic one: it answers "were these
+// bytes produced by Encrypt?" without a key, which is what an operator asking
+// "is my credential store actually encrypted at rest?" needs — and it cannot,
+// by construction, reveal anything about the plaintext. Anything that has to
+// know the value must Decrypt and hold the key.
+func LooksEncrypted(b []byte) bool {
+	return bytes.HasPrefix(b, []byte(ageHeader))
+}
+
 // Decrypt opens ciphertext sealed by Encrypt.
 func (k *Keyring) Decrypt(ciphertext []byte) ([]byte, error) {
 	r, err := age.Decrypt(bytes.NewReader(ciphertext), k.identity)

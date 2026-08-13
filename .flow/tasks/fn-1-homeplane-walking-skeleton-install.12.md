@@ -20,6 +20,7 @@ Make the Google connectors live through the .3 manifest/edge using a credential 
 - https://developers.google.com/workspace/drive/api/guides/api-specific-auth — drive.file semantics
 
 ## Acceptance
+- [ ] **Inherited from fn-1.15 (deferred there with Daniel's authorization, 2026-08-13):** the Homeplane-owned Google OAuth client exists (Daniel creates it in his own Google Cloud Console — Desktop/loopback app, scopes `drive.readonly` + `calendar.events`, Testing mode is fine) and its credentials are imported on the server as `google/client-id` + `google/client-secret` via `admin secret import` from 0600 files (never argv, never a chat channel). Verify with `deploy/server/verify.sh --host clawniel --fqdn <fqdn>` run WITHOUT `--pending`: `provider_secret_refs_present` must pass. Do NOT reuse the co-resident Hermes OAuth client — separate systems, separate app identities. <!-- Added by fn-1.15: this is the one .15 acceptance item that could not be completed there -->
 - [ ] `add-credentials google` end-to-end against real Google; credential server-side only; agent filesystem free of provider tokens
 - [ ] Drive READ call with valid grant reaches real Drive through the edge; a Drive write-class invocation is denied fail-closed + audited; Calendar six-op sequence succeeds; revoked grant → auth error in seconds
 - [ ] Calendar test event fully cleaned up after the proof; no pre-existing event or file touched (verified by before/after listing)

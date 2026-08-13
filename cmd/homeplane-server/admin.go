@@ -23,6 +23,7 @@ const adminUsage = `homeplane-server admin — server-local operator surface
   admin revoke-grant <grant-id>    revoke any grant, on any machine
   admin secret init-key [flags]    create the age key protecting provider secrets
   admin secret import [flags] <ref> import a provider app credential into the store
+  admin secret list [flags]        list stored credential refs (metadata only)
 
 These commands read and write the state directory directly. They are NOT
 reachable over HTTP: operator authority is shell access to this host.
@@ -181,13 +182,15 @@ func runAdminRevokeGrant(args []string) error {
 
 func runAdminSecret(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: homeplane-server admin secret <init-key|import>")
+		return errors.New("usage: homeplane-server admin secret <init-key|import|list>")
 	}
 	switch args[0] {
 	case "init-key":
 		return runAdminSecretInitKey(args[1:])
 	case "import":
 		return runAdminSecretImport(args[1:])
+	case "list":
+		return runAdminSecretList(args[1:])
 	default:
 		return fmt.Errorf("admin secret: unknown subcommand %q", args[0])
 	}
@@ -282,6 +285,64 @@ func runAdminSecretImport(args []string) error {
 	}
 	// Report the ref and generation only. The value is never echoed back.
 	fmt.Printf("imported secret %q (generation %d, %d bytes, source %s)\n", ref, generation, len(plaintext), source)
+	return nil
+}
+
+// runAdminSecretList reports WHICH credentials this server holds, and whether
+// they are really encrypted — without any path that could return one.
+//
+// It exists because "is the credential actually in the store right now?" had no
+// answer short of reading the database by hand. The audit log is not that
+// answer: it records that an import HAPPENED, which is a fact about the past,
+// not about the current contents of the store.
+//
+// The output is metadata only — ref, generation, ciphertext length, encrypted
+// flag, timestamps. `encrypted: false` on any row means plaintext reached the
+// secrets table and is the one thing here worth treating as an emergency.
+func runAdminSecretList(args []string) error {
+	fs := flag.NewFlagSet("admin secret list", flag.ContinueOnError)
+	stateDir := fs.String("state-dir", defaultStateDir(), "Homeplane state directory")
+	asJSON := fs.Bool("json", false, "emit JSON lines instead of a table")
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), "homeplane-server admin secret list [flags]\n\n")
+		fs.PrintDefaults()
+		fmt.Fprintf(fs.Output(), "\nSecret VALUES are never printed: this command cannot read them.\n")
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	st, err := openStore(*stateDir)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	metas, err := st.ListSecretMeta(context.Background())
+	if err != nil {
+		return err
+	}
+
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		for _, m := range metas {
+			if err := enc.Encode(m); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(tw, "REF\tGENERATION\tENCRYPTED\tBYTES\tUPDATED")
+	for _, m := range metas {
+		fmt.Fprintf(tw, "%s\t%d\t%t\t%d\t%s\n",
+			m.Ref, m.Generation, m.Encrypted, m.CiphertextBytes, m.UpdatedAt.UTC().Format(time.RFC3339))
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "%d secret(s)\n", len(metas))
 	return nil
 }
 

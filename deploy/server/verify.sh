@@ -166,25 +166,30 @@ check admin_cli_audit ok remote \
 check credential_key_0600 ok remote \
   "[ \"\$(stat -c '%a' $PREFIX/var/secrets.age-key)\" = 600 ] && echo 0600"
 
-# 9. The provider app credentials the DEPLOYED MANIFEST requires are actually in
-# the store — by ref, not by "some import happened at some point".
+# 9. The provider app credentials the DEPLOYED MANIFEST requires are in the
+# store NOW — asked of the store, not of the audit log.
+#
+# The distinction matters: an audit row proves an import happened once, which a
+# restored-from-empty or replaced database would still show. `admin secret list`
+# reports the store's current contents as metadata only (ref, generation,
+# encrypted flag) and cannot return a value.
 #
 # The refs are read out of the manifest rather than hardcoded: they are exactly
-# the driver's `*_ref` parameters, which is what the credential broker will look
-# up when a machine starts an OAuth flow. A deployment missing one of them looks
+# the driver's `*_ref` parameters, which is what the credential broker looks up
+# when a machine starts an OAuth flow. A deployment missing one looks perfectly
 # healthy and fails at the first `add-credentials`.
 #
 # This check FAILS while the Homeplane-owned Google OAuth app does not exist yet
-# (fn-1.12 / Daniel). That is the intended behavior: the earlier version of this
-# check greped for any `secret_imported` row, which a throwaway self-test import
-# satisfied — a verification that passes without the thing it verifies is worse
-# than no verification.
+# (Daniel's own Google Cloud Console action; feeds fn-1.12) — hence the
+# --pending declaration in the runbook. An earlier version greped for any
+# `secret_imported` row, which a throwaway self-test import satisfied: a
+# verification that passes without the thing it verifies is worse than none.
 check provider_secret_refs_present ok remote \
   "set -e
+   stored=\$($PREFIX/bin/homeplane-server admin secret list -state-dir $PREFIX/var -json 2>/dev/null | jq -s '.')
    missing=''
    for ref in \$(jq -r '.connectors[].credential_acquisition.params | to_entries[] | select(.key | endswith(\"_ref\")) | .value' $PREFIX/etc/manifest.json); do
-     if $PREFIX/bin/homeplane-server admin audit -state-dir $PREFIX/var -limit 0 -json \
-        | jq -e --arg r \"\$ref\" 'select(.Detail.secret_ref == \$r)' >/dev/null; then
+     if printf '%s' \"\$stored\" | jq -e --arg r \"\$ref\" 'any(.[]; .ref == \$r and .encrypted)' >/dev/null; then
        echo \"present: \$ref\"
      else
        missing=\"\$missing \$ref\"
@@ -192,18 +197,16 @@ check provider_secret_refs_present ok remote \
    done
    if [ -n \"\$missing\" ]; then echo \"MISSING:\$missing\"; exit 1; fi"
 
-# 10. Whatever is in the store is stored as ciphertext. Every value written by
-# `admin secret import` is an age message, so the age header must appear in the
-# database file and there must be at least as many headers as imported secrets.
-# The plaintext is never available here — that check belongs to import time —
-# but "the bytes on disk are age messages" is checkable at any time.
+# 10. Every secret the store currently holds is ciphertext. `encrypted` is the
+# store's own structural check (the bytes are an age message), evaluated per row
+# — so a single plaintext value cannot hide behind other rows that are fine.
 check secrets_encrypted_at_rest ok remote \
   "set -e
-   headers=\$(grep -a -c 'age-encryption.org/v1' $PREFIX/var/homeplane.db || true)
-   imports=\$($PREFIX/bin/homeplane-server admin audit -state-dir $PREFIX/var -limit 0 -json \
-     | jq -s '[.[] | select(.Event == \"secret_imported\")] | map(.Detail.secret_ref) | unique | length')
-   echo \"age_headers=\$headers stored_refs=\$imports\"
-   [ \"\$headers\" -ge \"\$imports\" ] && [ \"\$imports\" -gt 0 ]"
+   rows=\$($PREFIX/bin/homeplane-server admin secret list -state-dir $PREFIX/var -json | jq -s '.')
+   total=\$(printf '%s' \"\$rows\" | jq 'length')
+   plain=\$(printf '%s' \"\$rows\" | jq '[.[] | select(.encrypted | not)] | length')
+   echo \"stored=\$total plaintext=\$plain\"
+   [ \"\$total\" -gt 0 ] && [ \"\$plain\" -eq 0 ]"
 
 if [[ $AS_JSON -eq 1 ]]; then
   printf '{"host":"%s","fqdn":"%s","host_ip":"%s","gateway_port":%s,"checked_at":"%s","pending_count":%d,"result":"%s","checks":[%s]}\n' \

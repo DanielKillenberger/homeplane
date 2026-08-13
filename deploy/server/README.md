@@ -220,8 +220,20 @@ deploy/server/verify.sh --host clawniel --fqdn homeplane.tailab4e9b.ts.net --jso
 | `healthz_green_over_tailnet` | every server component reports ok |
 | `admin_cli_audit` | the admin CLI reads and writes the real state directory |
 | `credential_key_0600` | the age key exists with 0600 |
-| `provider_secret_refs_present` | every `*_ref` the deployed manifest names has been imported (currently **pending**, above) |
-| `secrets_encrypted_at_rest` | every stored secret is an age message on disk, not plaintext |
+| `provider_secret_refs_present` | every `*_ref` the deployed manifest names is in the store **now**, encrypted (currently **pending**, above) |
+| `secrets_encrypted_at_rest` | every stored secret is an age message, checked per row |
+
+The last two ask the store, not the audit log: an audit row proves an import
+happened once, which a database restored from an empty state would still show.
+`admin secret list` answers from current contents and reports metadata only
+(ref, generation, encrypted, size) — it has no code path that can return a
+value:
+
+```bash
+homeplane/bin/homeplane-server admin secret list -state-dir homeplane/var
+REF                        GENERATION  ENCRYPTED  BYTES  UPDATED
+deploy/bootstrap-selftest  1           true       232    2026-08-13T22:36:55Z
+```
 
 A check listed in `--pending` is reported as `pending` with its reason instead of
 `fail`, and the run's result becomes `pass_with_pending` — never `pass`. It is

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/DanielKillenberger/homeplane/internal/secrets"
 )
 
 // schema is the full DDL applied at Open. All statements are idempotent
@@ -750,6 +752,48 @@ func (s *SQLite) GetSecret(ctx context.Context, ref string) (Secret, error) {
 	sec.CreatedAt = created
 	sec.UpdatedAt = updated
 	return sec, nil
+}
+
+// ListSecretMeta returns metadata for every stored secret, ordered by ref, and
+// never the secret values.
+//
+// The ciphertext is read only to measure it and to check that it IS ciphertext;
+// it does not leave this function. That is deliberate: the operator surface
+// this feeds must be able to prove a credential is present and encrypted
+// without ever being a way to read one.
+func (s *SQLite) ListSecretMeta(ctx context.Context) ([]SecretMeta, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT ref, ciphertext, generation, created_at, updated_at
+		FROM secrets ORDER BY ref`)
+	if err != nil {
+		return nil, fmt.Errorf("store: list secrets: %w", err)
+	}
+	defer rows.Close()
+
+	var out []SecretMeta
+	for rows.Next() {
+		var (
+			meta                   SecretMeta
+			ciphertext             []byte
+			createdStr, updatedStr string
+		)
+		if err := rows.Scan(&meta.Ref, &ciphertext, &meta.Generation, &createdStr, &updatedStr); err != nil {
+			return nil, fmt.Errorf("store: list secrets scan: %w", err)
+		}
+		meta.CiphertextBytes = len(ciphertext)
+		meta.Encrypted = secrets.LooksEncrypted(ciphertext)
+		if meta.CreatedAt, err = parseTime(createdStr); err != nil {
+			return nil, fmt.Errorf("store: list secrets parse created_at: %w", err)
+		}
+		if meta.UpdatedAt, err = parseTime(updatedStr); err != nil {
+			return nil, fmt.Errorf("store: list secrets parse updated_at: %w", err)
+		}
+		out = append(out, meta)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: list secrets: %w", err)
+	}
+	return out, nil
 }
 
 // newID returns prefix + "-" + 16 lowercase hex characters from crypto/rand.
