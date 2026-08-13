@@ -60,26 +60,36 @@ status`.
 ## Installing a machine
 
 ```bash
-scripts/stage-release.sh dist        # build release-form artifacts + SHA256SUMS
+scripts/stage-release.sh dist        # agent binaries + pinned Node 22 + SHA256SUMS
 ./install.sh --stage-dir dist        # verify checksums, provision Node 22, install
 
 ~/.homeplane/bin/homeplane-agent enrol -server https://homeplane.<tailnet>.ts.net
 ~/.homeplane/bin/homeplane-agent status
 ```
 
+`stage-release.sh` stages both halves of a release: the cross-compiled agent for
+every supported platform, and the pinned Node 22 runtime, verified against the
+upstream checksums in `scripts/node-pinned.sha256` before it is allowed into the
+staging directory. That is what makes a fresh-machine install work — macOS has
+no package-manager fallback.
+
 The installer supports macOS (launchd) and systemd-based Linux with
-`systemctl --user`; anything else is rejected **before** anything is written. A
-checksum mismatch aborts with nothing installed, and a re-run is an idempotent
-refresh that leaves enrolment state alone. Node 22 is provisioned
-deterministically — from a checksummed vendored tarball staged alongside the
-agent, or from the distribution's package manager with
-`HOMEPLANE_NODE_PACKAGE=1` — and a machine that cannot get it fails the install
-rather than ending up quietly unable to sync its vault.
+`systemctl --user`; anything else is rejected **before** anything is written. It
+validates everything — artifact checksums, that the agent binary runs here, that
+the extracted Node runtime runs and reports 22+ — before it touches the install
+prefix, and it keeps the previous Node runtime until the whole install has
+landed, restoring it if any step fails. A checksum mismatch aborts with nothing
+installed, and a re-run is an idempotent refresh that leaves enrolment state
+alone. A machine that cannot get Node 22 (staged tarball, or the distribution's
+package manager with `HOMEPLANE_NODE_PACKAGE=1`) fails the install rather than
+ending up quietly unable to sync its vault.
 
 Enrolment is identity-preserving: re-running `enrol` rotates this machine's
 credential on the same server-side record and the previous credential stops
 working immediately. If the server cannot be reached, nothing is written to
-`~/.homeplane`.
+`~/.homeplane`. Concurrent enrolments are safe: the state directory is locked
+for the write, and a response older than the stored credential version is
+discarded rather than written over the live credential.
 
 `homeplane-agent status` reconciles grants **live** against the server on every
 run: a revoked grant reads `revoked`, and a server that cannot be reached makes

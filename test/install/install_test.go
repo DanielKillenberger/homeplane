@@ -450,6 +450,139 @@ func TestTamperedNodeTarballAbortsBeforeInstallingTheAgent(t *testing.T) {
 	}
 }
 
+// stageWithNode builds a staging dir holding the agent plus a node tarball
+// whose runtime reports the given major version.
+func stageWithNode(t *testing.T, nodeMajor int) *stage {
+	t.Helper()
+	osName, arch := hostPlatform()
+	nodeArch := "x64"
+	if arch == "arm64" {
+		nodeArch = "arm64"
+	}
+	root := fmt.Sprintf("node-v22.11.0-%s-%s", osName, nodeArch)
+
+	s := newStage(t)
+	s.addArtifact(t, fmt.Sprintf("homeplane-agent-%s-%s", osName, arch),
+		[]byte("#!/bin/sh\necho homeplane-agent stub\n"), 0o755)
+	s.addArtifact(t, root+".tar.gz", fakeNodeTarball(t, root, nodeMajor), 0o644)
+	s.writeManifest(t)
+	return s
+}
+
+// TestAFailedInstallRestoresThePreviousNodeRuntime is the atomicity guarantee:
+// a checksum-valid but malformed release must not be able to destroy the
+// runtime a working machine already has.
+func TestAFailedInstallRestoresThePreviousNodeRuntime(t *testing.T) {
+	prefix := filepath.Join(t.TempDir(), "homeplane")
+	noNode := map[string]string{"HOMEPLANE_NODE_BIN": filepath.Join(t.TempDir(), "absent")}
+
+	good := stageWithNode(t, 22)
+	if res := runInstaller(t, runOpts{stage: good, prefix: prefix, env: noNode}); res.code != 0 {
+		t.Fatalf("first install exit = %d:\n%s", res.code, res.output)
+	}
+	nodeBin := filepath.Join(prefix, "node", "bin", "node")
+	before, err := exec.Command(nodeBin, "--version").Output()
+	if err != nil {
+		t.Fatalf("provisioned node does not run: %v", err)
+	}
+
+	// A release whose Node is checksum-valid but too old — the malformed-release
+	// case. It is only detectable by running the extracted runtime.
+	bad := stageWithNode(t, 18)
+	res := runInstaller(t, runOpts{stage: bad, prefix: prefix, env: noNode})
+	if res.code == 0 {
+		t.Fatalf("installer accepted a release whose node reports v18:\n%s", res.output)
+	}
+
+	after, err := exec.Command(nodeBin, "--version").Output()
+	if err != nil {
+		t.Fatalf("the working node runtime did not survive the failed install: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Errorf("node runtime changed across a failed install: %q -> %q", before, after)
+	}
+	if _, err := os.Stat(installedBinary(prefix)); err != nil {
+		t.Errorf("the agent did not survive the failed install: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(prefix, "node.previous")); !os.IsNotExist(err) {
+		t.Errorf("a node.previous directory was left behind (stat err: %v)", err)
+	}
+}
+
+// TestAFailureAfterTheNodeSwapRollsTheRuntimeBack exercises the rollback trap
+// itself: the failure happens AFTER the new runtime has been moved into the
+// prefix, which is the only window in which the previous one can be lost.
+func TestAFailureAfterTheNodeSwapRollsTheRuntimeBack(t *testing.T) {
+	prefix := filepath.Join(t.TempDir(), "homeplane")
+	noNode := map[string]string{"HOMEPLANE_NODE_BIN": filepath.Join(t.TempDir(), "absent")}
+
+	first := stageWithNode(t, 22)
+	if res := runInstaller(t, runOpts{stage: first, prefix: prefix, env: noNode}); res.code != 0 {
+		t.Fatalf("first install exit = %d:\n%s", res.code, res.output)
+	}
+	// A marker identifies THIS runtime directory, so the assertion below can
+	// tell a restored runtime from a newly extracted one.
+	marker := filepath.Join(prefix, "node", "INSTALLED-FIRST")
+	if err := os.WriteFile(marker, []byte("original"), 0o644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	// Make the bin directory read-only: the runtime swap succeeds, and the very
+	// next step (symlink/agent placement) fails.
+	binDir := filepath.Join(prefix, "bin")
+	if err := os.Chmod(binDir, 0o555); err != nil {
+		t.Fatalf("chmod bin: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(binDir, 0o755) })
+
+	second := stageWithNode(t, 22)
+	res := runInstaller(t, runOpts{stage: second, prefix: prefix, env: noNode})
+	if res.code == 0 {
+		t.Fatalf("install succeeded despite an unwritable bin directory:\n%s", res.output)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("the original node runtime was not restored after the failure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(prefix, "node.previous")); !os.IsNotExist(err) {
+		t.Errorf("node.previous was left behind (stat err: %v)", err)
+	}
+	if !strings.Contains(res.output, "restored the previous node runtime") {
+		t.Errorf("the rollback was not reported to the operator:\n%s", res.output)
+	}
+}
+
+// TestAReleaseWithoutABundledNodeBinaryIsRejectedBeforeTheSwap covers the other
+// malformed shape: an archive that extracts but contains no runtime at all.
+func TestAReleaseWithoutABundledNodeBinaryIsRejectedBeforeTheSwap(t *testing.T) {
+	osName, arch := hostPlatform()
+	nodeArch := "x64"
+	if arch == "arm64" {
+		nodeArch = "arm64"
+	}
+	prefix := filepath.Join(t.TempDir(), "homeplane")
+	noNode := map[string]string{"HOMEPLANE_NODE_BIN": filepath.Join(t.TempDir(), "absent")}
+
+	good := stageWithNode(t, 22)
+	if res := runInstaller(t, runOpts{stage: good, prefix: prefix, env: noNode}); res.code != 0 {
+		t.Fatalf("first install exit = %d:\n%s", res.code, res.output)
+	}
+
+	empty := newStage(t)
+	empty.addArtifact(t, fmt.Sprintf("homeplane-agent-%s-%s", osName, arch),
+		[]byte("#!/bin/sh\necho stub\n"), 0o755)
+	empty.addArtifact(t, fmt.Sprintf("node-v22.11.0-%s-%s.tar.gz", osName, nodeArch),
+		emptyTarball(t, fmt.Sprintf("node-v22.11.0-%s-%s", osName, nodeArch)), 0o644)
+	empty.writeManifest(t)
+
+	res := runInstaller(t, runOpts{stage: empty, prefix: prefix, env: noNode})
+	if res.code == 0 {
+		t.Fatalf("installer accepted an archive with no bin/node:\n%s", res.output)
+	}
+	if _, err := exec.Command(filepath.Join(prefix, "node", "bin", "node"), "--version").Output(); err != nil {
+		t.Errorf("the working node runtime did not survive: %v", err)
+	}
+}
+
 // fakeNodeTarball builds a gzipped tar shaped like a Node release: a single
 // top-level directory containing bin/node.
 func fakeNodeTarball(t *testing.T, root string, major int) []byte {
@@ -484,6 +617,25 @@ func fakeNodeTarball(t *testing.T, root string, major int) []byte {
 				t.Fatalf("tar body: %v", err)
 			}
 		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	return []byte(buf.String())
+}
+
+// emptyTarball builds a release-shaped archive whose top-level directory holds
+// no runtime at all.
+func emptyTarball(t *testing.T, root string) []byte {
+	t.Helper()
+	var buf strings.Builder
+	gz := gzip.NewWriter(&stringWriter{&buf})
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Name: root + "/", Mode: 0o755, Typeflag: tar.TypeDir}); err != nil {
+		t.Fatalf("tar header: %v", err)
 	}
 	if err := tw.Close(); err != nil {
 		t.Fatalf("close tar: %v", err)

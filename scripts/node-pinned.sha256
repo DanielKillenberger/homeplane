@@ -1,0 +1,14 @@
+# Upstream SHA-256 checksums for the pinned Node runtime.
+#
+# Copied verbatim from https://nodejs.org/dist/v22.11.0/SHASUMS256.txt.
+# scripts/stage-release.sh verifies every Node archive it stages against these
+# values, so a tampered mirror or a truncated download can never reach a
+# machine — and install.sh then re-verifies against the manifest generated from
+# these same bytes.
+#
+# Bumping Node: change every line here to the new version's upstream checksums
+# AND the NODE_VERSION default in install.sh (a test asserts they agree).
+2e89afe6f4e3aa6c7e21c560d8a0453d84807e97850bbb819b998531a22bdfde  node-v22.11.0-darwin-arm64.tar.gz
+668d30b9512137b5f5baeef6c1bb4c46efff9a761ba990a034fb6b28b9da2465  node-v22.11.0-darwin-x64.tar.gz
+27453f7a0dd6b9e6738f1f6ea6a09b102ec7aa484de1e39d6a1c3608ad47aa6a  node-v22.11.0-linux-arm64.tar.gz
+4f862bab52039835efbe613b532238b6e4dde98d139a34e6923193e073438b13  node-v22.11.0-linux-x64.tar.gz
