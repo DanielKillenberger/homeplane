@@ -60,8 +60,13 @@ func TestAllowedCallIsForwardedAndAuditedFromTheManifest(t *testing.T) {
 	if call.ObservedNodeID != "nodeid-abc" || call.ObservedNodeName != "danis-mac" {
 		t.Errorf("observed identity wrong: %+v", call)
 	}
-	if call.Detail["provider"] != "stub-notes" || call.Detail["args_digest"] == "" {
+	if call.Detail["provider"] != "stub-notes" {
 		t.Errorf("detail = %v", call.Detail)
+	}
+	// The artifact was identified from the manifest's extractor, so the digest
+	// — which exists only to stand in for an identity — must NOT be recorded.
+	if _, ok := call.Detail["args_digest"]; ok {
+		t.Errorf("args digest recorded alongside a known artifact id: %v", call.Detail)
 	}
 	if call.Detail["required_capability"] != string(policy.ConnectorRead) {
 		t.Errorf("required capability = %q", call.Detail["required_capability"])
@@ -97,6 +102,9 @@ func TestResponseExtractorRecordsTheCreatedArtifact(t *testing.T) {
 	}
 	if result.ArtifactID != "n-created" {
 		t.Errorf("result artifact id = %q, want n-created", result.ArtifactID)
+	}
+	if _, ok := result.Detail["args_digest"]; ok {
+		t.Errorf("the result row kept an args digest after identifying the artifact: %v", result.Detail)
 	}
 	assertNoPayload(t, sink.events, secretBody, "weekly")
 }

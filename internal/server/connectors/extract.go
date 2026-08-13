@@ -1,6 +1,7 @@
 package connectors
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -44,8 +45,8 @@ func canonicalJSON(raw json.RawMessage) []byte {
 	if len(raw) == 0 {
 		return []byte("null")
 	}
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
+	v, err := decodeJSON(raw)
+	if err != nil {
 		// Not JSON: digest the bytes as given. Never parse-and-guess.
 		return raw
 	}
@@ -56,6 +57,20 @@ func canonicalJSON(raw json.RawMessage) []byte {
 		return raw
 	}
 	return out
+}
+
+// decodeJSON decodes with UseNumber so numbers keep their literal form.
+// Decoding into float64 would silently rewrite large integers (an id like
+// 9007199254740993 comes back as ...992), which would both corrupt an extracted
+// artifact id and make two different requests digest identically.
+func decodeJSON(raw json.RawMessage) (any, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 // segment is one step of a parsed pointer: an object key or an array index.
@@ -125,8 +140,8 @@ func Extract(e Extractor, doc json.RawMessage) (string, bool) {
 	if err != nil || len(doc) == 0 {
 		return "", false
 	}
-	var v any
-	if err := json.Unmarshal(doc, &v); err != nil {
+	v, err := decodeJSON(doc)
+	if err != nil {
 		return "", false
 	}
 	for _, s := range segs {
@@ -157,9 +172,8 @@ func scalarString(v any) (string, bool) {
 		out = t
 	case bool:
 		out = strconv.FormatBool(t)
-	case float64:
-		out = strconv.FormatFloat(t, 'f', -1, 64)
 	case json.Number:
+		// The literal as it appeared in the document — a 64-bit id survives.
 		out = t.String()
 	default:
 		// Objects, arrays and null are not identities.

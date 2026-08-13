@@ -1,7 +1,10 @@
 package connectors
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"regexp"
 
 	"github.com/DanielKillenberger/homeplane/internal/store"
 )
@@ -11,6 +14,47 @@ import (
 // of the request arguments — never from inspecting a payload for meaning. That
 // is what keeps the audit trail generic across arbitrary MCP tools without any
 // connector-specific code, and structurally incapable of holding a body.
+//
+// One subtlety governs the whole file: on a DENIED call the provider and tool
+// names are attacker-chosen strings that matched nothing in the manifest. They
+// are still worth recording — an operator needs to see what was attempted — but
+// they are sanitized first (see safeName). An unbounded name would otherwise be
+// a payload channel, and, worse, would make the store reject the row and leave
+// the denial unrecorded.
+
+// safeNameRe is the shape a name may have to be recorded verbatim. It is the
+// union of the provider and tool identifier shapes; anything else is replaced.
+var safeNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@/-]*$`)
+
+// UnnamedMarker is recorded when a call named nothing at all.
+const UnnamedMarker = "unnamed"
+
+// unrecognizedPrefix labels a name that could not be recorded verbatim. The
+// digest that follows keeps repeated probes correlated with each other without
+// letting their content into the log.
+const unrecognizedPrefix = "unrecognized-"
+
+const nameDigestDomain = "homeplane/connector-name\x00"
+
+// nameDigestLen is the hex length of the digest appended to an unrecognized
+// name. Twelve characters is ample to correlate probes and keeps the recorded
+// value fixed-width.
+const nameDigestLen = 12
+
+// safeName renders a caller-supplied provider or tool name for an audit row:
+// verbatim when it is a bounded, well-formed identifier, and otherwise a fixed
+// marker plus a digest of what was actually sent.
+func safeName(raw string) string {
+	switch {
+	case raw == "":
+		return UnnamedMarker
+	case len(raw) <= MaxIdentifierLen && safeNameRe.MatchString(raw):
+		return raw
+	default:
+		sum := sha256.Sum256(append([]byte(nameDigestDomain), []byte(raw)...))
+		return unrecognizedPrefix + hex.EncodeToString(sum[:])[:nameDigestLen]
+	}
+}
 
 // CallEvent builds the row recorded for an authorization decision, before the
 // tool runs. For an admitted call this row is the authoritative record that the
@@ -24,11 +68,10 @@ func (e *Engine) CallEvent(req Request, d Decision, callID string) store.AuditEv
 		Harness:          req.Caller.Harness,
 		GrantID:          req.Caller.GrantID,
 		ActionClass:      string(d.ActionClass),
-		Tool:             req.Tool,
+		Tool:             safeName(req.Tool),
 		Detail: map[string]string{
-			"provider":    req.Provider,
-			"args_digest": ArgsDigest(req.Args),
-			"call_id":     callID,
+			"provider": safeName(req.Provider),
+			"call_id":  callID,
 		},
 	}
 
@@ -57,13 +100,18 @@ func (e *Engine) CallEvent(req Request, d Decision, callID string) store.AuditEv
 	}
 
 	// Artifact identity, from the manifest's declared extractor when it reads
-	// the request; otherwise the args digest above stands in for it and the
-	// artifact is recorded as unknown.
+	// the request. The args digest is the FALLBACK, not a companion: when the
+	// artifact is identified there is nothing for a digest to stand in for, and
+	// a digest of the arguments is one more thing about the request in the log
+	// than the record needs.
 	ev.ArtifactID = ArtifactUnknown
 	if ex := d.Mapping.ArtifactID; ex != nil && ex.Source == FromRequest {
 		if id, ok := Extract(*ex, req.Args); ok {
 			ev.ArtifactID = id
 		}
+	}
+	if ev.ArtifactID == ArtifactUnknown {
+		ev.Detail["args_digest"] = ArgsDigest(req.Args)
 	}
 	return ev
 }
@@ -87,6 +135,9 @@ func (e *Engine) ResultEvent(req Request, d Decision, callID string, resp json.R
 	if ex := d.Mapping.ArtifactID; ex != nil && ex.Source == FromResponse {
 		if id, ok := Extract(*ex, resp); ok {
 			ev.ArtifactID = id
+			// The artifact is now identified, so the digest has nothing left to
+			// stand in for.
+			delete(ev.Detail, "args_digest")
 		}
 	}
 	return ev
