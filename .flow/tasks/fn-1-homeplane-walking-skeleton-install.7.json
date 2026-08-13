@@ -1,0 +1,23 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-08-13T13:40:34.830812Z",
+  "depends_on": [
+    "fn-1-homeplane-walking-skeleton-install.5",
+    "fn-1-homeplane-walking-skeleton-install.6",
+    "fn-1-homeplane-walking-skeleton-install.8",
+    "fn-1-homeplane-walking-skeleton-install.9",
+    "fn-1-homeplane-walking-skeleton-install.11",
+    "fn-1-homeplane-walking-skeleton-install.12",
+    "fn-1-homeplane-walking-skeleton-install.15",
+    "fn-1-homeplane-walking-skeleton-install.16"
+  ],
+  "id": "fn-1-homeplane-walking-skeleton-install.7",
+  "priority": null,
+  "spec": "fn-1-homeplane-walking-skeleton-install",
+  "spec_path": ".flow/tasks/fn-1-homeplane-walking-skeleton-install.7.md",
+  "status": "todo",
+  "title": "End-to-end proof automation: six-step Drive write, revocation, status/healthz truth",
+  "updated_at": "2026-08-13T14:52:12.402320Z"
+}

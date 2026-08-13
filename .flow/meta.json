@@ -1,0 +1,13 @@
+{
+  "next_spec": 1,
+  "schema_version": 3,
+  "setup": {
+    "block_hashes": {
+      "AGENTS.md": "e98ec53152b438b8424f6f7e5f2d6cd9b8283239524a2df2c71d6c1e649ee91c",
+      "CLAUDE.md": "e98ec53152b438b8424f6f7e5f2d6cd9b8283239524a2df2c71d6c1e649ee91c"
+    }
+  },
+  "setup_date": "2026-08-13T13:11:12Z",
+  "setup_mode": "copy",
+  "setup_version": "3.15.0"
+}

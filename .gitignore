@@ -1,0 +1,5 @@
+# flow-next worker scratch
+.flow/tmp/
+
+# spike build artifacts (disposable)
+spike/edge-proxy/edge-proxy

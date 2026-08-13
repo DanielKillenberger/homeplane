@@ -1,0 +1,94 @@
+{
+  "$schema": "https://flow-next.dev/schema/flow-config.schema.json",
+  "artifacts": {
+    "html": {
+      "enabled": false
+    }
+  },
+  "chart": {
+    "claimStaleAfter": 24,
+    "maxDecisions": 12
+  },
+  "land": {
+    "automatedReviewers": "",
+    "ciFixBudget": 3,
+    "cleanReviewCommentPattern": "(Didn'?t find any( major)? issues|No( major)? issues found).*Reviewed commit",
+    "patienceMinutes": 30,
+    "release": true,
+    "reviewSignal": "silence",
+    "reviewTrigger": ""
+  },
+  "memory": {
+    "enabled": true
+  },
+  "models": {
+    "roles": {},
+    "verifiedAt": null,
+    "verifiedWith": null
+  },
+  "pilot": {
+    "autonomy": "ready",
+    "gateClasses": []
+  },
+  "pipeline": {
+    "qa": "off"
+  },
+  "planSync": {
+    "crossSpec": false,
+    "enabled": true
+  },
+  "review": {
+    "backend": "codex:gpt-5.6-sol:xhigh"
+  },
+  "scouts": {
+    "github": false
+  },
+  "tracker": {
+    "charts": "off",
+    "conflictTiebreak": "always-ask",
+    "enabled": false,
+    "perEvent": {
+      "capture": "off",
+      "completionReview": "off",
+      "interview": "off",
+      "land": {
+        "merged": "off"
+      },
+      "makePr": "off",
+      "plan": "off",
+      "qa": "off",
+      "resolvePr": "off",
+      "work": {
+        "done": "off",
+        "firstClaim": "off"
+      }
+    },
+    "perTracker": {
+      "apiVersion": null,
+      "authScheme": null,
+      "baseUrl": null,
+      "host": null,
+      "labelMap": {},
+      "priorityMap": {},
+      "project": null,
+      "projectId": null,
+      "projectKey": null,
+      "sslVerify": true,
+      "statusMap": {},
+      "teamId": null
+    },
+    "provenance": null,
+    "readyState": null,
+    "staleAfterHours": 24,
+    "type": null,
+    "version": 1
+  },
+  "work": {
+    "delegate": false,
+    "delegateConsent": false,
+    "delegateDecision": "auto",
+    "delegateEffort": "medium",
+    "delegateModel": "gpt-5.6-terra",
+    "delegateSandbox": "yolo"
+  }
+}

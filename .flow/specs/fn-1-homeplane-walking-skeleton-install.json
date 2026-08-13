@@ -1,0 +1,2950 @@
+{
+  "branch_name": "fn-1-homeplane-walking-skeleton-install",
+  "completion_review_status": "unknown",
+  "completion_reviewed_at": null,
+  "created_at": "2026-08-13T13:14:26.640058Z",
+  "default_impl": null,
+  "default_review": null,
+  "default_sync": null,
+  "depends_on_epics": [],
+  "id": "fn-1-homeplane-walking-skeleton-install",
+  "impl_review_rounds": {},
+  "next_task": 1,
+  "plan_review_rounds": 0,
+  "plan_review_status": "ship",
+  "plan_reviewed_at": "2026-08-13T15:55:53.104081Z",
+  "review_attempts": [
+    {
+      "artifact_sha256": "dcb13d86b67642169e98eabe0b1a72c8a08c0e7d0da4a5385803407bfd1c0d99",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-1941731f6d9d56a5b0f59456595da310",
+            "classification": "introduced",
+            "findingId": "finding-1941731f6d9d56a5b0f59456595da310",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "classification": "introduced",
+            "findingId": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "classification": "introduced",
+            "findingId": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "classification": "introduced",
+            "findingId": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "classification": "introduced",
+            "findingId": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "classification": "introduced",
+            "findingId": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "classification": "introduced",
+            "findingId": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "classification": "introduced",
+            "findingId": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "classification": "introduced",
+            "findingId": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "classification": "introduced",
+            "findingId": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-61f690512dc161c74214fbc903be8347",
+            "classification": "introduced",
+            "findingId": "finding-61f690512dc161c74214fbc903be8347",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "classification": "introduced",
+            "findingId": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "0e79acc51b4908fd6d96d8d77dddb9a5cbcc6babe92a4489039d64b6a88ed071",
+      "reservation_id": "bfd94f9cfe654228822dfd727f8cff28",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T13:48:28.519289Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "2a9ed3edfcd4d811fbc471bd5024759dabf67a2abaddd0f8a84e8123d0a7a288",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": "timeout",
+      "finalized": {
+        "digest": "complete",
+        "receipt": "not_applicable",
+        "status": "not_applicable"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "transport_failure",
+      "output_sha256": "4d68ab2b37522d0020c9916f42fa46d3fd25f35b549370719acb2605153707df",
+      "reservation_id": "2d33efcdd37b4f36a177e796eb9075be",
+      "round_consumed": false,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T13:58:25.092599Z",
+      "verdict": null
+    },
+    {
+      "artifact_sha256": "1cf4c8eb13430edf0fe0a6e4d2b1e0b6cea43ddf9ccfcb607289756207ea7686",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-1941731f6d9d56a5b0f59456595da310",
+            "classification": "introduced",
+            "findingId": "finding-1941731f6d9d56a5b0f59456595da310",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "classification": "introduced",
+            "findingId": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "classification": "introduced",
+            "findingId": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "classification": "introduced",
+            "findingId": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "classification": "introduced",
+            "findingId": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "classification": "introduced",
+            "findingId": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "classification": "introduced",
+            "findingId": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "classification": "introduced",
+            "findingId": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "classification": "introduced",
+            "findingId": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "classification": "introduced",
+            "findingId": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "classification": "introduced",
+            "findingId": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d8db18d4774e422f99950028c023f6f5",
+            "classification": "introduced",
+            "findingId": "finding-d8db18d4774e422f99950028c023f6f5",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "classification": "introduced",
+            "findingId": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "classification": "introduced",
+            "findingId": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "classification": "introduced",
+            "findingId": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "classification": "introduced",
+            "findingId": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ff034b2cd88522b32db212cc513591f7",
+            "classification": "introduced",
+            "findingId": "finding-ff034b2cd88522b32db212cc513591f7",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "classification": "introduced",
+            "findingId": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-61f690512dc161c74214fbc903be8347",
+            "classification": "introduced",
+            "findingId": "finding-61f690512dc161c74214fbc903be8347",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "classification": "introduced",
+            "findingId": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c7e94fe4e9ad24a50bc5debddae28f05",
+            "classification": "introduced",
+            "findingId": "finding-c7e94fe4e9ad24a50bc5debddae28f05",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c3ff972524c5f7b7bd31b87375b1e786",
+            "classification": "introduced",
+            "findingId": "finding-c3ff972524c5f7b7bd31b87375b1e786",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-06ed68c0c2a271e8f6889bb6289c475a",
+            "classification": "introduced",
+            "findingId": "finding-06ed68c0c2a271e8f6889bb6289c475a",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c34c74b7516fc76e6da3359f718ad85c",
+            "classification": "introduced",
+            "findingId": "finding-c34c74b7516fc76e6da3359f718ad85c",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "2a5453127867f0c2799d7587ad4c6985b1501f319337865e06d3f1433ff07fb7",
+      "reservation_id": "a1fa4d44a5654662b90f1d1739386b38",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T14:08:18.958429Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "5bfd217dd644eb76bc149b83a18b01daf7491e0ff25c30d93f22e350c455ef1d",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": "timeout",
+      "finalized": {
+        "digest": "complete",
+        "receipt": "not_applicable",
+        "status": "not_applicable"
+      },
+      "forced": false,
+      "hash_epoch": 1,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "transport_failure",
+      "output_sha256": "5dc06d9dc850516ce3bced92afde60dae07714f24ae754bf54ff522bd2dd17e4",
+      "reservation_id": "39ede3e3249c4f9ab8bb54f9cacb7184",
+      "round_consumed": false,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T14:15:36.954134Z",
+      "verdict": null
+    },
+    {
+      "artifact_sha256": "5bfd217dd644eb76bc149b83a18b01daf7491e0ff25c30d93f22e350c455ef1d",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-441252d6c1d88494221fe3f252f4e425",
+            "classification": "introduced",
+            "findingId": "finding-441252d6c1d88494221fe3f252f4e425",
+            "firstSeenThisRound": true,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1941731f6d9d56a5b0f59456595da310",
+            "classification": "introduced",
+            "findingId": "finding-1941731f6d9d56a5b0f59456595da310",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "classification": "introduced",
+            "findingId": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "classification": "introduced",
+            "findingId": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "classification": "introduced",
+            "findingId": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "classification": "introduced",
+            "findingId": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "classification": "introduced",
+            "findingId": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "classification": "introduced",
+            "findingId": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "classification": "introduced",
+            "findingId": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "classification": "introduced",
+            "findingId": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "classification": "introduced",
+            "findingId": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "classification": "introduced",
+            "findingId": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d8db18d4774e422f99950028c023f6f5",
+            "classification": "introduced",
+            "findingId": "finding-d8db18d4774e422f99950028c023f6f5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "classification": "introduced",
+            "findingId": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "classification": "introduced",
+            "findingId": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "classification": "introduced",
+            "findingId": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "classification": "introduced",
+            "findingId": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ff034b2cd88522b32db212cc513591f7",
+            "classification": "introduced",
+            "findingId": "finding-ff034b2cd88522b32db212cc513591f7",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "classification": "introduced",
+            "findingId": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "classification": "introduced",
+            "findingId": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "classification": "introduced",
+            "findingId": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "classification": "introduced",
+            "findingId": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "classification": "introduced",
+            "findingId": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-61f690512dc161c74214fbc903be8347",
+            "classification": "introduced",
+            "findingId": "finding-61f690512dc161c74214fbc903be8347",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "classification": "introduced",
+            "findingId": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c7e94fe4e9ad24a50bc5debddae28f05",
+            "classification": "introduced",
+            "findingId": "finding-c7e94fe4e9ad24a50bc5debddae28f05",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c3ff972524c5f7b7bd31b87375b1e786",
+            "classification": "introduced",
+            "findingId": "finding-c3ff972524c5f7b7bd31b87375b1e786",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a7fef1e5ceac0c90de4cc8bb73ea187f",
+            "classification": "introduced",
+            "findingId": "finding-a7fef1e5ceac0c90de4cc8bb73ea187f",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8a81578493a3380809ef0984ea6ef427",
+            "classification": "introduced",
+            "findingId": "finding-8a81578493a3380809ef0984ea6ef427",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-f57dbdc8f5fee06c77469ea8713b0248",
+            "classification": "introduced",
+            "findingId": "finding-f57dbdc8f5fee06c77469ea8713b0248",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-06ed68c0c2a271e8f6889bb6289c475a",
+            "classification": "introduced",
+            "findingId": "finding-06ed68c0c2a271e8f6889bb6289c475a",
+            "firstSeenThisRound": false,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c34c74b7516fc76e6da3359f718ad85c",
+            "classification": "introduced",
+            "findingId": "finding-c34c74b7516fc76e6da3359f718ad85c",
+            "firstSeenThisRound": false,
+            "severity": "P2",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 1,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "90783f1679d3b2a78badb405c20c4e774a4df3fb444ceb02232e19dd9e1056c1",
+      "reservation_id": "0d9bd14fdb064a85964e85bd5d54e360",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T14:24:46.145934Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "e57f1f32b2f19f8da7be5ad463936fee9c77c9edfb2c9be1aa11af924b11e0c3",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": "timeout",
+      "finalized": {
+        "digest": "complete",
+        "receipt": "not_applicable",
+        "status": "not_applicable"
+      },
+      "forced": false,
+      "hash_epoch": 1,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "transport_failure",
+      "output_sha256": "1282f382dc380aecac583983a62712b9fc2f120ae3ea9cc58ca4cde60196c934",
+      "reservation_id": "9d1dee08fa0a4a20a9e999cea896a593",
+      "round_consumed": false,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T14:29:02.767323Z",
+      "verdict": null
+    },
+    {
+      "artifact_sha256": "e57f1f32b2f19f8da7be5ad463936fee9c77c9edfb2c9be1aa11af924b11e0c3",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-441252d6c1d88494221fe3f252f4e425",
+            "classification": "introduced",
+            "findingId": "finding-441252d6c1d88494221fe3f252f4e425",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1941731f6d9d56a5b0f59456595da310",
+            "classification": "introduced",
+            "findingId": "finding-1941731f6d9d56a5b0f59456595da310",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "classification": "introduced",
+            "findingId": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "classification": "introduced",
+            "findingId": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "classification": "introduced",
+            "findingId": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "classification": "introduced",
+            "findingId": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "classification": "introduced",
+            "findingId": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "classification": "introduced",
+            "findingId": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "classification": "introduced",
+            "findingId": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "classification": "introduced",
+            "findingId": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "classification": "introduced",
+            "findingId": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "classification": "introduced",
+            "findingId": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d8db18d4774e422f99950028c023f6f5",
+            "classification": "introduced",
+            "findingId": "finding-d8db18d4774e422f99950028c023f6f5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "classification": "introduced",
+            "findingId": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "classification": "introduced",
+            "findingId": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "classification": "introduced",
+            "findingId": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "classification": "introduced",
+            "findingId": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ff034b2cd88522b32db212cc513591f7",
+            "classification": "introduced",
+            "findingId": "finding-ff034b2cd88522b32db212cc513591f7",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "classification": "introduced",
+            "findingId": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "classification": "introduced",
+            "findingId": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "classification": "introduced",
+            "findingId": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "classification": "introduced",
+            "findingId": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "classification": "introduced",
+            "findingId": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "classification": "introduced",
+            "findingId": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "classification": "introduced",
+            "findingId": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "classification": "introduced",
+            "findingId": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "classification": "introduced",
+            "findingId": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "classification": "introduced",
+            "findingId": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-61f690512dc161c74214fbc903be8347",
+            "classification": "introduced",
+            "findingId": "finding-61f690512dc161c74214fbc903be8347",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "classification": "introduced",
+            "findingId": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c7e94fe4e9ad24a50bc5debddae28f05",
+            "classification": "introduced",
+            "findingId": "finding-c7e94fe4e9ad24a50bc5debddae28f05",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c3ff972524c5f7b7bd31b87375b1e786",
+            "classification": "introduced",
+            "findingId": "finding-c3ff972524c5f7b7bd31b87375b1e786",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a7fef1e5ceac0c90de4cc8bb73ea187f",
+            "classification": "introduced",
+            "findingId": "finding-a7fef1e5ceac0c90de4cc8bb73ea187f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8a81578493a3380809ef0984ea6ef427",
+            "classification": "introduced",
+            "findingId": "finding-8a81578493a3380809ef0984ea6ef427",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-f57dbdc8f5fee06c77469ea8713b0248",
+            "classification": "introduced",
+            "findingId": "finding-f57dbdc8f5fee06c77469ea8713b0248",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-83296467826b03deb8cb8a8c2e0883ed",
+            "classification": "introduced",
+            "findingId": "finding-83296467826b03deb8cb8a8c2e0883ed",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-e92338516720ce0abad77a232b4be224",
+            "classification": "introduced",
+            "findingId": "finding-e92338516720ce0abad77a232b4be224",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-809c0a13bc32574f59d198e38f219116",
+            "classification": "introduced",
+            "findingId": "finding-809c0a13bc32574f59d198e38f219116",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-06ed68c0c2a271e8f6889bb6289c475a",
+            "classification": "introduced",
+            "findingId": "finding-06ed68c0c2a271e8f6889bb6289c475a",
+            "firstSeenThisRound": false,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c34c74b7516fc76e6da3359f718ad85c",
+            "classification": "introduced",
+            "findingId": "finding-c34c74b7516fc76e6da3359f718ad85c",
+            "firstSeenThisRound": false,
+            "severity": "P2",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 1,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "5aeb218d4753cfe14647a2d9a19bf7526fcf61d1f2e39ce1a0eb24f911d54b12",
+      "reservation_id": "13ac6304e4b8488abab5ce47b40ecc1a",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T14:38:50.517381Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "3578febbf07d390c0570579c9b72ced8fe75009f51729ba4970542caf6c23c7c",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": "timeout",
+      "finalized": {
+        "digest": "complete",
+        "receipt": "not_applicable",
+        "status": "not_applicable"
+      },
+      "forced": false,
+      "hash_epoch": 2,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "transport_failure",
+      "output_sha256": "b96684a5520610e960a0ccf03f4857e838728f438f2cbff14e4d995a04804ce3",
+      "reservation_id": "57b7196a503b49569c92d4110ad80e63",
+      "round_consumed": false,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T14:41:55.742418Z",
+      "verdict": null
+    },
+    {
+      "artifact_sha256": "3578febbf07d390c0570579c9b72ced8fe75009f51729ba4970542caf6c23c7c",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": true,
+        "items": [
+          {
+            "chainRoot": "finding-441252d6c1d88494221fe3f252f4e425",
+            "classification": "introduced",
+            "findingId": "finding-441252d6c1d88494221fe3f252f4e425",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c6fe11d2c1bcda3d2d8b81239476d361",
+            "classification": "introduced",
+            "findingId": "finding-c6fe11d2c1bcda3d2d8b81239476d361",
+            "firstSeenThisRound": true,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1941731f6d9d56a5b0f59456595da310",
+            "classification": "introduced",
+            "findingId": "finding-1941731f6d9d56a5b0f59456595da310",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "classification": "introduced",
+            "findingId": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "classification": "introduced",
+            "findingId": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "classification": "introduced",
+            "findingId": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "classification": "introduced",
+            "findingId": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "classification": "introduced",
+            "findingId": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "classification": "introduced",
+            "findingId": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "classification": "introduced",
+            "findingId": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "classification": "introduced",
+            "findingId": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "classification": "introduced",
+            "findingId": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "classification": "introduced",
+            "findingId": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d8db18d4774e422f99950028c023f6f5",
+            "classification": "introduced",
+            "findingId": "finding-d8db18d4774e422f99950028c023f6f5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "classification": "introduced",
+            "findingId": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "classification": "introduced",
+            "findingId": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "classification": "introduced",
+            "findingId": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "classification": "introduced",
+            "findingId": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ff034b2cd88522b32db212cc513591f7",
+            "classification": "introduced",
+            "findingId": "finding-ff034b2cd88522b32db212cc513591f7",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "classification": "introduced",
+            "findingId": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "classification": "introduced",
+            "findingId": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "classification": "introduced",
+            "findingId": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "classification": "introduced",
+            "findingId": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "classification": "introduced",
+            "findingId": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "classification": "introduced",
+            "findingId": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "classification": "introduced",
+            "findingId": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "classification": "introduced",
+            "findingId": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "classification": "introduced",
+            "findingId": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "classification": "introduced",
+            "findingId": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d92bdfdd50f330a56b00a8cb4f90c3a2",
+            "classification": "introduced",
+            "findingId": "finding-d92bdfdd50f330a56b00a8cb4f90c3a2",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8a186eb116a828e000c0cd2978a500e1",
+            "classification": "introduced",
+            "findingId": "finding-8a186eb116a828e000c0cd2978a500e1",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c8e92ed2eeaed96b44b1717c67504ce8",
+            "classification": "introduced",
+            "findingId": "finding-c8e92ed2eeaed96b44b1717c67504ce8",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7f914d3927e5b7da8863d56aa0768ba9",
+            "classification": "introduced",
+            "findingId": "finding-7f914d3927e5b7da8863d56aa0768ba9",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-61f690512dc161c74214fbc903be8347",
+            "classification": "introduced",
+            "findingId": "finding-61f690512dc161c74214fbc903be8347",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "classification": "introduced",
+            "findingId": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c7e94fe4e9ad24a50bc5debddae28f05",
+            "classification": "introduced",
+            "findingId": "finding-c7e94fe4e9ad24a50bc5debddae28f05",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c3ff972524c5f7b7bd31b87375b1e786",
+            "classification": "introduced",
+            "findingId": "finding-c3ff972524c5f7b7bd31b87375b1e786",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a7fef1e5ceac0c90de4cc8bb73ea187f",
+            "classification": "introduced",
+            "findingId": "finding-a7fef1e5ceac0c90de4cc8bb73ea187f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8a81578493a3380809ef0984ea6ef427",
+            "classification": "introduced",
+            "findingId": "finding-8a81578493a3380809ef0984ea6ef427",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-f57dbdc8f5fee06c77469ea8713b0248",
+            "classification": "introduced",
+            "findingId": "finding-f57dbdc8f5fee06c77469ea8713b0248",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 2,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "823b18e826e1e070b767be582611b850bd5a3d6eb2b399c7f601aab509e2e019",
+      "reservation_id": "621cb51f74d04b7aa070a7f3be1b73f1",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T14:50:48.917709Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "fa0a20f7ee187a734f1905c5d92a3f94fa30f6562f42e0b87c0cc8f4a9ceed93",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": "timeout",
+      "finalized": {
+        "digest": "complete",
+        "receipt": "not_applicable",
+        "status": "not_applicable"
+      },
+      "forced": false,
+      "hash_epoch": 2,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "transport_failure",
+      "output_sha256": "585d3f0a67e6288192c4fd9ac6c8cf84ac141fb488bf1efc17aed0f46bb006d1",
+      "reservation_id": "6d9050af18234d76a712883bf0641bc9",
+      "round_consumed": false,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T14:53:10.071760Z",
+      "verdict": null
+    },
+    {
+      "artifact_sha256": "c8100f3e8e007a1ae6d1a867d215dce039111a8466c16480380ab24ce3e39c20",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": true,
+        "items": [
+          {
+            "chainRoot": "finding-441252d6c1d88494221fe3f252f4e425",
+            "classification": "introduced",
+            "findingId": "finding-441252d6c1d88494221fe3f252f4e425",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c6fe11d2c1bcda3d2d8b81239476d361",
+            "classification": "introduced",
+            "findingId": "finding-c6fe11d2c1bcda3d2d8b81239476d361",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1941731f6d9d56a5b0f59456595da310",
+            "classification": "introduced",
+            "findingId": "finding-1941731f6d9d56a5b0f59456595da310",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "classification": "introduced",
+            "findingId": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "classification": "introduced",
+            "findingId": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "classification": "introduced",
+            "findingId": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "classification": "introduced",
+            "findingId": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "classification": "introduced",
+            "findingId": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "classification": "introduced",
+            "findingId": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "classification": "introduced",
+            "findingId": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "classification": "introduced",
+            "findingId": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "classification": "introduced",
+            "findingId": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "classification": "introduced",
+            "findingId": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d8db18d4774e422f99950028c023f6f5",
+            "classification": "introduced",
+            "findingId": "finding-d8db18d4774e422f99950028c023f6f5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "classification": "introduced",
+            "findingId": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "classification": "introduced",
+            "findingId": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "classification": "introduced",
+            "findingId": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "classification": "introduced",
+            "findingId": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ff034b2cd88522b32db212cc513591f7",
+            "classification": "introduced",
+            "findingId": "finding-ff034b2cd88522b32db212cc513591f7",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "classification": "introduced",
+            "findingId": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "classification": "introduced",
+            "findingId": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "classification": "introduced",
+            "findingId": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "classification": "introduced",
+            "findingId": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "classification": "introduced",
+            "findingId": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "classification": "introduced",
+            "findingId": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "classification": "introduced",
+            "findingId": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "classification": "introduced",
+            "findingId": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "classification": "introduced",
+            "findingId": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "classification": "introduced",
+            "findingId": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d92bdfdd50f330a56b00a8cb4f90c3a2",
+            "classification": "introduced",
+            "findingId": "finding-d92bdfdd50f330a56b00a8cb4f90c3a2",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8a186eb116a828e000c0cd2978a500e1",
+            "classification": "introduced",
+            "findingId": "finding-8a186eb116a828e000c0cd2978a500e1",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c8e92ed2eeaed96b44b1717c67504ce8",
+            "classification": "introduced",
+            "findingId": "finding-c8e92ed2eeaed96b44b1717c67504ce8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7f914d3927e5b7da8863d56aa0768ba9",
+            "classification": "introduced",
+            "findingId": "finding-7f914d3927e5b7da8863d56aa0768ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ac9c93d3c35e340d0e2fcb09f7afbbb0",
+            "classification": "introduced",
+            "findingId": "finding-ac9c93d3c35e340d0e2fcb09f7afbbb0",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-dcf4010ff45b34ad1eb76d24cca565bb",
+            "classification": "introduced",
+            "findingId": "finding-dcf4010ff45b34ad1eb76d24cca565bb",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eba0d614ed817350db8a5b3a2bea0740",
+            "classification": "introduced",
+            "findingId": "finding-eba0d614ed817350db8a5b3a2bea0740",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0d75480073857320c13302bbd85c2803",
+            "classification": "introduced",
+            "findingId": "finding-0d75480073857320c13302bbd85c2803",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-61f690512dc161c74214fbc903be8347",
+            "classification": "introduced",
+            "findingId": "finding-61f690512dc161c74214fbc903be8347",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "classification": "introduced",
+            "findingId": "finding-c01a40828781ae30eee8171d4bb515b0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c7e94fe4e9ad24a50bc5debddae28f05",
+            "classification": "introduced",
+            "findingId": "finding-c7e94fe4e9ad24a50bc5debddae28f05",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 3,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "84ba3ea7a674fa1b9cc5840f3ed46be1e12997510d5f9c567c1008ff691a9f98",
+      "reservation_id": "463c8df07e494285860cb9bd16ba7bfc",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T15:38:55.072789Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "52f960ffb45a068e0e6c150d10b14d6f8da5f3568623ef3f272ee6beee02d421",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": "timeout",
+      "finalized": {
+        "digest": "complete",
+        "receipt": "not_applicable",
+        "status": "not_applicable"
+      },
+      "forced": false,
+      "hash_epoch": 3,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "transport_failure",
+      "output_sha256": "a2c21a55c4bece717f286fcae47eb1f0a51addf5f31758058c06fcca6292f36b",
+      "reservation_id": "7cff894821b6472fa7139b50bc8d1c50",
+      "round_consumed": false,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T15:41:05.201961Z",
+      "verdict": null
+    },
+    {
+      "artifact_sha256": "52f960ffb45a068e0e6c150d10b14d6f8da5f3568623ef3f272ee6beee02d421",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": true,
+        "items": [
+          {
+            "chainRoot": "finding-441252d6c1d88494221fe3f252f4e425",
+            "classification": "introduced",
+            "findingId": "finding-441252d6c1d88494221fe3f252f4e425",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c6fe11d2c1bcda3d2d8b81239476d361",
+            "classification": "introduced",
+            "findingId": "finding-c6fe11d2c1bcda3d2d8b81239476d361",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1941731f6d9d56a5b0f59456595da310",
+            "classification": "introduced",
+            "findingId": "finding-1941731f6d9d56a5b0f59456595da310",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "classification": "introduced",
+            "findingId": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "classification": "introduced",
+            "findingId": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "classification": "introduced",
+            "findingId": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "classification": "introduced",
+            "findingId": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "classification": "introduced",
+            "findingId": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "classification": "introduced",
+            "findingId": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "classification": "introduced",
+            "findingId": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "classification": "introduced",
+            "findingId": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "classification": "introduced",
+            "findingId": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "classification": "introduced",
+            "findingId": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d8db18d4774e422f99950028c023f6f5",
+            "classification": "introduced",
+            "findingId": "finding-d8db18d4774e422f99950028c023f6f5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "classification": "introduced",
+            "findingId": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "classification": "introduced",
+            "findingId": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "classification": "introduced",
+            "findingId": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "classification": "introduced",
+            "findingId": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ff034b2cd88522b32db212cc513591f7",
+            "classification": "introduced",
+            "findingId": "finding-ff034b2cd88522b32db212cc513591f7",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "classification": "introduced",
+            "findingId": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "classification": "introduced",
+            "findingId": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "classification": "introduced",
+            "findingId": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "classification": "introduced",
+            "findingId": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "classification": "introduced",
+            "findingId": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "classification": "introduced",
+            "findingId": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "classification": "introduced",
+            "findingId": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "classification": "introduced",
+            "findingId": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "classification": "introduced",
+            "findingId": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "classification": "introduced",
+            "findingId": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d92bdfdd50f330a56b00a8cb4f90c3a2",
+            "classification": "introduced",
+            "findingId": "finding-d92bdfdd50f330a56b00a8cb4f90c3a2",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8a186eb116a828e000c0cd2978a500e1",
+            "classification": "introduced",
+            "findingId": "finding-8a186eb116a828e000c0cd2978a500e1",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c8e92ed2eeaed96b44b1717c67504ce8",
+            "classification": "introduced",
+            "findingId": "finding-c8e92ed2eeaed96b44b1717c67504ce8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7f914d3927e5b7da8863d56aa0768ba9",
+            "classification": "introduced",
+            "findingId": "finding-7f914d3927e5b7da8863d56aa0768ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ac9c93d3c35e340d0e2fcb09f7afbbb0",
+            "classification": "introduced",
+            "findingId": "finding-ac9c93d3c35e340d0e2fcb09f7afbbb0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-dcf4010ff45b34ad1eb76d24cca565bb",
+            "classification": "introduced",
+            "findingId": "finding-dcf4010ff45b34ad1eb76d24cca565bb",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eba0d614ed817350db8a5b3a2bea0740",
+            "classification": "introduced",
+            "findingId": "finding-eba0d614ed817350db8a5b3a2bea0740",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0d75480073857320c13302bbd85c2803",
+            "classification": "introduced",
+            "findingId": "finding-0d75480073857320c13302bbd85c2803",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-866967e8ccad389c6bb6a8c15c28b36c",
+            "classification": "introduced",
+            "findingId": "finding-866967e8ccad389c6bb6a8c15c28b36c",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4b1eea1a60418957ac0ff52e9336475b",
+            "classification": "introduced",
+            "findingId": "finding-4b1eea1a60418957ac0ff52e9336475b",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4c5e75ce92b1761421ea77882aede31e",
+            "classification": "introduced",
+            "findingId": "finding-4c5e75ce92b1761421ea77882aede31e",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 3,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "45821359a42198238cf216add39826dde09f68b979089abf7dc8210a9582fb18",
+      "reservation_id": "d07cab2441794de7bfb8ea24d677e277",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T15:48:10.496101Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "5378be031d2fbfae40cb0405af6b17852786b5c55aa21b2d0ef276d65069c0d1",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": true,
+        "items": [
+          {
+            "chainRoot": "finding-441252d6c1d88494221fe3f252f4e425",
+            "classification": "introduced",
+            "findingId": "finding-441252d6c1d88494221fe3f252f4e425",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c6fe11d2c1bcda3d2d8b81239476d361",
+            "classification": "introduced",
+            "findingId": "finding-c6fe11d2c1bcda3d2d8b81239476d361",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1941731f6d9d56a5b0f59456595da310",
+            "classification": "introduced",
+            "findingId": "finding-1941731f6d9d56a5b0f59456595da310",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "classification": "introduced",
+            "findingId": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "classification": "introduced",
+            "findingId": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "classification": "introduced",
+            "findingId": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "classification": "introduced",
+            "findingId": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "classification": "introduced",
+            "findingId": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "classification": "introduced",
+            "findingId": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "classification": "introduced",
+            "findingId": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "classification": "introduced",
+            "findingId": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "classification": "introduced",
+            "findingId": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "classification": "introduced",
+            "findingId": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d8db18d4774e422f99950028c023f6f5",
+            "classification": "introduced",
+            "findingId": "finding-d8db18d4774e422f99950028c023f6f5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "classification": "introduced",
+            "findingId": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "classification": "introduced",
+            "findingId": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "classification": "introduced",
+            "findingId": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "classification": "introduced",
+            "findingId": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ff034b2cd88522b32db212cc513591f7",
+            "classification": "introduced",
+            "findingId": "finding-ff034b2cd88522b32db212cc513591f7",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "classification": "introduced",
+            "findingId": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "classification": "introduced",
+            "findingId": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "classification": "introduced",
+            "findingId": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "classification": "introduced",
+            "findingId": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "classification": "introduced",
+            "findingId": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "classification": "introduced",
+            "findingId": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "classification": "introduced",
+            "findingId": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "classification": "introduced",
+            "findingId": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "classification": "introduced",
+            "findingId": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "classification": "introduced",
+            "findingId": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d92bdfdd50f330a56b00a8cb4f90c3a2",
+            "classification": "introduced",
+            "findingId": "finding-d92bdfdd50f330a56b00a8cb4f90c3a2",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8a186eb116a828e000c0cd2978a500e1",
+            "classification": "introduced",
+            "findingId": "finding-8a186eb116a828e000c0cd2978a500e1",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c8e92ed2eeaed96b44b1717c67504ce8",
+            "classification": "introduced",
+            "findingId": "finding-c8e92ed2eeaed96b44b1717c67504ce8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7f914d3927e5b7da8863d56aa0768ba9",
+            "classification": "introduced",
+            "findingId": "finding-7f914d3927e5b7da8863d56aa0768ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ac9c93d3c35e340d0e2fcb09f7afbbb0",
+            "classification": "introduced",
+            "findingId": "finding-ac9c93d3c35e340d0e2fcb09f7afbbb0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-dcf4010ff45b34ad1eb76d24cca565bb",
+            "classification": "introduced",
+            "findingId": "finding-dcf4010ff45b34ad1eb76d24cca565bb",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eba0d614ed817350db8a5b3a2bea0740",
+            "classification": "introduced",
+            "findingId": "finding-eba0d614ed817350db8a5b3a2bea0740",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0d75480073857320c13302bbd85c2803",
+            "classification": "introduced",
+            "findingId": "finding-0d75480073857320c13302bbd85c2803",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-866967e8ccad389c6bb6a8c15c28b36c",
+            "classification": "introduced",
+            "findingId": "finding-866967e8ccad389c6bb6a8c15c28b36c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4b1eea1a60418957ac0ff52e9336475b",
+            "classification": "introduced",
+            "findingId": "finding-4b1eea1a60418957ac0ff52e9336475b",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4c5e75ce92b1761421ea77882aede31e",
+            "classification": "introduced",
+            "findingId": "finding-4c5e75ce92b1761421ea77882aede31e",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 4,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "62151473f3f5a2a1e5f08faf04b2e008089fc5dbfb62aa132e3c7d1b79fbe2e4",
+      "reservation_id": "4b00f62f76474bc1975cbc6ce90d9616",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T15:53:51.294227Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "adaacb2cec6a0c322f8a79e17e4a10b9e70991180e1db211002cbd4d4f3e9416",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": true,
+        "items": [
+          {
+            "chainRoot": "finding-441252d6c1d88494221fe3f252f4e425",
+            "classification": "introduced",
+            "findingId": "finding-441252d6c1d88494221fe3f252f4e425",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c6fe11d2c1bcda3d2d8b81239476d361",
+            "classification": "introduced",
+            "findingId": "finding-c6fe11d2c1bcda3d2d8b81239476d361",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1941731f6d9d56a5b0f59456595da310",
+            "classification": "introduced",
+            "findingId": "finding-1941731f6d9d56a5b0f59456595da310",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "classification": "introduced",
+            "findingId": "finding-eafd220e3766877fb9c157b3deb4194c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "classification": "introduced",
+            "findingId": "finding-214d4e5cf48bb9edab03923a92b87648",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "classification": "introduced",
+            "findingId": "finding-c5e97c0e87ec3fc1c45368486365d2f8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "classification": "introduced",
+            "findingId": "finding-fc51cd536ccc1e3fed897c2c4bc2a619",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "classification": "introduced",
+            "findingId": "finding-7425110ed2d1d79bd9de2ea9ee4c61a8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "classification": "introduced",
+            "findingId": "finding-6d3686087c9e81c42418b76ef6403d65",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "classification": "introduced",
+            "findingId": "finding-c4495207ee60bc52a612f2a538b9220f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "classification": "introduced",
+            "findingId": "finding-19c20ac9a429d28228098ad6e1f4026d",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "classification": "introduced",
+            "findingId": "finding-601394931e1cdaf836b3ed864b55d5c9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "classification": "introduced",
+            "findingId": "finding-cfe41c1e22b8be09277dd9a74d590646",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d8db18d4774e422f99950028c023f6f5",
+            "classification": "introduced",
+            "findingId": "finding-d8db18d4774e422f99950028c023f6f5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "classification": "introduced",
+            "findingId": "finding-34d7e8b06f3fd0f1ae7c948014e30105",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "classification": "introduced",
+            "findingId": "finding-1ab9a9ea33eb07877a5e1eae1b939ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "classification": "introduced",
+            "findingId": "finding-0b84e880be804ea2fa3f43fa67ada466",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "classification": "introduced",
+            "findingId": "finding-7ac46e0265b8d1674712db7467edcbb0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ff034b2cd88522b32db212cc513591f7",
+            "classification": "introduced",
+            "findingId": "finding-ff034b2cd88522b32db212cc513591f7",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "classification": "introduced",
+            "findingId": "finding-4023bb4b12509520f61da413dfc8c0b8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "classification": "introduced",
+            "findingId": "finding-50545a49fbf42a4b34bb2a343987fd9e",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "classification": "introduced",
+            "findingId": "finding-5c8893278ce7c364d4b23ada067d78a5",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "classification": "introduced",
+            "findingId": "finding-a8fd9eced919ce7418698866ed5fd034",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "classification": "introduced",
+            "findingId": "finding-add1bcd32a42ad292c2c8d6edbc8fa77",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "classification": "introduced",
+            "findingId": "finding-82308bfca8c7862d5c88f9af3a4e62ae",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "classification": "introduced",
+            "findingId": "finding-813acdc77e2c80ef372e4561e8c6b073",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "classification": "introduced",
+            "findingId": "finding-f439ce73f1a3c32842c604b5961a50eb",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "classification": "introduced",
+            "findingId": "finding-3a3595836fc5fa2962e380240b52fcea",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "classification": "introduced",
+            "findingId": "finding-fcc658b05cb1a6f791db1bb6773ae97a",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-d92bdfdd50f330a56b00a8cb4f90c3a2",
+            "classification": "introduced",
+            "findingId": "finding-d92bdfdd50f330a56b00a8cb4f90c3a2",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8a186eb116a828e000c0cd2978a500e1",
+            "classification": "introduced",
+            "findingId": "finding-8a186eb116a828e000c0cd2978a500e1",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c8e92ed2eeaed96b44b1717c67504ce8",
+            "classification": "introduced",
+            "findingId": "finding-c8e92ed2eeaed96b44b1717c67504ce8",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-7f914d3927e5b7da8863d56aa0768ba9",
+            "classification": "introduced",
+            "findingId": "finding-7f914d3927e5b7da8863d56aa0768ba9",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ac9c93d3c35e340d0e2fcb09f7afbbb0",
+            "classification": "introduced",
+            "findingId": "finding-ac9c93d3c35e340d0e2fcb09f7afbbb0",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-dcf4010ff45b34ad1eb76d24cca565bb",
+            "classification": "introduced",
+            "findingId": "finding-dcf4010ff45b34ad1eb76d24cca565bb",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-eba0d614ed817350db8a5b3a2bea0740",
+            "classification": "introduced",
+            "findingId": "finding-eba0d614ed817350db8a5b3a2bea0740",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-0d75480073857320c13302bbd85c2803",
+            "classification": "introduced",
+            "findingId": "finding-0d75480073857320c13302bbd85c2803",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-866967e8ccad389c6bb6a8c15c28b36c",
+            "classification": "introduced",
+            "findingId": "finding-866967e8ccad389c6bb6a8c15c28b36c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4b1eea1a60418957ac0ff52e9336475b",
+            "classification": "introduced",
+            "findingId": "finding-4b1eea1a60418957ac0ff52e9336475b",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4c5e75ce92b1761421ea77882aede31e",
+            "classification": "introduced",
+            "findingId": "finding-4c5e75ce92b1761421ea77882aede31e",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 4,
+      "head_sha": "84ba61ccef9de4140c786c8ee73050c2375133f9",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "b8cab991965be90a9a98818b342d2f53354e9e8db86e3193721b9e3cec04b55b",
+      "reservation_id": "ac9d24b3b0ff48e5ae695fe53a4088da",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-13T15:55:53.094411Z",
+      "verdict": "SHIP"
+    }
+  ],
+  "review_hash_epoch": {
+    "plan": 5,
+    "plan#completion": 4
+  },
+  "review_pending_rounds": {
+    "plan": 2
+  },
+  "review_reservations": {
+    "c91570dacc3d47f3ba992f3847901572": {
+      "artifact_sha256": "fa0a20f7ee187a734f1905c5d92a3f94fa30f6562f42e0b87c0cc8f4a9ceed93",
+      "counter_scope": "plan",
+      "epoch": 2,
+      "forced": false,
+      "review_type": "plan",
+      "superseded_by": "reset",
+      "superseded_epoch": 3
+    },
+    "cb673339de3443a9abd1d5ff77e95b66": {
+      "artifact_sha256": "fa0a20f7ee187a734f1905c5d92a3f94fa30f6562f42e0b87c0cc8f4a9ceed93",
+      "counter_scope": "plan",
+      "epoch": 2,
+      "forced": false,
+      "review_type": "plan",
+      "superseded_by": "reset",
+      "superseded_epoch": 3
+    }
+  },
+  "review_transport_failures": {
+    "plan": 0
+  },
+  "spec_path": ".flow/specs/fn-1-homeplane-walking-skeleton-install.md",
+  "status": "open",
+  "title": "Homeplane walking skeleton: install \u2192 enrol \u2192 vault \u2192 GNO \u2192 harnesses \u2192 connector \u2192 reversible write \u2192 revoke",
+  "tracker": {
+    "baseHashFlow": null,
+    "baseHashTracker": null,
+    "depRelations": [],
+    "id": null,
+    "identifier": null,
+    "lastSyncedAt": null,
+    "mergeBaseFlow": null,
+    "mergeBaseTracker": null,
+    "url": null
+  },
+  "updated_at": "2026-08-13T15:55:53.105439Z"
+}
