@@ -11,6 +11,7 @@
 # Usage:
 #   deploy/server/verify.sh --host clawniel --fqdn homeplane.example.ts.net \
 #                           [--host-ip 100.x.y.z] [--gateway-port 44022] [--json]
+#                           [--pending <check> --pending-reason "<why>"]
 #   deploy/server/verify.sh --host clawniel --snapshot   # state fingerprint only
 #
 # --snapshot prints the fingerprint of everything an upgrade must preserve (age
@@ -26,6 +27,8 @@ GATEWAY_PORT=44022
 PREFIX="\$HOME/homeplane"
 AS_JSON=0
 SNAPSHOT=0
+PENDING_CHECKS=""
+PENDING_REASON=""
 
 die() { echo "$PROGRAM: $*" >&2; exit 1; }
 
@@ -37,6 +40,8 @@ while [[ $# -gt 0 ]]; do
     --gateway-port) GATEWAY_PORT="$2"; shift 2 ;;
     --prefix) PREFIX="$2"; shift 2 ;;
     --json) AS_JSON=1; shift ;;
+    --pending) PENDING_CHECKS="$PENDING_CHECKS $2"; shift 2 ;;
+    --pending-reason) PENDING_REASON="$2"; shift 2 ;;
     --snapshot) SNAPSHOT=1; shift ;;
     -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option $1" ;;
@@ -80,24 +85,41 @@ fi
 
 RESULTS=()
 FAILED=0
+PENDING_COUNT=0
 
 # check NAME COMMAND... — records the outcome, never aborts. A verification run
 # that stops at the first failure tells you about one problem; this one tells
 # you about all of them.
+#
+# A check named in --pending is recorded as "pending" with its declared reason
+# instead of "fail". That exists for exactly one situation: a deployment step
+# that is blocked on someone outside this machine (today: the Google OAuth app
+# Daniel must create). The alternative — weakening the check until it passes —
+# is how a verification suite quietly stops verifying. A pending check is
+# printed loudly, is machine-readable in the JSON, and turns the overall result
+# into "pass_with_pending", never "pass".
 check() {
   local name="$1" expect="$2"; shift 2
   local out rc=0
   out="$("$@" 2>&1)" || rc=$?
   local result="pass"
   if [[ "$expect" == "ok" && $rc -ne 0 ]] || [[ "$expect" == "fail" && $rc -eq 0 ]]; then
-    result="fail"; FAILED=1
+    if [[ " $PENDING_CHECKS " == *" $name "* ]]; then
+      result="pending"; PENDING_COUNT=$((PENDING_COUNT + 1))
+    else
+      result="fail"; FAILED=1
+    fi
   fi
   # Detail is truncated: this is evidence, not a log dump.
   local detail="${out//$'\n'/ }"
   detail="${detail:0:300}"
-  RESULTS+=("$(printf '{"check":"%s","expect":"%s","exit_code":%d,"result":"%s","detail":%s}' \
-    "$name" "$expect" "$rc" "$result" "$(printf '%s' "$detail" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")")
-  printf '%-34s %-6s %s\n' "$name" "$result" "$detail" >&2
+  local reason_json='null'
+  if [[ "$result" == "pending" ]]; then
+    reason_json="$(printf '%s' "$PENDING_REASON" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+  fi
+  RESULTS+=("$(printf '{"check":"%s","expect":"%s","exit_code":%d,"result":"%s","detail":%s,"pending_reason":%s}' \
+    "$name" "$expect" "$rc" "$result" "$(printf '%s' "$detail" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" "$reason_json")")
+  printf '%-34s %-8s %s\n' "$name" "$result" "$detail" >&2
 }
 
 # 1-2. Supervision. `is-active` is the whole assertion: systemd only reports
@@ -144,16 +166,49 @@ check admin_cli_audit ok remote \
 check credential_key_0600 ok remote \
   "[ \"\$(stat -c '%a' $PREFIX/var/secrets.age-key)\" = 600 ] && echo 0600"
 
-# 9. Provider secrets are present in the store AND encrypted at rest: the audit
-# log records the import, and the plaintext does not appear in the database
-# file. The needle is read from a file, never passed as an argument.
-check secret_imported_and_encrypted ok remote \
-  "$PREFIX/bin/homeplane-server admin audit -state-dir $PREFIX/var -limit 0 -json | grep -q secret_imported && echo imported"
+# 9. The provider app credentials the DEPLOYED MANIFEST requires are actually in
+# the store — by ref, not by "some import happened at some point".
+#
+# The refs are read out of the manifest rather than hardcoded: they are exactly
+# the driver's `*_ref` parameters, which is what the credential broker will look
+# up when a machine starts an OAuth flow. A deployment missing one of them looks
+# healthy and fails at the first `add-credentials`.
+#
+# This check FAILS while the Homeplane-owned Google OAuth app does not exist yet
+# (fn-1.12 / Daniel). That is the intended behavior: the earlier version of this
+# check greped for any `secret_imported` row, which a throwaway self-test import
+# satisfied — a verification that passes without the thing it verifies is worse
+# than no verification.
+check provider_secret_refs_present ok remote \
+  "set -e
+   missing=''
+   for ref in \$(jq -r '.connectors[].credential_acquisition.params | to_entries[] | select(.key | endswith(\"_ref\")) | .value' $PREFIX/etc/manifest.json); do
+     if $PREFIX/bin/homeplane-server admin audit -state-dir $PREFIX/var -limit 0 -json \
+        | jq -e --arg r \"\$ref\" 'select(.Detail.secret_ref == \$r)' >/dev/null; then
+       echo \"present: \$ref\"
+     else
+       missing=\"\$missing \$ref\"
+     fi
+   done
+   if [ -n \"\$missing\" ]; then echo \"MISSING:\$missing\"; exit 1; fi"
+
+# 10. Whatever is in the store is stored as ciphertext. Every value written by
+# `admin secret import` is an age message, so the age header must appear in the
+# database file and there must be at least as many headers as imported secrets.
+# The plaintext is never available here — that check belongs to import time —
+# but "the bytes on disk are age messages" is checkable at any time.
+check secrets_encrypted_at_rest ok remote \
+  "set -e
+   headers=\$(grep -a -c 'age-encryption.org/v1' $PREFIX/var/homeplane.db || true)
+   imports=\$($PREFIX/bin/homeplane-server admin audit -state-dir $PREFIX/var -limit 0 -json \
+     | jq -s '[.[] | select(.Event == \"secret_imported\")] | map(.Detail.secret_ref) | unique | length')
+   echo \"age_headers=\$headers stored_refs=\$imports\"
+   [ \"\$headers\" -ge \"\$imports\" ] && [ \"\$imports\" -gt 0 ]"
 
 if [[ $AS_JSON -eq 1 ]]; then
-  printf '{"host":"%s","fqdn":"%s","host_ip":"%s","gateway_port":%s,"checked_at":"%s","result":"%s","checks":[%s]}\n' \
-    "$HOST" "$FQDN" "$HOST_IP" "$GATEWAY_PORT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    "$([[ $FAILED -eq 0 ]] && echo pass || echo fail)" \
+  printf '{"host":"%s","fqdn":"%s","host_ip":"%s","gateway_port":%s,"checked_at":"%s","pending_count":%d,"result":"%s","checks":[%s]}\n' \
+    "$HOST" "$FQDN" "$HOST_IP" "$GATEWAY_PORT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PENDING_COUNT" \
+    "$(if [[ $FAILED -ne 0 ]]; then echo fail; elif [[ $PENDING_COUNT -gt 0 ]]; then echo pass_with_pending; else echo pass; fi)" \
     "$(IFS=,; echo "${RESULTS[*]}")"
 fi
 

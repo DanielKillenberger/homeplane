@@ -159,6 +159,57 @@ func TestToolHivePinsCoverBothLinuxArchitectures(t *testing.T) {
 	}
 }
 
+// TestInstallerVerifiesEverythingBeforeMutatingTheDeployment holds the
+// installer's central safety property structurally: acquisition and
+// verification happen in a preflight phase, and the first write that touches
+// the running deployment comes after it. Without the ordering, a failed
+// ToolHive download or a missing unit template leaves a host with a new server
+// binary and an old everything-else — a state no test and no operator asked for.
+func TestInstallerVerifiesEverythingBeforeMutatingTheDeployment(t *testing.T) {
+	body := deployFile(t, "install-server.sh")
+	commit := strings.Index(body, "# --- commit ---")
+	if commit < 0 {
+		t.Fatal("install-server.sh has no commit phase marker; the preflight/commit split is the safety property")
+	}
+	// Everything that can fail on missing input, network, or checksum must be
+	// upstream of the commit marker.
+	for _, preflight := range []string{
+		`verify "$STAGE_DIR/$SERVER_ARTIFACT" "$SERVER_SHA"`,
+		`missing unit template`,
+		`no manifest.json in $STAGE_DIR`,
+		`could not download $url`,
+	} {
+		idx := strings.Index(body, preflight)
+		if idx < 0 {
+			t.Errorf("install-server.sh no longer contains preflight step %q", preflight)
+			continue
+		}
+		if idx > commit {
+			t.Errorf("preflight step %q happens AFTER the commit phase; a failure there would leave a half-upgraded host", preflight)
+		}
+	}
+	// ...and the first mutation of the live deployment must be downstream.
+	install := strings.Index(body, `run install -m 0755 "$STAGE_DIR/$SERVER_ARTIFACT" "$BIN_DIR/homeplane-server"`)
+	if install < 0 {
+		t.Fatal("install-server.sh no longer installs the server binary the way this test expects")
+	}
+	if install < commit {
+		t.Error("the server binary is installed before the commit phase: acquisition failures would leave a partially upgraded prefix")
+	}
+}
+
+// TestInstallerHandlesTheInstalledConfigFallback: an upgrade with no staged
+// config reuses the INSTALLED one, which makes `install src dst` a same-file
+// call — and GNU install rejects that, aborting the advertised fallback under
+// `set -e`. Verified live on the host as well; this keeps the guard from being
+// refactored away.
+func TestInstallerHandlesTheInstalledConfigFallback(t *testing.T) {
+	body := deployFile(t, "install-server.sh")
+	if !strings.Contains(body, `if [[ "$(abs_path "$CONFIG")" == "$(abs_path "$ETC_DIR/server.env")" ]]; then`) {
+		t.Error("install-server.sh does not guard the same-file config install; the installed-config upgrade fallback would abort")
+	}
+}
+
 // TestDeployScriptsAreSyntacticallyValid. They run on a production host, often
 // unattended; `bash -n` is the floor.
 func TestDeployScriptsAreSyntacticallyValid(t *testing.T) {

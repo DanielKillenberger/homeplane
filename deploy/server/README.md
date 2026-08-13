@@ -123,9 +123,21 @@ key and orphan every stored secret. It is a hard prerequisite for
 `admin secret import`, which encrypts against that key.
 
 ```bash
-# BACK THIS UP OFFLINE. Without it, every stored provider secret is unrecoverable.
-scp clawniel:homeplane/var/secrets.age-key <somewhere offline>
+# BACK THIS UP OFF THE SERVER. Without it, every stored provider secret is
+# unrecoverable — a lost key is not a degraded deployment, it is a destroyed one.
+mkdir -p ~/.homeplane/backups && chmod 700 ~/.homeplane ~/.homeplane/backups
+scp clawniel:homeplane/var/secrets.age-key ~/.homeplane/backups/clawniel-secrets.age-key
+chmod 600 ~/.homeplane/backups/clawniel-secrets.age-key
+# Verify the copy rather than assuming scp succeeded:
+shasum -a 256 ~/.homeplane/backups/clawniel-secrets.age-key
+ssh clawniel 'sha256sum homeplane/var/secrets.age-key'
 ```
+
+Done for this deployment on 2026-08-14 (copy at
+`~/.homeplane/backups/clawniel-secrets.age-key`, 0600, sha256 verified equal to
+the on-host key). Move it somewhere genuinely offline when convenient — a
+laptop is off the *server*, which is what protects against losing the box, but
+it is not a cold backup.
 
 Importing a provider app credential (never as an argument, never echoed):
 
@@ -147,6 +159,32 @@ itself is verified on every deployment against a throwaway ref
 (`deploy/bootstrap-selftest`): imported from a 0600 file, encrypted at rest —
 the plaintext does not appear in the database — and recorded in the audit log by
 ref and generation only.
+
+### Pending: the Google OAuth app credentials
+
+`provider_secret_refs_present` in `verify.sh` **fails today**, on purpose. The
+refs the deployed manifest requires — `google/client-id`, `google/client-secret`
+— are not in the store, because the Homeplane-owned Google OAuth client does not
+exist yet. Creating it is Daniel's own action (an authenticated Google Cloud
+Console session on his account; nothing here can or should mint credentials
+inside it), and its output feeds fn-1.12.
+
+Deliberately NOT done: reusing the existing Hermes OAuth client on the same
+host. Two systems sharing one app identity blurs ownership, makes revocation
+ambiguous, and widens the blast radius of a single compromised client.
+
+The completion step, once the client exists (values into 0600 files on the host,
+never through a chat channel, never as an argument):
+
+```bash
+# on clawniel, after placing ~/.homeplane/google-client-{id,secret} (0600)
+cd ~/homeplane
+bin/homeplane-server admin secret import -state-dir var -file ~/.homeplane/google-client-id     google/client-id
+bin/homeplane-server admin secret import -state-dir var -file ~/.homeplane/google-client-secret google/client-secret
+rm -f ~/.homeplane/google-client-id ~/.homeplane/google-client-secret
+```
+
+Then re-run `verify.sh` WITHOUT `--pending`; all ten checks must pass.
 
 ## Connector manifest
 
@@ -182,7 +220,19 @@ deploy/server/verify.sh --host clawniel --fqdn homeplane.tailab4e9b.ts.net --jso
 | `healthz_green_over_tailnet` | every server component reports ok |
 | `admin_cli_audit` | the admin CLI reads and writes the real state directory |
 | `credential_key_0600` | the age key exists with 0600 |
-| `secret_imported_and_encrypted` | the store records an import, and the plaintext is not in the database |
+| `provider_secret_refs_present` | every `*_ref` the deployed manifest names has been imported (currently **pending**, above) |
+| `secrets_encrypted_at_rest` | every stored secret is an age message on disk, not plaintext |
+
+A check listed in `--pending` is reported as `pending` with its reason instead of
+`fail`, and the run's result becomes `pass_with_pending` — never `pass`. It is
+the one honest way to record a step blocked outside this machine; weakening a
+check until it goes green is how a verification suite stops verifying:
+
+```bash
+deploy/server/verify.sh --host clawniel --fqdn homeplane.tailab4e9b.ts.net \
+  --pending provider_secret_refs_present \
+  --pending-reason "Homeplane-owned Google OAuth app not created yet (Daniel; feeds fn-1.12)"
+```
 
 ## Troubleshooting
 

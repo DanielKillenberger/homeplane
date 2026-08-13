@@ -151,6 +151,13 @@ expected_sha() {
   awk -v want="$name" '$2 == want || $2 == "*" want { print $1; found=1 } END { if (!found) exit 1 }' "$manifest"
 }
 
+# abs_path resolves a path without requiring it to exist as a directory, so the
+# same-file comparison below is about the FILES, not about how they were typed.
+abs_path() {
+  local p="$1"
+  printf '%s/%s\n' "$(cd -- "$(dirname -- "$p")" && pwd -P)" "$(basename -- "$p")"
+}
+
 verify() {
   local file="$1" want="$2" got
   got="$(sha256_of "$file")"
@@ -160,10 +167,26 @@ verify() {
 Nothing has been installed."
 }
 
+# --- preflight: acquire and verify EVERYTHING before touching the deployment --
+#
+# The split between this section and "commit" below is the script's central
+# safety property. Every input a re-deploy needs — the server binary, the
+# ToolHive archive, the config, the manifest, both unit templates — is located,
+# checksum-verified and staged into a scratch directory FIRST. A missing file, a
+# failed download or a checksum mismatch therefore aborts while the running
+# deployment is still entirely intact. The commit phase that follows does only
+# renames and restarts, and every one of its inputs is already on local disk.
+
 [[ -f "$STAGE_DIR/$SERVER_ARTIFACT" ]] \
   || die "no $SERVER_ARTIFACT in $STAGE_DIR (build it with scripts/stage-release.sh)"
 [[ -f "$STAGE_DIR/SHA256SUMS" ]] \
   || die "no SHA256SUMS in $STAGE_DIR; refusing to install an unverified server binary"
+[[ -f "$STAGE_DIR/manifest.json" ]] || die "no manifest.json in $STAGE_DIR"
+for unit in homeplane-gateway homeplane-server; do
+  [[ -f "$STAGE_DIR/units/$unit.service.tmpl" ]] \
+    || die "missing unit template $STAGE_DIR/units/$unit.service.tmpl"
+done
+
 SERVER_SHA="$(expected_sha "$SERVER_ARTIFACT" "$STAGE_DIR/SHA256SUMS")" \
   || die "$SERVER_ARTIFACT is not listed in SHA256SUMS; refusing to install it"
 verify "$STAGE_DIR/$SERVER_ARTIFACT" "$SERVER_SHA"
@@ -178,25 +201,29 @@ THV_ARCHIVE="$(awk '!/^#/ && NF == 2 {print $2}' "$THV_PINS" | grep -- "_linux_$
 [[ -n "$THV_ARCHIVE" ]] || die "toolhive-pinned.sha256 pins no linux-$GOARCH archive"
 THV_VERSION="$(sed -E 's/^toolhive_([0-9.]+)_.*/\1/' <<<"$THV_ARCHIVE")"
 
-# --- install -----------------------------------------------------------------
-
 info "prefix        $PREFIX"
 info "state dir     $STATE_DIR (preserved across upgrades)"
 info "tsnet node    $HOMEPLANE_HOSTNAME ($ENDPOINT_URL)"
 info "gateway       thv $THV_VERSION, workload $HOMEPLANE_GATEWAY_WORKLOAD on 127.0.0.1:$HOMEPLANE_GATEWAY_PORT"
 
-run mkdir -p "$BIN_DIR" "$ETC_DIR" "$PREFIX/releases" "$UNIT_DIR"
-# 0700 on the state dir: it holds the age key, the credential store and the
-# tsnet node identity.
-run mkdir -p "$STATE_DIR"
-run chmod 700 "$STATE_DIR"
+STAGING=""
+if [[ $DRY_RUN -eq 0 ]]; then
+  STAGING="$(mktemp -d "${TMPDIR:-/tmp}/homeplane-install.XXXXXX")"
+  trap 'rm -rf "$STAGING"' EXIT
+fi
 
-# install(1) writes through a temporary and renames, so a running server is
-# never reading a half-written binary; the unit restart below picks up the new
-# one.
-run install -m 0755 "$STAGE_DIR/$SERVER_ARTIFACT" "$BIN_DIR/homeplane-server"
+# The releases directory is the only pre-commit write outside the scratch dir:
+# it is a cache of verified archives, it is not read by the running deployment,
+# and keeping the download here is what lets a later re-run work offline.
+run mkdir -p "$PREFIX/releases"
 
-if [[ ! -x "$BIN_DIR/thv" ]] || [[ "$("$BIN_DIR/thv" version 2>/dev/null | head -1)" != *"$THV_VERSION"* ]]; then
+# ToolHive: reuse the installed binary when it is already the pinned version;
+# otherwise acquire + verify + extract into the scratch dir. Nothing is
+# installed yet.
+THV_STAGED=""
+if [[ -x "$BIN_DIR/thv" ]] && [[ "$("$BIN_DIR/thv" version 2>/dev/null | head -1)" == *"$THV_VERSION"* ]]; then
+  info "thv $THV_VERSION already installed"
+else
   archive="$PREFIX/releases/$THV_ARCHIVE"
   if [[ ! -f "$archive" ]]; then
     if [[ -f "$STAGE_DIR/$THV_ARCHIVE" ]]; then
@@ -209,22 +236,75 @@ if [[ ! -x "$BIN_DIR/thv" ]] || [[ "$("$BIN_DIR/thv" version 2>/dev/null | head 
     fi
   fi
   if [[ $DRY_RUN -eq 0 ]]; then
-    verify "$archive" "$(expected_sha "$THV_ARCHIVE" "$THV_PINS")"
+    THV_EXPECTED="$(expected_sha "$THV_ARCHIVE" "$THV_PINS")" \
+      || die "$THV_ARCHIVE is not listed in $THV_PINS"
+    verify "$archive" "$THV_EXPECTED"
     info "verified $THV_ARCHIVE against the pin file"
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
-    tar -xzf "$archive" -C "$tmp" thv
-    install -m 0755 "$tmp/thv" "$BIN_DIR/thv"
+    tar -xzf "$archive" -C "$STAGING" thv
+    THV_STAGED="$STAGING/thv"
+    chmod 0755 "$THV_STAGED"
   fi
-else
-  info "thv $THV_VERSION already installed"
+fi
+
+# Units are rendered into the scratch dir too, so a template the installer
+# cannot substitute fails before any unit file on disk is replaced.
+render_unit() {
+  local src="$1" dst="$2"
+  sed -e "s#@PREFIX@#$PREFIX#g" \
+      -e "s#@STATE_DIR@#$STATE_DIR#g" \
+      -e "s#@HOSTNAME@#$HOMEPLANE_HOSTNAME#g" \
+      -e "s#@ADDR@#$HOMEPLANE_ADDR#g" \
+      -e "s#@ENDPOINT_URL@#$ENDPOINT_URL#g" \
+      -e "s#@GATEWAY_PORT@#$HOMEPLANE_GATEWAY_PORT#g" \
+      -e "s#@GATEWAY_WORKLOAD@#$HOMEPLANE_GATEWAY_WORKLOAD#g" \
+      -e "s#@GATEWAY_NAME@#$HOMEPLANE_GATEWAY_NAME#g" \
+      "$src" > "$dst"
+}
+
+if [[ $DRY_RUN -eq 0 ]]; then
+  mkdir -p "$STAGING/units"
+  for unit in homeplane-gateway homeplane-server; do
+    render_unit "$STAGE_DIR/units/$unit.service.tmpl" "$STAGING/units/$unit.service"
+    # An unsubstituted placeholder reaches systemd verbatim and starts a unit
+    # with a literal "@SOMETHING@" in its command line.
+    if grep -q '@[A-Z_]*@' "$STAGING/units/$unit.service"; then
+      die "$unit.service still contains an unsubstituted placeholder: $(grep -o '@[A-Z_]*@' "$STAGING/units/$unit.service" | sort -u | tr '\n' ' ')"
+    fi
+  done
+fi
+
+# --- commit ------------------------------------------------------------------
+#
+# From here on every input is verified and local. What remains are directory
+# creations, renames and systemd calls.
+
+run mkdir -p "$BIN_DIR" "$ETC_DIR" "$UNIT_DIR"
+# 0700 on the state dir: it holds the age key, the credential store and the
+# tsnet node identity.
+run mkdir -p "$STATE_DIR"
+run chmod 700 "$STATE_DIR"
+
+# install(1) writes through a temporary and renames, so a running server is
+# never reading a half-written binary; the unit restart below picks up the new
+# one.
+run install -m 0755 "$STAGE_DIR/$SERVER_ARTIFACT" "$BIN_DIR/homeplane-server"
+if [[ -n "$THV_STAGED" ]]; then
+  run install -m 0755 "$THV_STAGED" "$BIN_DIR/thv"
 fi
 
 # Config and manifest are replaced on every run — they are declarative inputs,
 # and an upgrade that left a stale manifest behind would authorize yesterday's
 # tool surface.
-run install -m 0600 "$CONFIG" "$ETC_DIR/server.env"
-[[ -f "$STAGE_DIR/manifest.json" ]] || die "no manifest.json in $STAGE_DIR"
+#
+# The same-file case is real, not theoretical: an upgrade with no staged config
+# reuses the INSTALLED one, and `install src dst` with src == dst fails. Only
+# the mode is (re-)applied then.
+if [[ "$(abs_path "$CONFIG")" == "$(abs_path "$ETC_DIR/server.env")" ]]; then
+  info "configuration is already installed at $ETC_DIR/server.env"
+  run chmod 0600 "$ETC_DIR/server.env"
+else
+  run install -m 0600 "$CONFIG" "$ETC_DIR/server.env"
+fi
 run install -m 0644 "$STAGE_DIR/manifest.json" "$ETC_DIR/manifest.json"
 if [[ -f "$STAGE_DIR/README.md" ]]; then
   run install -m 0644 "$STAGE_DIR/README.md" "$PREFIX/README-deploy.md"
@@ -270,28 +350,14 @@ else
 fi
 
 # --- units -------------------------------------------------------------------
-
-render_unit() {
-  local src="$1" dst="$2"
-  sed -e "s#@PREFIX@#$PREFIX#g" \
-      -e "s#@STATE_DIR@#$STATE_DIR#g" \
-      -e "s#@HOSTNAME@#$HOMEPLANE_HOSTNAME#g" \
-      -e "s#@ADDR@#$HOMEPLANE_ADDR#g" \
-      -e "s#@ENDPOINT_URL@#$ENDPOINT_URL#g" \
-      -e "s#@GATEWAY_PORT@#$HOMEPLANE_GATEWAY_PORT#g" \
-      -e "s#@GATEWAY_WORKLOAD@#$HOMEPLANE_GATEWAY_WORKLOAD#g" \
-      -e "s#@GATEWAY_NAME@#$HOMEPLANE_GATEWAY_NAME#g" \
-      "$src" > "$dst"
-}
-
+#
+# Already rendered and placeholder-checked in the scratch dir during preflight;
+# this only moves them into place.
 for unit in homeplane-gateway homeplane-server; do
-  src="$STAGE_DIR/units/$unit.service.tmpl"
-  [[ -f "$src" ]] || die "missing unit template $src"
   if [[ $DRY_RUN -eq 1 ]]; then
-    echo "would render $src -> $UNIT_DIR/$unit.service"
+    echo "would render $STAGE_DIR/units/$unit.service.tmpl -> $UNIT_DIR/$unit.service"
   else
-    render_unit "$src" "$UNIT_DIR/$unit.service"
-    chmod 644 "$UNIT_DIR/$unit.service"
+    install -m 0644 "$STAGING/units/$unit.service" "$UNIT_DIR/$unit.service"
   fi
 done
 
