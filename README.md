@@ -14,11 +14,12 @@ Architecture, decisions, and scope live in `STRATEGY.md`,
 | Path | What it is |
 |---|---|
 | `cmd/homeplane-server` | Control plane: tsnet-embedded HTTP server + server-local admin CLI |
-| `cmd/homeplane-agent` | Machine agent: `enrol`, `status`, `add-credentials` |
+| `cmd/homeplane-agent` | Machine agent: `enrol`, `status`, `vault`, `gno`, `add-credentials` |
 | `internal/agent` | Agent state directory, control-plane client, enrolment, status |
 | `internal/agent/credflow` | Machine half of the credential flow: loopback listener, browser, relay |
+| `internal/agent/gno` | Retrieval engine (GNO): install, disposable machine-local index, supervision, endpoint descriptor |
 | `internal/server/credflow` | Credential broker: the OAuth flow state machine and credential swap |
-| `install.sh` | Installer: platform gating, checksummed artifacts, Node 22 provisioning |
+| `install.sh` | Installer: platform gating, checksummed artifacts, Node 22 + Bun 1.3 provisioning |
 | `internal/store` | SQLite persistence (machines, grants, audit, encrypted secrets) |
 | `internal/server` | Enrolment, grant lifecycle, audit, health handlers |
 | `internal/server/connectors` | Connector manifest, policy engine, audit derivation, in-process broker |
@@ -105,18 +106,20 @@ Homeplane grant token stripped — MCP semantics stay with the gateway.
 ## Installing a machine
 
 ```bash
-scripts/stage-release.sh dist        # agent binaries + pinned Node 22 + SHA256SUMS
-./install.sh --stage-dir dist        # verify checksums, provision Node 22, install
+scripts/stage-release.sh dist        # agent binaries + pinned Node 22 + Bun 1.3 + SHA256SUMS
+./install.sh --stage-dir dist        # verify checksums, provision both runtimes, install
 
 ~/.homeplane/bin/homeplane-agent enrol -server https://homeplane.<tailnet>.ts.net
 ~/.homeplane/bin/homeplane-agent status
 ```
 
-`stage-release.sh` stages both halves of a release: the cross-compiled agent for
-every supported platform, and the pinned Node 22 runtime, verified against the
-upstream checksums in `scripts/node-pinned.sha256` before it is allowed into the
-staging directory. That is what makes a fresh-machine install work — macOS has
-no package-manager fallback.
+`stage-release.sh` stages every half of a release: the cross-compiled agent for
+every supported platform, the pinned Node 22 runtime (`scripts/node-pinned.sha256`),
+and the pinned Bun 1.3 runtime (`scripts/bun-pinned.sha256`), each verified
+against its upstream checksums before it is allowed into the staging directory.
+That is what makes a fresh-machine install work — macOS has no package-manager
+fallback. Node and Bun are both prerequisites, not alternatives: vault sync runs
+on Node (`obsidian-headless`), the retrieval engine runs on Bun (GNO, D8).
 
 The installer supports macOS (launchd) and systemd-based Linux with
 `systemctl --user`; anything else is rejected **before** anything is written. It
@@ -127,7 +130,30 @@ landed, restoring it if any step fails. A checksum mismatch aborts with nothing
 installed, and a re-run is an idempotent refresh that leaves enrolment state
 alone. A machine that cannot get Node 22 (staged tarball, or the distribution's
 package manager with `HOMEPLANE_NODE_PACKAGE=1`) fails the install rather than
-ending up quietly unable to sync its vault.
+ending up quietly unable to sync its vault, and the same is true of Bun 1.3 and
+the retrieval engine.
+
+## The retrieval engine
+
+```bash
+scripts/fetch-gno.sh --prefix ~/.homeplane/gno-pkg   # checksum-verified install
+homeplane-agent gno activate -apply                  # bind the vault, supervise, publish
+homeplane-agent gno endpoint                         # what harnesses are wired from
+homeplane-agent gno rebuild                          # discard the index, rebuild from the vault
+```
+
+`gno activate` refuses unless GNO matches its pinned version, the index location
+is outside the vault and outside every known synchronized tree, `gno setup`
+verifies the binding with a real retrieval, and one launch of the stdio MCP
+template answers a tool call with real vault content. It then publishes
+`~/.homeplane/endpoints/retrieval-engine.json` — the descriptor harness
+configuration is generated from — and registers a removal plan.
+
+Two lifecycles, deliberately not conflated: the indexing **daemon** is
+supervised (pid, restart count, crash-loop surfaced in `status`), while harness
+access is **stdio**, launched per client, so `status` reports the last launch
+probe rather than a pid it does not have. The reasoning, and what was verified
+against the real binary, is in `docs/decisions/d8-gno.md`.
 
 Enrolment is identity-preserving: re-running `enrol` rotates this machine's
 credential on the same server-side record and the previous credential stops

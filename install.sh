@@ -7,14 +7,17 @@
 #   validate  1. Is this machine supported (OS, architecture, init system)?
 #             2. Does every staged artifact match the checksum manifest?
 #             3. Does the agent binary actually run here?
-#             4. Can the Node 22 prerequisite be satisfied, and does the
-#                extracted runtime run and report >= 22?
-#   commit    5. Move the validated Node runtime into the prefix, keeping the
-#             6. previous one aside, then place the agent atomically.
+#             4. Can the Node 22 and Bun 1.3 prerequisites be satisfied, and do
+#                the extracted runtimes run and report the required versions?
+#   commit    5. Move the validated runtimes into the prefix, keeping the
+#             6. previous ones aside, then place the agent atomically.
+#
+# Both runtimes are prerequisites, not alternatives: vault sync runs on Node
+# (obsidian-headless) and the retrieval engine runs on Bun (GNO).
 #
 # Nothing under the install prefix is touched until every check above has
-# passed, and the previous Node runtime is retained until the WHOLE install
-# succeeds — a failure at any point restores it. A checksum-valid but malformed
+# passed, and the previous runtimes are retained until the WHOLE install
+# succeeds — a failure at any point restores them. A checksum-valid but malformed
 # release therefore cannot destroy a working machine, and it cannot leave a
 # machine with a new runtime and no agent.
 #
@@ -38,6 +41,7 @@
 #   HOMEPLANE_UNAME_S / HOMEPLANE_UNAME_M   override detected OS / architecture
 #   HOMEPLANE_INIT_OVERRIDE                 override detected init system
 #   HOMEPLANE_NODE_BIN                      node binary to probe
+#   HOMEPLANE_BUN_BIN                       bun binary to probe
 
 set -euo pipefail
 
@@ -48,6 +52,13 @@ readonly PROGRAM="install.sh"
 # scripts/node-pinned.sha256 must pin this same version (asserted by the tests).
 readonly NODE_MIN_MAJOR=22
 readonly NODE_VERSION="${HOMEPLANE_NODE_VERSION:-22.11.0}"
+
+# Bun prerequisite, pinned the same way and for the same reason. GNO (D8) is a
+# Bun program, so a machine without Bun cannot run the retrieval engine at all.
+# scripts/bun-pinned.sha256 must pin this same version (asserted by the tests).
+readonly BUN_MIN_MAJOR=1
+readonly BUN_MIN_MINOR=3
+readonly BUN_VERSION="${HOMEPLANE_BUN_VERSION:-1.3.11}"
 
 readonly MANIFEST_NAME="SHA256SUMS"
 
@@ -62,7 +73,7 @@ die() {
 info() { echo "$PROGRAM: $*"; }
 
 usage() {
-  sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # --- argument parsing --------------------------------------------------------
@@ -84,6 +95,7 @@ done
 
 readonly BIN_DIR="$PREFIX/bin"
 readonly NODE_DIR="$PREFIX/node"
+readonly BUN_DIR="$PREFIX/bun"
 
 # --- failure handling --------------------------------------------------------
 #
@@ -95,6 +107,8 @@ TMP_ROOT=""
 INSTALL_COMPLETE=0
 NODE_RESTORE_NEEDED=0
 NODE_DIR_CREATED=0
+BUN_RESTORE_NEEDED=0
+BUN_DIR_CREATED=0
 
 on_exit() {
   if [[ $INSTALL_COMPLETE -eq 0 && $NODE_RESTORE_NEEDED -eq 1 && -d "$NODE_DIR.previous" ]]; then
@@ -106,6 +120,14 @@ on_exit() {
     # remove the one this run was in the middle of placing.
     rm -rf "$NODE_DIR"
     echo "$PROGRAM: install failed; removed the partially placed node runtime" >&2
+  fi
+  if [[ $INSTALL_COMPLETE -eq 0 && $BUN_RESTORE_NEEDED -eq 1 && -d "$BUN_DIR.previous" ]]; then
+    rm -rf "$BUN_DIR"
+    mv "$BUN_DIR.previous" "$BUN_DIR"
+    echo "$PROGRAM: install failed; restored the previous bun runtime at $BUN_DIR" >&2
+  elif [[ $INSTALL_COMPLETE -eq 0 && $BUN_DIR_CREATED -eq 1 ]]; then
+    rm -rf "$BUN_DIR"
+    echo "$PROGRAM: install failed; removed the partially placed bun runtime" >&2
   fi
   if [[ -n "$TMP_ROOT" && -d "$TMP_ROOT" ]]; then
     rm -rf "$TMP_ROOT"
@@ -347,6 +369,123 @@ provision_node_package() {
   fi
 }
 
+# --- step 4b: validate the Bun prerequisite ----------------------------------
+#
+# Deliberately a SEPARATE prerequisite from Node rather than a replacement for
+# it: vault sync runs on Node (obsidian-headless) and the retrieval engine runs
+# on Bun (GNO). A machine needs both, and an installer that quietly accepted one
+# would produce a machine that half works.
+
+bun_version_string() {
+  local bin="$1" version
+  version="$("$bin" --version 2>/dev/null)" || return 1
+  version="${version#v}"
+  version="${version%%[!0-9.]*}"
+  [[ -n "$version" ]] || return 1
+  echo "$version"
+}
+
+# bun_at_least reports whether a version is >= BUN_MIN_MAJOR.BUN_MIN_MINOR. Bun
+# is versioned 1.x, so unlike Node the minor is load-bearing and a major-only
+# comparison would accept the 1.0 releases GNO does not run on.
+bun_at_least() {
+  local version="$1" major minor
+  major="${version%%.*}"
+  minor="${version#*.}"
+  minor="${minor%%.*}"
+  [[ -n "$major" && -n "$minor" ]] || return 1
+  if (( major > BUN_MIN_MAJOR )); then return 0; fi
+  if (( major < BUN_MIN_MAJOR )); then return 1; fi
+  (( minor >= BUN_MIN_MINOR ))
+}
+
+have_bun() {
+  local bin="${HOMEPLANE_BUN_BIN:-}"
+  if [[ -z "$bin" ]]; then
+    bin="$(command -v bun 2>/dev/null || true)"
+  fi
+  [[ -n "$bin" && -x "$bin" ]] || return 1
+  local version
+  version="$(bun_version_string "$bin")" || return 1
+  bun_at_least "$version"
+}
+
+bun_archive_name() {
+  local os="$1" arch="$2" bun_arch
+  case "$arch" in
+    arm64) bun_arch=aarch64 ;;
+    amd64) bun_arch=x64 ;;
+  esac
+  echo "bun-v${BUN_VERSION}-${os}-${bun_arch}.zip"
+}
+
+# BUN_ACTION mirrors NODE_ACTION: none | vendored.
+#
+# There is no package-manager branch. Bun is not packaged consistently across
+# distributions, and `curl | bash` from bun.sh is exactly the unverified install
+# path R1 exists to refuse — so the staged, checksummed archive is the only
+# provisioning route, and its absence is an honest failure rather than a
+# silently half-working machine.
+BUN_ACTION="none"
+VALIDATED_BUN=""
+
+prepare_bun() {
+  local os="$1" arch="$2"
+  if have_bun; then
+    BUN_ACTION="none"
+    info "bun ${BUN_MIN_MAJOR}.${BUN_MIN_MINOR}+ already present"
+    return
+  fi
+
+  local archive
+  archive="$(bun_archive_name "$os" "$arch")"
+  [[ -f "$STAGE_DIR/$archive" ]] || die "bun >= ${BUN_MIN_MAJOR}.${BUN_MIN_MINOR} is required by the retrieval engine (GNO) and was not found.
+Stage the checksummed archive '$archive' in $STAGE_DIR (scripts/stage-release.sh does this).
+Nothing has been installed."
+
+  verify_artifact "$archive"
+  command -v unzip >/dev/null 2>&1 || die "unzip is required to install the staged bun archive; nothing has been changed"
+
+  local extract_root="$TMP_ROOT/bun-extract"
+  mkdir -p "$extract_root"
+  # Extract into a temporary root: a failed or partial extraction never becomes
+  # the machine's Bun installation.
+  unzip -q "$STAGE_DIR/$archive" -d "$extract_root" || die "could not extract $archive"
+  local extracted_bin
+  extracted_bin="$(find "$extract_root" -type f -name bun | head -n 1)"
+  [[ -n "$extracted_bin" ]] || die "$archive does not contain a bun executable; nothing has been changed"
+  chmod 0755 "$extracted_bin"
+
+  local version
+  version="$(bun_version_string "$extracted_bin")" \
+    || die "the bun runtime in $archive did not run on this machine. It is checksum-valid, so it is probably built for a different platform. Nothing has been changed."
+  bun_at_least "$version" \
+    || die "the bun runtime in $archive reports $version, need >= ${BUN_MIN_MAJOR}.${BUN_MIN_MINOR}; nothing has been changed"
+
+  BUN_ACTION="vendored"
+  VALIDATED_BUN="$extracted_bin"
+}
+
+commit_bun() {
+  [[ "$BUN_ACTION" == "vendored" ]] || return 0
+
+  mkdir -p "$PREFIX" "$BIN_DIR"
+  rm -rf "$BUN_DIR.previous"
+  if [[ -d "$BUN_DIR" ]]; then
+    # Move the previous runtime aside rather than deleting it, exactly as the
+    # Node path does: on_exit puts it back if anything after this point fails.
+    mv "$BUN_DIR" "$BUN_DIR.previous"
+    BUN_RESTORE_NEEDED=1
+  else
+    BUN_DIR_CREATED=1
+  fi
+  mkdir -p "$BUN_DIR"
+  mv "$VALIDATED_BUN" "$BUN_DIR/bun"
+  chmod 0755 "$BUN_DIR/bun"
+  ln -sf "$BUN_DIR/bun" "$BIN_DIR/bun"
+  info "provisioned bun v$BUN_VERSION from the staged archive into $BUN_DIR"
+}
+
 # --- step 5/6: commit --------------------------------------------------------
 
 commit_node() {
@@ -411,13 +550,15 @@ main() {
   artifact="homeplane-agent-${os}-${arch}"
   prepare_agent "$artifact"
   prepare_node "$os" "$arch"
+  prepare_bun "$os" "$arch"
 
   # ...then commit, newest-runtime-first, with the old one still recoverable.
   commit_node "$os"
+  commit_bun
   commit_agent
 
   INSTALL_COMPLETE=1
-  rm -rf "$NODE_DIR.previous"
+  rm -rf "$NODE_DIR.previous" "$BUN_DIR.previous"
 
   cat <<EOF
 

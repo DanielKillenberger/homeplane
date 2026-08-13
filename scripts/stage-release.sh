@@ -6,7 +6,11 @@
 #
 #   * the cross-compiled homeplane-agent binary for every supported platform;
 #   * the pinned Node 22 runtime for every supported platform, verified against
-#     the upstream checksums in scripts/node-pinned.sha256.
+#     the upstream checksums in scripts/node-pinned.sha256;
+#   * the pinned Bun runtime for every supported platform, verified against the
+#     upstream checksums in scripts/bun-pinned.sha256. GNO (D8) runs on Bun, so
+#     the retrieval engine is as unrunnable without it as vault sync is without
+#     Node.
 #
 # The Node half is not optional decoration: install.sh provisions Node from the
 # staged tarball, and macOS has no package-manager fallback, so a staging
@@ -17,7 +21,7 @@
 # a claim about real, checksummed artifacts.
 #
 # Usage:
-#   scripts/stage-release.sh [output-dir] [--skip-node]
+#   scripts/stage-release.sh [output-dir] [--skip-node] [--skip-bun]
 #
 # Environment:
 #   HOMEPLANE_NODE_CACHE       where downloaded Node archives are cached
@@ -26,6 +30,10 @@
 #                              stage instead of the full supported matrix
 #   HOMEPLANE_NODE_DIST_URL    Node distribution root (default nodejs.org/dist)
 #   HOMEPLANE_NODE_PIN_FILE    checksum pin file (default scripts/node-pinned.sha256)
+#   HOMEPLANE_BUN_CACHE        where downloaded Bun archives are cached
+#                              (default ~/.cache/homeplane/bun)
+#   HOMEPLANE_BUN_DIST_URL     Bun release root (default github.com/oven-sh/bun)
+#   HOMEPLANE_BUN_PIN_FILE     checksum pin file (default scripts/bun-pinned.sha256)
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -38,9 +46,11 @@ info() { echo "$PROGRAM: $*"; }
 
 OUT_DIR="dist"
 SKIP_NODE=0
+SKIP_BUN=0
 for arg in "$@"; do
   case "$arg" in
     --skip-node) SKIP_NODE=1 ;;
+    --skip-bun) SKIP_BUN=1 ;;
     -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "unknown option $arg" ;;
     *) OUT_DIR="$arg" ;;
@@ -51,6 +61,9 @@ mkdir -p "$OUT_DIR"
 NODE_PIN_FILE="${HOMEPLANE_NODE_PIN_FILE:-$REPO_ROOT/scripts/node-pinned.sha256}"
 NODE_DIST_URL="${HOMEPLANE_NODE_DIST_URL:-https://nodejs.org/dist}"
 NODE_CACHE="${HOMEPLANE_NODE_CACHE:-$HOME/.cache/homeplane/node}"
+BUN_PIN_FILE="${HOMEPLANE_BUN_PIN_FILE:-$REPO_ROOT/scripts/bun-pinned.sha256}"
+BUN_DIST_URL="${HOMEPLANE_BUN_DIST_URL:-https://github.com/oven-sh/bun/releases/download}"
+BUN_CACHE="${HOMEPLANE_BUN_CACHE:-$HOME/.cache/homeplane/bun}"
 
 # The supported matrix, and only the supported matrix: install.sh rejects
 # anything outside it, so shipping other artifacts would be misleading.
@@ -97,6 +110,79 @@ node_archive_name() {
     *) die "unsupported architecture $goarch" ;;
   esac
   echo "node-v${NODE_VERSION}-${goos}-${node_arch}.tar.gz"
+}
+
+# Bun's release assets carry no version in their names, so the version is stated
+# explicitly in the pin file and the STAGED copy is renamed to include it — a
+# staging directory whose file names do not say what they are is how a stale
+# runtime survives a bump unnoticed.
+bun_version_from_pins() {
+  local version
+  version="$(awk -F= '/^[[:space:]]*version[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }' "$BUN_PIN_FILE")"
+  [[ -n "$version" ]] || die "no Bun version pinned in $BUN_PIN_FILE"
+  echo "$version"
+}
+
+bun_pinned_sha() {
+  local name="$1"
+  awk -v want="$name" '$2 == want { print $1; found=1 } END { if (!found) exit 1 }' "$BUN_PIN_FILE" \
+    || die "no pinned checksum for '$name' in $BUN_PIN_FILE; refusing to stage an unverified runtime"
+}
+
+# bun_asset_name is the name upstream publishes; bun_archive_name is what we
+# stage it as.
+bun_asset_name() {
+  local goos="$1" goarch="$2" bun_arch
+  case "$goarch" in
+    arm64) bun_arch=aarch64 ;;
+    amd64) bun_arch=x64 ;;
+    *) die "unsupported architecture $goarch" ;;
+  esac
+  echo "bun-${goos}-${bun_arch}.zip"
+}
+
+bun_archive_name() {
+  local goos="$1" goarch="$2"
+  echo "bun-v${BUN_VERSION}-$(bun_asset_name "$goos" "$goarch" | sed 's/^bun-//')"
+}
+
+fetch_bun() {
+  local asset="$1"
+  local cached="$BUN_CACHE/bun-v$BUN_VERSION-$asset"
+  mkdir -p "$BUN_CACHE"
+  FETCHED_ARCHIVE=""
+
+  local want
+  want="$(bun_pinned_sha "$asset")"
+
+  if [[ -f "$cached" ]]; then
+    if [[ "$(sha256_of "$cached")" == "$want" ]]; then
+      FETCHED_ARCHIVE="$cached"
+      return
+    fi
+    info "cached $asset does not match its pinned checksum; re-downloading"
+    rm -f "$cached"
+  fi
+
+  local url="$BUN_DIST_URL/bun-v$BUN_VERSION/$asset"
+  info "downloading $url"
+  command -v curl >/dev/null 2>&1 || die "curl is required to fetch the Bun runtime"
+  if ! curl -fsSL --retry 2 -o "$cached.part" "$url"; then
+    rm -f "$cached.part"
+    die "could not download $url (stage with --skip-bun only if every target machine already has Bun $BUN_VERSION)"
+  fi
+
+  local got
+  got="$(sha256_of "$cached.part")"
+  if [[ "$got" != "$want" ]]; then
+    rm -f "$cached.part"
+    die "checksum mismatch for $asset
+  expected (pinned): $want
+  actual (download): $got
+Nothing has been staged. Either the mirror is compromised or $BUN_PIN_FILE is stale."
+  fi
+  mv "$cached.part" "$cached"
+  FETCHED_ARCHIVE="$cached"
 }
 
 # fetch_node downloads (or reuses a cached) Node archive and verifies it against
@@ -174,12 +260,28 @@ else
   info "skipping Node staging (--skip-node): the resulting directory only installs onto machines that already have Node 22"
 fi
 
+if [[ $SKIP_BUN -eq 0 ]]; then
+  [[ -f "$BUN_PIN_FILE" ]] || die "$BUN_PIN_FILE not found; cannot stage a verified Bun runtime"
+  BUN_VERSION="$(bun_version_from_pins)"
+  info "staging bun v$BUN_VERSION (pinned in $BUN_PIN_FILE)"
+  while read -r goos goarch; do
+    [[ -n "$goos" ]] || continue
+    asset="$(bun_asset_name "$goos" "$goarch")"
+    fetch_bun "$asset"
+    staged="$(bun_archive_name "$goos" "$goarch")"
+    cp "$FETCHED_ARCHIVE" "$OUT_DIR/$staged"
+    info "staged $staged"
+  done <<<"$PLATFORMS"
+else
+  info "skipping Bun staging (--skip-bun): the resulting directory only installs onto machines that already have Bun 1.3+"
+fi
+
 # The manifest is regenerated wholesale so a stale entry can never survive a
 # rebuild. install.sh verifies every artifact it touches against it.
 (
   cd "$OUT_DIR"
   artifacts=()
-  for f in homeplane-agent-* node-v*.tar.gz; do
+  for f in homeplane-agent-* node-v*.tar.gz bun-v*.zip; do
     # An unmatched glob comes through as its own literal pattern; skipping
     # non-files is what keeps `--skip-node` from manifesting a phantom archive.
     if [[ -f "$f" ]]; then

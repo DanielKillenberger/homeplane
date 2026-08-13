@@ -136,7 +136,10 @@ func runStageRelease(t *testing.T, dist, pin string, extraEnv ...string) stageRe
 	osName, arch := hostPlatform()
 	out := filepath.Join(t.TempDir(), "dist")
 
-	cmd := exec.Command("bash", filepath.Join(repoRoot(t), "scripts", "stage-release.sh"), out)
+	// --skip-bun: these tests exercise the NODE half against a file:// mirror,
+	// and staging Bun as well would make every one of them download from
+	// GitHub. The Bun half has its own tests in bun_test.go.
+	cmd := exec.Command("bash", filepath.Join(repoRoot(t), "scripts", "stage-release.sh"), out, "--skip-bun")
 	cmd.Dir = repoRoot(t)
 	cmd.Env = append(os.Environ(),
 		"HOMEPLANE_NODE_DIST_URL=file://"+dist,
@@ -224,7 +227,7 @@ func TestSkipNodeStagesAnAgentOnlyRelease(t *testing.T) {
 	osName, arch := hostPlatform()
 	out := filepath.Join(t.TempDir(), "dist")
 
-	cmd := exec.Command("bash", filepath.Join(repoRoot(t), "scripts", "stage-release.sh"), out, "--skip-node")
+	cmd := exec.Command("bash", filepath.Join(repoRoot(t), "scripts", "stage-release.sh"), out, "--skip-node", "--skip-bun")
 	cmd.Dir = repoRoot(t)
 	cmd.Env = append(os.Environ(),
 		"HOMEPLANE_NODE_DIST_URL=file://"+dist,

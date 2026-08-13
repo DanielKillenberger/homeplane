@@ -1,0 +1,310 @@
+# Captured from gno 1.29.6 by scripts/capture-gno-contract.sh.
+# Verbatim upstream --help output. Do not hand-edit.
+
+=== gno --help ===
+Usage: gno [options] [command]
+
+GNO - Local Knowledge Index and Retrieval
+
+Options:
+  -V, --version                   show version
+  --index <name>                  index name (default: "default")
+  --config <path>                 config file path
+  --no-color                      disable colors
+  --verbose                       verbose logging
+  --yes                           non-interactive mode
+  -q, --quiet                     suppress non-essential output
+  --json                          JSON output (for errors and supported
+                                  commands)
+  --offline                       offline mode (use cached models only)
+  --no-pager                      disable automatic paging of long output
+  -h, --help                      display help for command
+
+Commands:
+  search [options] <query>        BM25 keyword search
+  vsearch [options] <query>       Vector similarity search
+  query [options] <query...>      Hybrid search with expansion and reranking
+  bench [options] <fixture>       Run retrieval quality benchmarks from a
+                                  fixture
+  ask [options] <query>           Human-friendly query with grounded answer
+  profile                         Inspect a project-local retrieval profile
+  init [options] [path]           Initialize GNO configuration
+  setup [options] <folder>        Add and verify a folder with a real lexical
+                                  retrieval
+  index [options] [collection]    Index files from collections
+  status [options]                Show index status
+  doctor [options]                Diagnose configuration issues
+  capture [options] [content...]  Capture a note with provenance
+  collection                      Manage collections
+  egress-audit                    Manage local content-free egress audit
+                                  receipts
+  context                         Manage context items
+  models                          Manage LLM models
+  update [options]                Sync files from disk into the index
+  embed [options] [collection]    Generate embeddings for indexed documents
+  cleanup                         Clean orphaned data from index
+  reset [options]                 Delete all GNO data and start fresh
+  trace                           Inspect and manage private local retrieval
+                                  traces
+  publish                         Export publish artifacts for gno.sh
+  vec                             Vector index maintenance
+  get [options] <ref>             Get document by URI or docid
+  multi-get [options] <refs...>   Get multiple documents by URI or docid
+  ls [options] [scope]            List indexed documents
+  tags                            Manage document tags
+  links                           Document link commands
+  backlinks [options] <doc>       List documents linking to this document
+  similar [options] <doc>         Find semantically similar documents
+  graph [options]                 Output knowledge graph of document links
+  changes [options]               List retained metadata-only document changes
+  diff [options] <doc>            Show one retained metadata-only structural
+                                  change
+  impact [options] <doc>          Find bounded inbound knowledge dependencies
+  mcp                             MCP server and configuration
+  skill                           Manage GNO agent skill
+  daemon [options]                Start headless continuous indexing
+  serve [options]                 Start web UI server
+  completion                      Shell completion scripts
+  help [command]                  display help for command
+
+Documentation: https://github.com/gmickel/gno#readme
+Report issues: https://github.com/gmickel/gno/issues
+
+=== gno setup --help ===
+Usage: gno setup [options] <folder>
+
+Add and verify a folder with a real lexical retrieval
+
+Options:
+  -n, --name <name>        collection name
+  --exclude <pattern>      literal exclusion pattern (repeatable) (default: [])
+  --authorize-secret-risk  explicitly authorize indexing likely secret files
+  --connector <id>         install and verify one connector (repeatable)
+                           (default: [])
+  --apply-profile          apply a valid project profile before lexical setup
+  --no-semantic            skip background semantic indexing
+  --json                   JSON output
+  -h, --help               display help for command
+
+=== gno search --help ===
+Usage: gno search [options] <query>
+
+BM25 keyword search
+
+Options:
+  -n, --limit <num>        max results
+  --min-score <num>        minimum score threshold
+  -c, --collection <name>  filter by collection
+  --lang <code>            language filter/hint (BCP-47)
+  --since <date>           modified-at lower bound (ISO date/time or token)
+  --until <date>           modified-at upper bound (ISO date/time or token)
+  --category <values>      require category match (comma-separated)
+  --author <text>          filter by author (case-insensitive contains)
+  --intent <text>          disambiguating context for ambiguous queries
+  --exclude <values>       exclude docs containing any term (comma-separated)
+  --tags-all <tags>        require ALL tags (comma-separated)
+  --tags-any <tags>        require ANY tag (comma-separated)
+  --project-root <path>    trusted project root (repeatable; replaces cwd
+                           affinity) (default: [])
+  --no-project-affinity    disable project-aware ranking
+  --full                   include full content
+  --line-numbers           include line numbers in output
+  --json                   JSON output
+  --md                     Markdown output
+  --csv                    CSV output
+  --xml                    XML output
+  --files                  file paths only
+  -h, --help               display help for command
+
+=== gno status --help ===
+Usage: gno status [options]
+
+Show index status
+
+Options:
+  --json      JSON output
+  -h, --help  display help for command
+
+=== gno doctor --help ===
+Usage: gno doctor [options]
+
+Diagnose configuration issues
+
+Options:
+  --json      JSON output
+  -h, --help  display help for command
+
+=== gno index --help ===
+Usage: gno index [options] [collection]
+
+Index files from collections
+
+Options:
+  --no-embed     skip embedding after sync
+  --git-pull     run git pull in git repositories
+  --models-pull  download models if missing
+  --json         JSON output
+  -h, --help     display help for command
+
+=== gno update --help ===
+Usage: gno update [options]
+
+Sync files from disk into the index
+
+Options:
+  --git-pull  run git pull in git repositories
+  --json      JSON output
+  -h, --help  display help for command
+
+=== gno reset --help ===
+Usage: gno reset [options]
+
+Delete all GNO data and start fresh
+
+Options:
+  --confirm      confirm destructive operation
+  --keep-config  preserve config file
+  --keep-cache   preserve model cache
+  -h, --help     display help for command
+
+=== gno daemon --help ===
+Usage: gno daemon [options]
+
+Start headless continuous indexing
+
+Options:
+  -p, --port <num>               MCP gateway port (default: "3000")
+  --no-sync-on-start             skip initial sync and only watch future file
+                                 changes
+  --json                         JSON output (applies to --status; see
+                                 process-status schema)
+  --host <address>               HTTP listen address (default: 127.0.0.1)
+  --mcp-token-file <path>        restrictive bearer token file
+  --mcp-allowed-host <host>      exact allowed Host header (repeatable)
+  --mcp-allowed-origin <origin>  exact allowed Origin (repeatable)
+  --mcp-enable-write             authorize HTTP MCP mutation tools (independent
+                                 of authentication)
+  --detach                       run as a detached background process
+                                 (macOS/Linux only)
+  --status                       show status of the detached daemon process (use
+                                 --json for machine output)
+  --stop                         stop the detached daemon process (SIGTERM then
+                                 SIGKILL fallback)
+  --pid-file <path>              override pid-file path
+  --log-file <path>              override log-file path (append-only)
+  -h, --help                     display help for command
+
+=== gno serve --help ===
+Usage: gno serve [options]
+
+Start web UI server
+
+Options:
+  -p, --port <num>               port to listen on (default: "3000")
+  --json                         JSON output (applies to --status; see
+                                 process-status schema)
+  --host <address>               loopback HTTP listen address (default:
+                                 127.0.0.1)
+  --mcp-token-file <path>        restrictive bearer token file
+  --mcp-allowed-host <host>      exact allowed Host header (repeatable)
+  --mcp-allowed-origin <origin>  exact allowed Origin (repeatable)
+  --mcp-enable-write             authorize HTTP MCP mutation tools (independent
+                                 of authentication)
+  --detach                       run as a detached background process
+                                 (macOS/Linux only)
+  --status                       show status of the detached serve process (use
+                                 --json for machine output)
+  --stop                         stop the detached serve process (SIGTERM then
+                                 SIGKILL fallback)
+  --pid-file <path>              override pid-file path
+  --log-file <path>              override log-file path (append-only)
+  -h, --help                     display help for command
+
+=== gno mcp --help ===
+Usage: gno mcp [options] [command]
+
+MCP server and configuration
+
+Options:
+  -h, --help           display help for command
+
+Commands:
+  serve [options]      Start MCP server (stdio transport)
+  install [options]    Install gno as MCP server in client configuration
+  uninstall [options]  Remove gno MCP server from client configuration
+  status [options]     Show MCP server installation status
+  help [command]       display help for command
+
+=== gno collection --help ===
+Usage: gno collection [options] [command]
+
+Manage collections
+
+Options:
+  -h, --help                         display help for command
+
+Commands:
+  add [options] <path>               Add a collection
+  list [options]                     List collections
+  remove <name>                      Remove a collection
+  rename <old> <new>                 Rename a collection
+  clear-embeddings [options] <name>  Clear stale or all embeddings for a
+                                     collection
+  policy                             Inspect and change collection egress policy
+  help [command]                     display help for command
+
+=== gno mcp install -t claude-code -s user --dry-run --json ===
+{
+  "installed": {
+    "target": "claude-code",
+    "scope": "user",
+    "configPath": "<home>/.claude.json",
+    "action": "dry_run_create",
+    "serverEntry": {
+      "command": "<home>/.bun/bin/bun",
+      "args": [
+        "run",
+        "<home>/.bun/install/global/node_modules/@gmickel/gno/src/index.ts",
+        "--index",
+        "default",
+        "--config",
+        "<gno-dirs>/config/index.yml",
+        "mcp"
+      ],
+      "env": {
+        "GNO_DATA_DIR": "<gno-dirs>/data",
+        "GNO_CACHE_DIR": "<gno-dirs>/cache"
+      }
+    }
+  }
+}
+
+=== gno mcp install -t codex -s user --dry-run --json ===
+{
+  "installed": {
+    "target": "codex",
+    "scope": "user",
+    "configPath": "<home>/.codex/config.toml",
+    "action": "dry_run_create",
+    "serverEntry": {
+      "command": "<home>/.bun/bin/bun",
+      "args": [
+        "run",
+        "<home>/.bun/install/global/node_modules/@gmickel/gno/src/index.ts",
+        "--index",
+        "default",
+        "--config",
+        "<gno-dirs>/config/index.yml",
+        "mcp"
+      ],
+      "env": {
+        "GNO_DATA_DIR": "<gno-dirs>/data",
+        "GNO_CACHE_DIR": "<gno-dirs>/cache"
+      }
+    }
+  }
+}
+
+=== gno mcp install -t <invalid> --dry-run --json ===
+{"error":{"code":"VALIDATION","message":"Invalid target: homeplane-not-a-target. Must be one of: claude-desktop, claude-code, codex, cursor, zed, windsurf, opencode, amp, lmstudio, librechat."}}
+

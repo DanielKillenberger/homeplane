@@ -122,6 +122,9 @@ type StatusOptions struct {
 	// question — and a test must be able to stage "the pid is gone" without
 	// killing a real process.
 	SyncLiveness supervise.Probe
+	// GNOLiveness observes the supervised retrieval engine, for the same reason
+	// and with the same default (supervise.ProcessProbe).
+	GNOLiveness supervise.Probe
 }
 
 // Status inspects the machine and reports what is actually true right now.
@@ -172,7 +175,7 @@ func Status(ctx context.Context, opts StatusOptions) (Report, error) {
 	report.Components = append(report.Components, enrolmentComponent(hasState, state, credential))
 	report.Components = append(report.Components, vaultComponent(state))
 	report.Components = append(report.Components, syncComponent(dir, state, opts.SyncLiveness))
-	report.Components = append(report.Components, localComponent(ComponentGNO, state.GNO, "GNO is not configured yet"))
+	report.Components = append(report.Components, gnoComponent(dir, state, opts.GNOLiveness))
 	report.Components = append(report.Components, listComponent(ComponentHarnesses, state.Harnesses, "no harness is configured yet"))
 	report.Components = append(report.Components, listComponent(ComponentSkills, state.Skills, "no skills are provisioned yet"))
 
@@ -304,6 +307,72 @@ func syncComponent(stateDir string, state State, probe supervise.Probe) Componen
 		// which is the same rule the server-dependent components follow.
 		c.State = StateUnknown
 		c.Detail = "cannot tell whether sync is running (" + live.Detail + ") — " + ledger.Summary(now)
+	case !live.Alive:
+		c.State = StateDegraded
+		c.Detail = "not running: " + live.Detail +
+			" (retryable; the vault remains readable locally) — " + ledger.Summary(now)
+	default:
+		c.State = StateOK
+		c.Detail = live.Detail + "; " + ledger.Summary(now) + "; " + c.Detail
+	}
+	return c
+}
+
+// gnoComponent reports whether the retrieval engine is ACTUALLY running.
+//
+// R4 names two lifecycles and forbids conflating them, so this reports both and
+// keeps them labelled:
+//
+//	the DAEMON is supervised — pid, restart count, crash-loop, all from the
+//	  shared ledger and an external liveness probe, exactly like vault sync;
+//	the STDIO endpoint is launched per client — it has no pid, so what is
+//	  reported is the LAST PROBE of the launch template, with its timestamp.
+//
+// The engine also has a hard precondition: no vault, no engine. A machine whose
+// vault is missing must report the engine as degraded and SAY why, rather than
+// leaving a not_configured that reads like "nobody got round to it yet".
+func gnoComponent(stateDir string, state State, probe supervise.Probe) ComponentReport {
+	c := localComponent(ComponentGNO, state.GNO, "the retrieval engine is not configured yet")
+	if state.GNO == nil || strings.TrimSpace(state.GNO.State) == "" {
+		if strings.TrimSpace(state.VaultPath) == "" {
+			// Naming the blocker is the whole requirement here (R4): without a
+			// vault the engine was never started, and that is a different
+			// machine state from "not set up yet".
+			return ComponentReport{Name: ComponentGNO, State: StateNotConfigured,
+				Detail: "not started: no vault on this machine — run `homeplane-agent vault detect -record` or `vault retrieve` first"}
+		}
+		return c
+	}
+	// A recorded failure is the whole story: nothing was supervised, so there is
+	// no ledger to consult.
+	if c.State != StateOK && c.State != StateInstalled {
+		return c
+	}
+	ledger, live, err := (supervise.Tracker{Dir: stateDir, Label: supervise.GNOLabel}).Observe(probe)
+	if err != nil {
+		return ComponentReport{Name: ComponentGNO, State: StateUnknown,
+			Detail: "restart history unreadable: " + err.Error()}
+	}
+	now := time.Now()
+	switch {
+	case c.State == StateInstalled:
+		if ledger.TotalStarts == 0 {
+			c.State = StateDegraded
+			c.Detail = "supervision unit installed but not loaded — the index is NOT being kept current; " + c.Detail
+			return c
+		}
+	case ledger.TotalStarts == 0:
+		c.State = StateDegraded
+		c.Detail = "supervised but never started — the index is NOT being kept current; " + c.Detail
+		return c
+	}
+	switch {
+	case ledger.CrashLooping(now, supervise.DefaultCrashLoopWindow, supervise.DefaultCrashLoopThreshold):
+		c.State = StateDegraded
+		c.Detail = "crash-looping (retryable; the vault remains readable locally) — " + ledger.Summary(now)
+	case !live.Known:
+		c.State = StateUnknown
+		c.Detail = "cannot tell whether the retrieval engine is running (" + live.Detail + ") — " + ledger.Summary(now)
 	case !live.Alive:
 		c.State = StateDegraded
 		c.Detail = "not running: " + live.Detail +
