@@ -75,7 +75,7 @@ var ErrNoRemovalPlan = errors.New("gno: no removal plan registered for the retri
 
 // RegisterRemoval records how to undo this activation.
 func RegisterRemoval(stateDir string, cfg Config, installer supervise.Installer, uid string, now time.Time) error {
-	unit, err := DaemonUnit(orSelf(cfg.UnitPath), stateDir, cfg.DaemonHost, cfg.DaemonPort)
+	unit, err := DaemonUnit(orSelf(cfg.UnitPath), stateDir, cfg.DaemonHost, cfg.DaemonPort, cfg.GatewayToken)
 	if err != nil {
 		return err
 	}
@@ -92,6 +92,7 @@ func RegisterRemoval(stateDir string, cfg Config, installer supervise.Installer,
 		UnitPath:      cfg.UnitPath,
 		Paths: []string{
 			cfg.Paths.Data,
+			LaunchLedgerPath(stateDir),
 			cfg.Paths.Cache,
 			cfg.Paths.Config,
 			DescriptorPath(stateDir),

@@ -2,11 +2,14 @@ package agent_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DanielKillenberger/homeplane/internal/agent"
+	"github.com/DanielKillenberger/homeplane/internal/agent/gno"
 	"github.com/DanielKillenberger/homeplane/internal/agent/supervise"
 )
 
@@ -41,11 +44,115 @@ func TestStatusNamesTheMissingVaultAsTheReasonTheEngineIsNotRunning(t *testing.T
 	writeVaultState(t, dir, agent.State{})
 
 	c := gnoReport(t, dir, nil)
-	if c.State != agent.StateNotConfigured {
-		t.Fatalf("expected not_configured, got %s", c.State)
+	// R4 asks for a NAMED degraded state, not a shrug: "not_configured" reads as
+	// "nobody has got round to it", which is a different machine from one that
+	// cannot run its retrieval engine because there is nothing to index.
+	if c.State != agent.StateDegraded {
+		t.Fatalf("expected degraded, got %s (%q)", c.State, c.Detail)
 	}
 	if !strings.Contains(c.Detail, "no vault") {
 		t.Fatalf("the blocker is not named: %q", c.Detail)
+	}
+}
+
+// The dangerous case is not the fresh machine — it is the machine that
+// activated weeks ago whose vault has since vanished. Its recorded state still
+// says ok and its daemon pid is still alive, because GNO happily serves a stale
+// index.
+func TestStatusReportsAVanishedVaultEvenWithALiveEngine(t *testing.T) {
+	dir := t.TempDir()
+	gone := filepath.Join(dir, "Daniel-OS")
+	writeVaultState(t, dir, agent.State{
+		VaultPath: gone,
+		GNO:       &agent.ComponentState{State: agent.StateOK, Detail: "indexing"},
+	})
+	tracker := supervise.Tracker{Dir: dir, Label: supervise.GNOLabel}
+	if _, err := tracker.RecordStart(time.Now(), 4242, "supervised start"); err != nil {
+		t.Fatal(err)
+	}
+
+	c := gnoReport(t, dir, aliveProbe)
+	if c.State != agent.StateDegraded {
+		t.Fatalf("a live daemon over a vanished vault reported %s: %q", c.State, c.Detail)
+	}
+	if !strings.Contains(c.Detail, "no longer exists") {
+		t.Fatalf("the detail does not name the vanished vault: %q", c.Detail)
+	}
+}
+
+func TestStatusReportsAVaultPathThatIsNotADirectory(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "not-a-vault")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeVaultState(t, dir, agent.State{
+		VaultPath: file,
+		GNO:       &agent.ComponentState{State: agent.StateOK, Detail: "indexing"},
+	})
+
+	c := gnoReport(t, dir, aliveProbe)
+	if c.State != agent.StateDegraded || !strings.Contains(c.Detail, "not a directory") {
+		t.Fatalf("a file masquerading as a vault reported %s: %q", c.State, c.Detail)
+	}
+}
+
+// The stdio endpoint and the daemon fail independently: a healthy indexer with
+// every harness launch failing is a broken machine, and status has to say so.
+func TestStatusSurfacesFailingHarnessLaunches(t *testing.T) {
+	dir := t.TempDir()
+	writeVaultState(t, dir, agent.State{
+		VaultPath: dir,
+		GNO:       &agent.ComponentState{State: agent.StateOK, Detail: "collection daniel-os"},
+	})
+	tracker := supervise.Tracker{Dir: dir, Label: supervise.GNOLabel}
+	if _, err := tracker.RecordStart(time.Now(), 4242, "supervised start"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := gno.RecordLaunch(dir, gno.Launch{
+			At: time.Now(), OK: false, ExitCode: 127, Detail: "bun: command not found",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	c := gnoReport(t, dir, aliveProbe)
+	if c.State != agent.StateDegraded {
+		t.Fatalf("failing harness launches reported %s: %q", c.State, c.Detail)
+	}
+	if !strings.Contains(c.Detail, "harness launches are FAILING") {
+		t.Fatalf("the failing half is not named: %q", c.Detail)
+	}
+	if !strings.Contains(c.Detail, "bun: command not found") {
+		t.Fatalf("the launch failure reason was dropped: %q", c.Detail)
+	}
+}
+
+// A successful launch is reported with its timestamp and never as a pid.
+func TestStatusReportsTheLastSuccessfulLaunchWithoutClaimingAPid(t *testing.T) {
+	dir := t.TempDir()
+	writeVaultState(t, dir, agent.State{
+		VaultPath: dir,
+		GNO:       &agent.ComponentState{State: agent.StateOK, Detail: "collection daniel-os"},
+	})
+	tracker := supervise.Tracker{Dir: dir, Label: supervise.GNOLabel}
+	if _, err := tracker.RecordStart(time.Now(), 4242, "supervised start"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gno.RecordLaunch(dir, gno.Launch{At: time.Now(), OK: true, PID: 999}); err != nil {
+		t.Fatal(err)
+	}
+
+	c := gnoReport(t, dir, aliveProbe)
+	if c.State != agent.StateOK {
+		t.Fatalf("a healthy machine reported %s: %q", c.State, c.Detail)
+	}
+	if !strings.Contains(c.Detail, "stdio endpoint: last launch ok at") {
+		t.Fatalf("the launch history is missing: %q", c.Detail)
+	}
+	if strings.Contains(c.Detail, "stdio endpoint: pid") {
+		t.Fatalf("status claimed a pid for the stdio endpoint: %q", c.Detail)
 	}
 }
 

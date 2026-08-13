@@ -21,13 +21,17 @@ package gno
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -147,15 +151,93 @@ func IndexArgs(collection string) []string {
 }
 
 // DaemonArgs is the SUPERVISED process: headless continuous indexing, bound to
-// loopback.
+// loopback and authenticated.
 //
 // `--offline` is global and load-bearing: without it the daemon downloads model
 // weights on first start, so a freshly installed machine would spend its first
 // ten minutes pulling 639 MB from a supervised unit that looks like it is
 // hanging. Offline keeps the daemon to lexical indexing plus whatever models
 // are already cached; pulling models is an explicit operator step.
-func DaemonArgs(host string, port int) []string {
-	return []string{"--offline", "daemon", "--host", host, "--port", strconv.Itoa(port), "--json"}
+//
+// `--mcp-token-file` is defence in depth. Harnesses reach the engine over stdio
+// and never use this HTTP gateway, so nothing legitimate needs it unauthenticated
+// — and an unauthenticated retrieval endpoint over the whole vault is the single
+// worst thing this component could leave running. The token is a FILE PATH in
+// argv, never the token itself.
+// There is deliberately NO `--json` here. Upstream accepts the flag on `daemon`
+// only alongside `--status`, and rejects the long-running form with a VALIDATION
+// error — so passing it would make the supervised unit fail on every start. The
+// captured contract records that constraint; TestArgvMatchesThePinnedContract
+// enforces it.
+func DaemonArgs(host string, port int, tokenFile string) []string {
+	args := []string{"--offline", "daemon", "--host", host, "--port", strconv.Itoa(port)}
+	if strings.TrimSpace(tokenFile) != "" {
+		args = append(args, "--mcp-token-file", tokenFile)
+	}
+	return args
+}
+
+// ErrGatewayNotLoopback means the engine's own HTTP gateway was pointed at an
+// address other than this machine's loopback interface.
+var ErrGatewayNotLoopback = errors.New("gno: the retrieval engine's gateway must bind loopback only")
+
+// ErrGatewayPort means the port is outside the usable range.
+var ErrGatewayPort = errors.New("gno: the retrieval engine's gateway port is out of range")
+
+// ValidateGateway refuses any binding that would expose vault retrieval beyond
+// this machine.
+//
+// "Documented as loopback-only" is not a control. The daemon serves search over
+// the entire vault, so the address it binds is checked against the actual
+// loopback ranges — 127.0.0.0/8 and ::1 — rather than trusted to a default or a
+// comment. A hostname is refused outright: resolution is not this component's
+// business and `localhost` can be re-pointed in /etc/hosts.
+func ValidateGateway(host string, port int) error {
+	trimmed := strings.TrimSpace(host)
+	if trimmed == "" {
+		return fmt.Errorf("%w: no host configured", ErrGatewayNotLoopback)
+	}
+	ip := net.ParseIP(strings.Trim(trimmed, "[]"))
+	if ip == nil {
+		return fmt.Errorf("%w: %q is not a literal IP address", ErrGatewayNotLoopback, host)
+	}
+	if !ip.IsLoopback() {
+		return fmt.Errorf("%w: %s is reachable from outside this machine", ErrGatewayNotLoopback, host)
+	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("%w: %d", ErrGatewayPort, port)
+	}
+	return nil
+}
+
+// GatewayTokenFile is the 0600 bearer token protecting the daemon's own HTTP
+// gateway.
+func GatewayTokenFile(p Paths) string { return filepath.Join(p.Config, "gateway-token") }
+
+// EnsureGatewayToken creates the gateway token if it does not exist and returns
+// its path. The token itself is never returned, logged, or put in argv.
+func EnsureGatewayToken(p Paths) (string, error) {
+	path := GatewayTokenFile(p)
+	if info, err := os.Stat(path); err == nil && info.Size() > 0 {
+		// Tighten permissions on an existing token rather than merely noticing.
+		if info.Mode().Perm() != filePerm {
+			if err := os.Chmod(path, filePerm); err != nil {
+				return "", fmt.Errorf("gno: tighten gateway token permissions: %w", err)
+			}
+		}
+		return path, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), dirPerm); err != nil {
+		return "", fmt.Errorf("gno: create config directory: %w", err)
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("gno: generate gateway token: %w", err)
+	}
+	if err := writeFileAtomic(path, []byte(hex.EncodeToString(raw)+"\n"), filePerm); err != nil {
+		return "", fmt.Errorf("gno: write gateway token: %w", err)
+	}
+	return path, nil
 }
 
 // MCPServeArgs is the stdio MCP server a harness launches per client. `serve`

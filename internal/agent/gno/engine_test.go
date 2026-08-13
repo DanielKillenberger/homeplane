@@ -311,7 +311,7 @@ func TestRebuildSelfHealsADeletedIndex(t *testing.T) {
 		t.Fatal("the index was not actually deleted")
 	}
 
-	res, err := Rebuild(context.Background(), f.cli, cfg)
+	res, err := Rebuild(context.Background(), f.cli, cfg, RebuildOptions{StateDir: f.stateDir})
 	if err != nil {
 		t.Fatalf("rebuild: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestRebuildRefusesAnIndexThatIsNoLongerMachineLocal(t *testing.T) {
 		Data:   filepath.Join(f.vaultPath, ".gno", "data"),
 		Cache:  filepath.Join(f.vaultPath, ".gno", "cache"),
 	}
-	if _, err := Rebuild(context.Background(), f.cli, cfg); err == nil {
+	if _, err := Rebuild(context.Background(), f.cli, cfg, RebuildOptions{StateDir: f.stateDir}); err == nil {
 		t.Fatal("a rebuild into the vault was accepted")
 	}
 }

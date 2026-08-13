@@ -355,6 +355,49 @@ func (i Installer) ActivationCommands(u Unit, uid string) ([]Command, error) {
 	}
 }
 
+// StopCommands halt a running unit WITHOUT forgetting it.
+//
+// This is distinct from deactivation, and the distinction matters: an operator
+// rebuilding a machine-local index needs the supervised process to let go of its
+// files for a moment, not to be uninstalled. On launchd, stopping a KeepAlive
+// job means booting it out of the session — `launchctl stop` is undone
+// immediately by KeepAlive — so the unit FILE stays on disk and StartCommands
+// bootstraps it back.
+func (i Installer) StopCommands(u Unit, uid string) ([]Command, error) {
+	path, err := i.Path(u)
+	if err != nil {
+		return nil, err
+	}
+	switch i.Platform {
+	case Launchd:
+		return []Command{{Name: "launchctl", Args: []string{"bootout", "gui/" + uid, path}}}, nil
+	case Systemd:
+		return []Command{{Name: "systemctl", Args: []string{"--user", "stop", serviceName(u.Label)}}}, nil
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedPlatform, i.Platform)
+	}
+}
+
+// StartCommands bring a stopped unit back up.
+func (i Installer) StartCommands(u Unit, uid string) ([]Command, error) {
+	path, err := i.Path(u)
+	if err != nil {
+		return nil, err
+	}
+	switch i.Platform {
+	case Launchd:
+		target := "gui/" + uid
+		return []Command{
+			{Name: "launchctl", Args: []string{"bootstrap", target, path}},
+			{Name: "launchctl", Args: []string{"kickstart", "-k", target + "/" + u.Label}},
+		}, nil
+	case Systemd:
+		return []Command{{Name: "systemctl", Args: []string{"--user", "start", serviceName(u.Label)}}}, nil
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedPlatform, i.Platform)
+	}
+}
+
 // DeactivationCommands stop and unload an installed unit.
 func (i Installer) DeactivationCommands(u Unit, uid string) ([]Command, error) {
 	path, err := i.Path(u)

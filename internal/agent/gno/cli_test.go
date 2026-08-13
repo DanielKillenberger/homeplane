@@ -84,7 +84,7 @@ func TestEnvironmentIsolationDropsAmbientGNOVariables(t *testing.T) {
 }
 
 func TestDaemonArgsAreOfflineAndLoopback(t *testing.T) {
-	args := DaemonArgs("127.0.0.1", 3077)
+	args := DaemonArgs("127.0.0.1", 3077, "/state/gno/config/gateway-token")
 	if args[0] != "--offline" {
 		t.Fatalf("--offline must be a GLOBAL flag before the subcommand: %v", args)
 	}

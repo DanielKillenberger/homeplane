@@ -67,7 +67,10 @@ type MCPProbeOptions struct {
 	// return real vault content.
 	CallTool string
 	CallArgs map[string]any
-	// Expect, when set, must appear in the tool call's text response.
+	// Expect is the evidence the tool call must return — normally the URI of a
+	// document the index has already been shown to hold. It is REQUIRED whenever
+	// CallTool is set: a probe that accepts any response at all proves only that
+	// a process started, which is precisely the hole this field closes.
 	Expect  string
 	Timeout time.Duration
 }
@@ -166,6 +169,12 @@ func ProbeMCP(ctx context.Context, opts MCPProbeOptions) MCPProbe {
 		probe.OK = true
 		return probe
 	}
+	if strings.TrimSpace(opts.Expect) == "" {
+		// Refusing here rather than defaulting to "anything goes" is the point:
+		// the caller has to say what evidence would make the call a success.
+		probe.Detail = "refusing to call " + opts.CallTool + " with nothing to verify the response against"
+		return probe
+	}
 
 	callRaw, err := client.call(ctx, "tools/call", map[string]any{
 		"name":      opts.CallTool,
@@ -176,10 +185,27 @@ func ProbeMCP(ctx context.Context, opts MCPProbeOptions) MCPProbe {
 		return probe
 	}
 	probe.CalledTool = opts.CallTool
-	text := extractToolText(callRaw)
+
+	// Three distinct ways a tool call can succeed at the transport level and
+	// still mean the endpoint does not work. All three used to pass.
+	text, isError, err := extractToolResult(callRaw)
 	probe.CallExcerpt = excerpt(text, 400)
-	if opts.Expect != "" && !strings.Contains(text, opts.Expect) {
-		probe.Detail = fmt.Sprintf("%s returned no content matching %q", opts.CallTool, opts.Expect)
+	switch {
+	case err != nil:
+		probe.Detail = opts.CallTool + ": unreadable result: " + err.Error()
+		return probe
+	case isError:
+		// MCP reports APPLICATION errors in-band, with isError on an otherwise
+		// perfectly successful JSON-RPC response. Treating that as success is how
+		// an endpoint that answers "index unavailable" passes activation.
+		probe.Detail = opts.CallTool + " returned an MCP error result: " + excerpt(text, 200)
+		return probe
+	case strings.TrimSpace(text) == "":
+		probe.Detail = opts.CallTool + " returned no content"
+		return probe
+	case !strings.Contains(text, opts.Expect):
+		probe.Detail = fmt.Sprintf("%s returned no content matching %q — the endpoint answered, but not from this index",
+			opts.CallTool, opts.Expect)
 		return probe
 	}
 	probe.OK = true
@@ -202,17 +228,28 @@ func excerpt(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// extractToolText flattens an MCP tool result's text content blocks.
-func extractToolText(raw json.RawMessage) string {
+// extractToolResult flattens an MCP tool result's content blocks AND returns
+// its isError flag.
+//
+// Returning the flag is the whole reason this function is not called
+// extractToolText any more: MCP signals application failures in-band, so a
+// caller that only reads the text cannot distinguish "here are your results"
+// from "here is why there are none".
+//
+// structuredContent is folded in as well, because GNO's search results carry the
+// document URIs there and a caller verifying "this came from my index" should be
+// able to match against them.
+func extractToolResult(raw json.RawMessage) (string, bool, error) {
 	var result struct {
 		Content []struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
-		IsError bool `json:"isError"`
+		StructuredContent json.RawMessage `json:"structuredContent"`
+		IsError           bool            `json:"isError"`
 	}
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return string(raw)
+		return string(raw), false, err
 	}
 	var sb strings.Builder
 	for _, c := range result.Content {
@@ -221,10 +258,11 @@ func extractToolText(raw json.RawMessage) string {
 			sb.WriteString("\n")
 		}
 	}
-	if sb.Len() == 0 {
-		return string(raw)
+	if len(result.StructuredContent) > 0 && string(result.StructuredContent) != "null" {
+		sb.Write(result.StructuredContent)
+		sb.WriteString("\n")
 	}
-	return sb.String()
+	return sb.String(), result.IsError, nil
 }
 
 // stdioClient speaks the newline-delimited JSON-RPC framing MCP uses over stdio.

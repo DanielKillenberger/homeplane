@@ -68,9 +68,42 @@ type Config struct {
 	Platform      string    `json:"platform"`
 	DaemonHost    string    `json:"daemon_host"`
 	DaemonPort    int       `json:"daemon_port"`
+	GatewayToken  string    `json:"gateway_token_file,omitempty"`
 	Applied       bool      `json:"applied"`
 	InstalledAt   time.Time `json:"installed_at"`
 	AppliedAt     time.Time `json:"applied_at,omitempty"`
+
+	// Activation is what the activation sequence actually established: the
+	// health report, the derived stdio launch template, and the endpoint probe.
+	//
+	// It is PERSISTED rather than recomputed because every later command needs
+	// it and only activation can produce it. `gno apply` used to re-derive the
+	// status detail from an empty result and overwrite a real probe with "never
+	// probed" — a command that loads a unit was erasing the evidence that the
+	// endpoint works.
+	Activation ActivationRecord `json:"activation"`
+}
+
+// ActivationRecord is the evidence activation produced, kept with the config.
+type ActivationRecord struct {
+	Doctor      DoctorReport   `json:"doctor"`
+	Launch      LaunchTemplate `json:"launch_template"`
+	Probe       MCPProbe       `json:"mcp_probe"`
+	ProbeQuery  string         `json:"probe_query,omitempty"`
+	ProbeExpect string         `json:"probe_expect,omitempty"`
+	IndexBytes  int64          `json:"index_bytes,omitempty"`
+}
+
+// activationRecord projects a PrepareResult into the persisted record.
+func activationRecord(p PrepareResult) ActivationRecord {
+	return ActivationRecord{
+		Doctor:      p.Doctor,
+		Launch:      p.Launch,
+		Probe:       p.Probe,
+		ProbeQuery:  p.ProbeQuery,
+		ProbeExpect: p.ProbeExpect,
+		IndexBytes:  p.IndexBytes,
+	}
 }
 
 // ConfigPath is where the activation record lives.
@@ -139,7 +172,12 @@ type PrepareResult struct {
 	Doctor      DoctorReport   `json:"doctor"`
 	Launch      LaunchTemplate `json:"launch_template"`
 	Probe       MCPProbe       `json:"mcp_probe"`
-	SetupOutput string         `json:"setup_summary,omitempty"`
+	// ProbeQuery and ProbeExpect record what the endpoint was held to, so the
+	// evidence names the document that proved it works rather than merely
+	// asserting that something did.
+	ProbeQuery  string `json:"probe_query,omitempty"`
+	ProbeExpect string `json:"probe_expect,omitempty"`
+	SetupOutput string `json:"setup_summary,omitempty"`
 }
 
 // LaunchTemplate is the stdio server entry derived from upstream.
@@ -255,21 +293,113 @@ func Prepare(ctx context.Context, opts PrepareOptions) (PrepareResult, error) {
 	if opts.SkipMCPProbe {
 		return res, nil
 	}
-	query := strings.TrimSpace(opts.ProbeQuery)
-	if query == "" {
-		query = res.Collection
+
+	// The probe needs GROUND TRUTH, not just a query. A tool call that "worked"
+	// proves nothing unless we already know what a correct answer contains — so
+	// the index is asked directly first, and the endpoint then has to return the
+	// same document. Without this the probe passes on an empty result, an
+	// in-band MCP error, or a server talking to somebody else's index.
+	truth, query, err := groundTruth(ctx, cli, res.Collection, opts.ProbeQuery, vaultPath)
+	if err != nil {
+		return res, err
 	}
+	res.ProbeQuery = query
+	res.ProbeExpect = truth
 	res.Probe = ProbeMCP(ctx, MCPProbeOptions{
 		Command:  command,
 		Args:     args,
 		Env:      env,
-		CallTool: "gno_search",
+		CallTool: SearchToolName,
 		CallArgs: map[string]any{"query": query},
+		Expect:   truth,
 	})
 	if !res.Probe.OK {
-		return res, fmt.Errorf("gno: the stdio MCP endpoint did not answer: %s", res.Probe.Detail)
+		return res, fmt.Errorf("gno: the stdio MCP endpoint did not answer with indexed vault content: %s", res.Probe.Detail)
 	}
 	return res, nil
+}
+
+// SearchToolName is the engine's lexical retrieval tool, as published over MCP.
+const SearchToolName = "gno_search"
+
+// ErrNoGroundTruth means the freshly built index returns nothing for any probe
+// query, so there is no correct answer to hold the endpoint to.
+var ErrNoGroundTruth = errors.New("gno: the index returned no results for any probe query, so the endpoint cannot be verified")
+
+// groundTruth asks the INDEX what a correct answer looks like, and returns the
+// evidence string the MCP response must contain plus the query that produced it.
+//
+// Candidate queries are tried in order of how specific they are: the operator's
+// own query, then a distinctive token taken from a real file in the vault, then
+// the collection name. The document URI is used as the evidence because it
+// appears in both GNO's text rendering and its structured content, and because
+// it names the DOCUMENT — a response containing it cannot have come from an
+// empty index or a different collection.
+func groundTruth(ctx context.Context, cli CLI, collection, explicit, vaultPath string) (string, string, error) {
+	var candidates []string
+	if q := strings.TrimSpace(explicit); q != "" {
+		candidates = append(candidates, q)
+	}
+	if token := vaultToken(vaultPath); token != "" {
+		candidates = append(candidates, token)
+	}
+	if collection != "" {
+		candidates = append(candidates, collection)
+	}
+	var lastErr error
+	for _, q := range candidates {
+		hits, err := cli.Search(ctx, q)
+		if err != nil {
+			if errors.Is(err, ErrNoResults) {
+				lastErr = err
+				continue
+			}
+			return "", q, fmt.Errorf("gno: probe the index: %w", err)
+		}
+		for _, hit := range hits {
+			if evidence := strings.TrimSpace(hit.URI); evidence != "" {
+				return evidence, q, nil
+			}
+		}
+		lastErr = ErrNoResults
+	}
+	if lastErr == nil {
+		lastErr = ErrNoResults
+	}
+	return "", "", fmt.Errorf("%w (tried %s)", ErrNoGroundTruth, strings.Join(candidates, ", "))
+}
+
+// vaultToken picks a distinctive search term from the vault itself: the base
+// name of the first indexable file. It is a far better probe query than the
+// collection name, because it is guaranteed to correspond to a document that
+// exists rather than to a word that may appear nowhere.
+func vaultToken(vaultPath string) string {
+	entries, err := os.ReadDir(vaultPath)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		switch strings.ToLower(filepath.Ext(e.Name())) {
+		case ".md", ".markdown", ".txt", ".org":
+			name := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+			// Split on separators so a term like "meeting-notes-2026" becomes a
+			// word the lexical index actually holds.
+			for _, part := range strings.FieldsFunc(name, func(r rune) bool {
+				return r == '-' || r == '_' || r == ' ' || r == '.'
+			}) {
+				if len(part) >= 4 {
+					return part
+				}
+			}
+			if len(name) >= 3 {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // ── Stage 2: Install ─────────────────────────────────────────────────────────
@@ -284,7 +414,13 @@ type InstallOptions struct {
 	DaemonHost  string
 	DaemonPort  int
 	Index       string
-	Now         func() time.Time
+	// AllowUnprobed permits installing an activation whose stdio endpoint was
+	// never probed. It exists only for the re-activation path that deliberately
+	// skipped the probe; the default is to refuse, because publishing a
+	// descriptor for an unproven endpoint is how task .6 ends up wiring a harness
+	// to something that does not answer.
+	AllowUnprobed bool
+	Now           func() time.Time
 }
 
 // Install writes the supervision unit, publishes the endpoint descriptor, and
@@ -306,8 +442,38 @@ func Install(opts InstallOptions) (Config, Descriptor, error) {
 	if port <= 0 {
 		port = DefaultDaemonPort
 	}
+	// Validate BEFORE anything is written: an install that has already placed a
+	// unit and then discovers the gateway is world-reachable has to unwind, and
+	// the simplest unwind is not to have started.
+	if err := ValidateGateway(host, port); err != nil {
+		return Config{}, Descriptor{}, err
+	}
+	if strings.TrimSpace(opts.Prepared.Launch.Command) == "" {
+		return Config{}, Descriptor{}, errors.New("gno: refusing to install without a derived stdio launch template")
+	}
+	if !opts.Prepared.Probe.OK && !opts.AllowUnprobed {
+		return Config{}, Descriptor{}, errors.New("gno: refusing to install an endpoint whose stdio launch was never proven")
+	}
 
-	unit, err := DaemonUnit(opts.AgentBinary, opts.StateDir, host, port)
+	tokenFile, err := EnsureGatewayToken(opts.Prepared.Paths)
+	if err != nil {
+		return Config{}, Descriptor{}, err
+	}
+
+	// Installation writes four things, and a failure part-way through used to
+	// leave the earlier ones behind — including a published endpoint descriptor
+	// for an activation that officially failed, which task .6 would then wire a
+	// harness to. So every write is registered for rollback, and the DESCRIPTOR
+	// IS PUBLISHED LAST: it is the file other components consume, so it must not
+	// exist until everything it describes does.
+	var written []string
+	rollback := func() {
+		for i := len(written) - 1; i >= 0; i-- {
+			_ = os.Remove(written[i])
+		}
+	}
+
+	unit, err := DaemonUnit(opts.AgentBinary, opts.StateDir, host, port, tokenFile)
 	if err != nil {
 		return Config{}, Descriptor{}, err
 	}
@@ -315,6 +481,37 @@ func Install(opts InstallOptions) (Config, Descriptor, error) {
 	if err != nil {
 		return Config{}, Descriptor{}, err
 	}
+	written = append(written, unitPath)
+
+	cfg := Config{
+		Bin:          opts.Prepared.Bin,
+		Version:      opts.Prepared.Version,
+		Collection:   opts.Prepared.Collection,
+		VaultPath:    opts.Prepared.VaultPath,
+		Index:        opts.Index,
+		Paths:        opts.Prepared.Paths,
+		IndexDBPath:  opts.Prepared.IndexDBPath,
+		UnitLabel:    unit.Label,
+		UnitPath:     unitPath,
+		Platform:     string(opts.Installer.Platform),
+		DaemonHost:   host,
+		DaemonPort:   port,
+		GatewayToken: tokenFile,
+		Applied:      false,
+		InstalledAt:  now().UTC(),
+		Activation:   activationRecord(opts.Prepared),
+	}
+	if err := SaveConfig(opts.StateDir, cfg); err != nil {
+		rollback()
+		return Config{}, Descriptor{}, err
+	}
+	written = append(written, ConfigPath(opts.StateDir))
+
+	if err := RegisterRemoval(opts.StateDir, cfg, opts.Installer, currentUID(), now()); err != nil {
+		rollback()
+		return Config{}, Descriptor{}, err
+	}
+	written = append(written, RemovalPlanPath(opts.StateDir))
 
 	descriptor := Descriptor{
 		SchemaVersion: DescriptorSchemaVersion,
@@ -322,13 +519,23 @@ func Install(opts InstallOptions) (Config, Descriptor, error) {
 		Engine:        "gno",
 		EngineVersion: opts.Prepared.Version,
 		Transport:     TransportStdio,
-		Command:       opts.Prepared.Launch.Command,
-		Args:          opts.Prepared.Launch.Args,
-		Env:           opts.Prepared.Launch.Env,
-		ServerName:    "gno",
-		Collection:    opts.Prepared.Collection,
-		VaultPath:     opts.Prepared.VaultPath,
-		DerivedFrom:   opts.Prepared.Launch.DerivedFrom,
+		// Harnesses launch the AGENT, not the engine, for the same reason the
+		// supervision unit does: a launch nobody records is a launch `status`
+		// can never report on (R4). The agent is a transparent stdio pass-through
+		// that runs the derived upstream template underneath.
+		Command:    opts.AgentBinary,
+		Args:       StdioWrapperArgs(opts.StateDir),
+		Env:        opts.Prepared.Launch.Env,
+		ServerName: "gno",
+		Underlying: &LaunchTemplate{
+			Command:     opts.Prepared.Launch.Command,
+			Args:        opts.Prepared.Launch.Args,
+			Env:         opts.Prepared.Launch.Env,
+			DerivedFrom: opts.Prepared.Launch.DerivedFrom,
+		},
+		Collection:  opts.Prepared.Collection,
+		VaultPath:   opts.Prepared.VaultPath,
+		DerivedFrom: opts.Prepared.Launch.DerivedFrom,
 		Supervision: &SupervisionInfo{
 			Mode:          "daemon",
 			UnitLabel:     unit.Label,
@@ -340,31 +547,10 @@ func Install(opts InstallOptions) (Config, Descriptor, error) {
 		WrittenAt: now().UTC(),
 	}
 	if err := SaveDescriptor(opts.StateDir, descriptor); err != nil {
+		rollback()
 		return Config{}, Descriptor{}, err
 	}
 
-	cfg := Config{
-		Bin:         opts.Prepared.Bin,
-		Version:     opts.Prepared.Version,
-		Collection:  opts.Prepared.Collection,
-		VaultPath:   opts.Prepared.VaultPath,
-		Index:       opts.Index,
-		Paths:       opts.Prepared.Paths,
-		IndexDBPath: opts.Prepared.IndexDBPath,
-		UnitLabel:   unit.Label,
-		UnitPath:    unitPath,
-		Platform:    string(opts.Installer.Platform),
-		DaemonHost:  host,
-		DaemonPort:  port,
-		Applied:     false,
-		InstalledAt: now().UTC(),
-	}
-	if err := SaveConfig(opts.StateDir, cfg); err != nil {
-		return Config{}, Descriptor{}, err
-	}
-	if err := RegisterRemoval(opts.StateDir, cfg, opts.Installer, currentUID(), now()); err != nil {
-		return Config{}, Descriptor{}, err
-	}
 	// A fresh unit starts a fresh restart history.
 	_ = (supervise.Tracker{Dir: opts.StateDir, Label: unit.Label}).Reset()
 	return cfg, descriptor, nil
@@ -376,9 +562,15 @@ func Install(opts InstallOptions) (Config, Descriptor, error) {
 // records its own start and exit in the shared restart ledger, which is the only
 // thing that makes a crash loop visible to `status` (launchd and systemd both
 // restart forever without telling anyone).
-func DaemonUnit(agentBinary, stateDir, host string, port int) (supervise.Unit, error) {
+func DaemonUnit(agentBinary, stateDir, host string, port int, tokenFile string) (supervise.Unit, error) {
 	if strings.TrimSpace(agentBinary) == "" {
 		return supervise.Unit{}, errors.New("gno: the supervision unit needs the homeplane-agent path")
+	}
+	// The unit is the thing that survives reboots, so the loopback guarantee is
+	// re-checked at the moment it is written rather than trusted to whoever
+	// called us.
+	if err := ValidateGateway(host, port); err != nil {
+		return supervise.Unit{}, err
 	}
 	logDir := filepath.Join(stateDir, "logs")
 	if err := os.MkdirAll(logDir, dirPerm); err != nil {
@@ -391,7 +583,9 @@ func DaemonUnit(agentBinary, stateDir, host string, port int) (supervise.Unit, e
 		Args: []string{"gno", "run",
 			"-state-dir", stateDir,
 			"-host", host,
-			"-port", strconv.Itoa(port)},
+			"-port", strconv.Itoa(port),
+			// A PATH, never the token itself: unit files are world-readable.
+			"-gateway-token-file", tokenFile},
 		WorkingDir:      stateDir,
 		StdoutPath:      filepath.Join(logDir, "gno.log"),
 		StderrPath:      filepath.Join(logDir, "gno.err.log"),
@@ -417,7 +611,7 @@ func Apply(stateDir string, installer supervise.Installer, uid string, now func(
 	if exe, err := os.Executable(); err == nil {
 		agentBin = exe
 	}
-	unit, err := DaemonUnit(agentBin, stateDir, cfg.DaemonHost, cfg.DaemonPort)
+	unit, err := DaemonUnit(agentBin, stateDir, cfg.DaemonHost, cfg.DaemonPort, cfg.GatewayToken)
 	if err != nil {
 		return cfg, nil, err
 	}
@@ -462,7 +656,15 @@ func RunDaemon(ctx context.Context, opts RunOptions) error {
 	err := opts.Run(ctx)
 	code := 0
 	detail := ""
-	if err != nil {
+	switch {
+	case err == nil:
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		// A cancelled context is how a supervised process is ASKED to stop —
+		// during a rebuild, a shutdown, or a unit reload. Recording that as a
+		// failed exit would make every deliberate stop look like a crash in the
+		// ledger `status` reads.
+		detail = "stopped on request"
+	default:
 		code = 1
 		detail = firstLine(err.Error())
 	}
@@ -474,12 +676,40 @@ func RunDaemon(ctx context.Context, opts RunOptions) error {
 
 // ── Rebuild: the disposable contract, exercised ──────────────────────────────
 
+// ErrRebuildInProgress means another rebuild holds the lock.
+var ErrRebuildInProgress = errors.New("gno: another index rebuild is already running")
+
+// ErrEngineRunning means the supervised daemon is alive and nothing was supplied
+// to stop it.
+var ErrEngineRunning = errors.New("gno: the retrieval engine is running and holds the index open")
+
+// RebuildOptions describes how to make the index safe to replace.
+type RebuildOptions struct {
+	StateDir string
+	// Quiesce stops whatever is holding the index open and returns a resume
+	// function. It is injected rather than assumed because the thing to stop
+	// differs by caller: the CLI stops a launchd/systemd unit, a test stops a
+	// goroutine, and a machine where the engine was never applied has nothing to
+	// stop at all.
+	Quiesce func(context.Context) (resume func() error, err error)
+	// Probe reports daemon liveness for the refuse-if-running guard. Nil means
+	// supervise.ProcessProbe.
+	Probe supervise.Probe
+}
+
 // Rebuild deletes the machine-local index and rebuilds it from the vault.
 //
-// This is the self-heal path: deleting the index is a supported operation, and
-// the ONLY thing needed to recover from it is the vault, which syncs. Nothing
-// here touches the vault itself.
-func Rebuild(ctx context.Context, cli CLI, cfg Config) (PrepareResult, error) {
+// This is the self-heal path, and it is the one operation in this package that
+// can corrupt state if it is careless. The supervised daemon holds the SQLite
+// index open continuously; removing the data directory underneath it leaves the
+// daemon writing to an unlinked file on Unix while every client reads the
+// replacement — continuous indexing silently attached to a database nobody can
+// see. So the daemon is STOPPED first, the rebuild runs under an exclusive lock,
+// and the daemon comes back only after the new index has been verified.
+//
+// Nothing here touches the vault itself: the only thing needed to recover from a
+// deleted index is the vault, which syncs.
+func Rebuild(ctx context.Context, cli CLI, cfg Config, opts RebuildOptions) (PrepareResult, error) {
 	res := PrepareResult{
 		VaultPath:  cfg.VaultPath,
 		Collection: cfg.Collection,
@@ -490,6 +720,36 @@ func Rebuild(ctx context.Context, cli CLI, cfg Config) (PrepareResult, error) {
 	if err := EnsureDisposable(cfg.Paths, cfg.VaultPath); err != nil {
 		return res, err
 	}
+
+	stateDir := opts.StateDir
+	if strings.TrimSpace(stateDir) == "" {
+		return res, errors.New("gno: rebuild needs the agent state directory for its lock")
+	}
+	unlock, err := acquireRebuildLock(stateDir)
+	if err != nil {
+		return res, err
+	}
+	defer unlock()
+
+	// Refuse rather than race. A rebuild that quietly proceeded while the daemon
+	// held the old database open would "succeed" and leave the machine indexing
+	// into a file that no longer exists.
+	if opts.Quiesce == nil {
+		if alive, detail := engineIsAlive(stateDir, opts.Probe); alive {
+			return res, fmt.Errorf("%w (%s) — stop it first, or rebuild through `homeplane-agent gno rebuild`, which does", ErrEngineRunning, detail)
+		}
+	} else {
+		resume, err := opts.Quiesce(ctx)
+		if err != nil {
+			return res, fmt.Errorf("gno: stop the retrieval engine before rebuilding: %w", err)
+		}
+		if resume != nil {
+			// Resume runs whatever happened below: a failed rebuild that left the
+			// engine stopped would turn a recoverable problem into an outage.
+			defer func() { _ = resume() }()
+		}
+	}
+
 	if err := Discard(cfg.Paths); err != nil {
 		return res, err
 	}
@@ -511,6 +771,96 @@ func Rebuild(ctx context.Context, cli CLI, cfg Config) (PrepareResult, error) {
 		res.Doctor = doctor
 	}
 	return res, nil
+}
+
+// engineIsAlive reports whether the supervised daemon appears to be running.
+func engineIsAlive(stateDir string, probe supervise.Probe) (bool, string) {
+	_, live, err := (supervise.Tracker{Dir: stateDir, Label: UnitLabel}).Observe(probe)
+	if err != nil {
+		// An unreadable ledger is not proof of absence, so assume the worst: the
+		// cost of a needless refusal is an error message, the cost of a wrong
+		// "it is not running" is a corrupted index.
+		return true, "restart history unreadable: " + err.Error()
+	}
+	if !live.Known {
+		return true, "cannot tell whether it is running (" + live.Detail + ")"
+	}
+	return live.Alive, live.Detail
+}
+
+// rebuildLockName is the exclusive lock guarding index replacement.
+const rebuildLockName = "gno.rebuild.lock"
+
+// staleRebuildLock is how long a lock may sit before it is treated as abandoned
+// by a process that died mid-rebuild.
+const staleRebuildLock = 30 * time.Minute
+
+// acquireRebuildLock takes an exclusive, atomic lock via O_EXCL creation.
+func acquireRebuildLock(stateDir string) (func(), error) {
+	path := filepath.Join(stateDir, rebuildLockName)
+	take := func() (*os.File, error) {
+		return os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, filePerm)
+	}
+	f, err := take()
+	if errors.Is(err, os.ErrExist) {
+		// A crashed rebuild must not lock the machine out forever, but a lock
+		// that is merely OLD is still evidence, so the age threshold is generous.
+		if info, statErr := os.Stat(path); statErr == nil && time.Since(info.ModTime()) > staleRebuildLock {
+			_ = os.Remove(path)
+			f, err = take()
+		}
+	}
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return nil, ErrRebuildInProgress
+		}
+		return nil, fmt.Errorf("gno: take the rebuild lock: %w", err)
+	}
+	fmt.Fprintf(f, "pid %d at %s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339))
+	_ = f.Close()
+	return func() { _ = os.Remove(path) }, nil
+}
+
+// SupervisorQuiesce stops the supervised unit through the platform supervisor
+// and returns a resume that starts it again.
+//
+// It is a no-op when the unit was never applied: there is nothing holding the
+// index open, so stopping and starting would only add failure modes.
+func SupervisorQuiesce(stateDir string, cfg Config, installer supervise.Installer, uid string) func(context.Context) (func() error, error) {
+	return func(ctx context.Context) (func() error, error) {
+		if !cfg.Applied || installer.Runner == nil {
+			return nil, nil
+		}
+		agentBin := cfg.UnitPath
+		if exe, err := os.Executable(); err == nil {
+			agentBin = exe
+		}
+		unit, err := DaemonUnit(agentBin, stateDir, cfg.DaemonHost, cfg.DaemonPort, cfg.GatewayToken)
+		if err != nil {
+			return nil, err
+		}
+		stop, err := installer.StopCommands(unit, uid)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range stop {
+			if err := installer.Runner(c.Name, c.Args...); err != nil {
+				return nil, fmt.Errorf("%s: %w", c, err)
+			}
+		}
+		return func() error {
+			start, err := installer.StartCommands(unit, uid)
+			if err != nil {
+				return err
+			}
+			for _, c := range start {
+				if err := installer.Runner(c.Name, c.Args...); err != nil {
+					return fmt.Errorf("%s: %w", c, err)
+				}
+			}
+			return nil
+		}, nil
+	}
 }
 
 func currentUID() string { return strconv.Itoa(os.Getuid()) }

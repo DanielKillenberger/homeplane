@@ -59,7 +59,7 @@ case "$1" in
           case "$line" in
             *'"method":"initialize"'*) printf '{"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"gno","version":"1.29.6"}},"jsonrpc":"2.0","id":1}\n' ;;
             *'"method":"tools/list"'*) printf '{"result":{"tools":[{"name":"gno_search"}]},"jsonrpc":"2.0","id":2}\n' ;;
-            *'"method":"tools/call"'*) printf '{"result":{"content":[{"type":"text","text":"Found 1 results"}]},"jsonrpc":"2.0","id":3}\n' ;;
+            *'"method":"tools/call"'*) printf '{"result":{"content":[{"type":"text","text":"Found 1 results [#a] gno://c/n.md"}]},"jsonrpc":"2.0","id":3}\n' ;;
           esac
         done
         exit 0 ;;
@@ -215,8 +215,13 @@ func TestGNOEndpointPrintsThePublishedDescriptor(t *testing.T) {
 	if d.Component != gno.ComponentRetrievalEngine {
 		t.Fatalf("wrong component: %q", d.Component)
 	}
-	if d.Args[len(d.Args)-1] != "mcp" {
-		t.Fatalf("the published launch template is not the stdio server: %v", d.Args)
+	// Harnesses launch the AGENT, so that every launch is recorded and can reach
+	// `status` (R4). The engine's own template is published alongside it.
+	if d.Command == "" || len(d.Args) < 2 || d.Args[0] != "gno" || d.Args[1] != "mcp" {
+		t.Fatalf("the published command is not the agent's stdio wrapper: %s %v", d.Command, d.Args)
+	}
+	if d.Underlying == nil || d.Underlying.Args[len(d.Underlying.Args)-1] != "mcp" {
+		t.Fatalf("the underlying engine template is missing or not the stdio server: %+v", d.Underlying)
 	}
 }
 
@@ -267,6 +272,118 @@ func TestGNODeactivateWithoutExecuteChangesNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(cfg.UnitPath); err != nil {
 		t.Fatalf("the unit was removed by a dry run: %v", err)
+	}
+}
+
+// The wrapper is what harnesses actually run, so a launch that fails must be
+// visible to `status` afterwards — that is the whole reason for the indirection.
+func TestGNOMCPWrapperRecordsEveryLaunch(t *testing.T) {
+	stateDir, _, unitDir, bin := gnoEnv(t)
+	var discard bytes.Buffer
+	if code := runGNO(context.Background(), []string{
+		"activate", "-state-dir", stateDir, "-bin", bin, "-unit-dir", unitDir, "-json",
+	}, &discard, &discard); code != 0 {
+		t.Fatalf("activate failed:\n%s", discard.String())
+	}
+
+	// The stub's stdio server exits as soon as its stdin closes, which is
+	// exactly what a harness disconnect looks like.
+	var stdout, stderr bytes.Buffer
+	if code := runGNO(context.Background(), []string{"mcp", "-state-dir", stateDir}, &stdout, &stderr); code != 0 {
+		t.Fatalf("wrapper exit != 0: %s", stderr.String())
+	}
+	ledger, err := gno.LoadLaunchLedger(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ledger.TotalLaunches != 1 {
+		t.Fatalf("the launch was not recorded: %+v", ledger)
+	}
+
+	// And a machine whose engine has gone missing records the failure rather
+	// than failing silently where nobody can see it.
+	cfg, err := gno.LoadConfig(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Activation.Launch.Command = filepath.Join(tmp(t), "definitely-not-here")
+	if err := gno.SaveConfig(stateDir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if code := runGNO(context.Background(), []string{"mcp", "-state-dir", stateDir}, &stdout, &stderr); code == 0 {
+		t.Fatal("the wrapper reported success with no engine to launch")
+	}
+	ledger, err = gno.LoadLaunchLedger(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ledger.ConsecutiveFailures() != 1 {
+		t.Fatalf("the failed launch was not recorded: %+v", ledger)
+	}
+}
+
+// R4's precondition applies to the supervised process too: no vault, no engine.
+func TestGNORunRefusesWithoutAVault(t *testing.T) {
+	stateDir, vaultPath, unitDir, bin := gnoEnv(t)
+	var discard bytes.Buffer
+	if code := runGNO(context.Background(), []string{
+		"activate", "-state-dir", stateDir, "-bin", bin, "-unit-dir", unitDir, "-json",
+	}, &discard, &discard); code != 0 {
+		t.Fatalf("activate failed:\n%s", discard.String())
+	}
+	if err := os.RemoveAll(vaultPath); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := runGNO(context.Background(), []string{"run", "-state-dir", stateDir, "-bin", bin}, &stdout, &stderr); code == 0 {
+		t.Fatal("the daemon started against a vault that no longer exists")
+	}
+	if !strings.Contains(stderr.String(), "vault is not available") {
+		t.Fatalf("the refusal does not name the vault: %s", stderr.String())
+	}
+	state, _, err := agent.PeekState(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.GNO == nil || state.GNO.State != agent.StateDegraded {
+		t.Fatalf("the refusal was not recorded as degraded: %+v", state.GNO)
+	}
+}
+
+// A gateway host that is not loopback must never reach a running daemon.
+func TestGNORunRefusesANonLoopbackGateway(t *testing.T) {
+	stateDir, _, unitDir, bin := gnoEnv(t)
+	var discard bytes.Buffer
+	if code := runGNO(context.Background(), []string{
+		"activate", "-state-dir", stateDir, "-bin", bin, "-unit-dir", unitDir, "-json",
+	}, &discard, &discard); code != 0 {
+		t.Fatalf("activate failed:\n%s", discard.String())
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := runGNO(context.Background(), []string{
+		"run", "-state-dir", stateDir, "-bin", bin, "-host", "0.0.0.0",
+	}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatal("the daemon bound a world-reachable address")
+	}
+	if !strings.Contains(stderr.String(), "loopback") {
+		t.Fatalf("the refusal does not name the binding: %s", stderr.String())
+	}
+}
+
+func TestGNOActivateRefusesANonLoopbackGateway(t *testing.T) {
+	stateDir, _, unitDir, bin := gnoEnv(t)
+	var stdout, stderr bytes.Buffer
+	code := runGNO(context.Background(), []string{
+		"activate", "-state-dir", stateDir, "-bin", bin, "-unit-dir", unitDir, "-host", "0.0.0.0",
+	}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatal("activation accepted a world-reachable gateway")
+	}
+	if _, err := gno.LoadDescriptor(stateDir); err == nil {
+		t.Fatal("a descriptor was published for a refused activation")
 	}
 }
 

@@ -63,6 +63,16 @@ later mistakes the difference for an oversight.
   discards it and re-runs the verified `setup` from the vault alone. The vault
   is never modified. `TestLiveDeletedIndexSelfHeals` exercises this against the
   real engine.
+- A rebuild **stops the daemon first**. The supervised daemon holds the SQLite
+  index open continuously, and on Unix removing the file underneath it leaves the
+  daemon writing to an unlinked database while every client reads the
+  replacement — continuous indexing silently attached to state nobody can see. So
+  the rebuild takes an exclusive lock, quiesces the daemon through the platform
+  supervisor, rebuilds, verifies, and resumes it (including after a failed
+  rebuild — a recoverable problem must not become an outage). With no way to stop
+  the daemon it REFUSES rather than racing, and an unobservable daemon counts as
+  running. `TestLiveRebuildWhileTheDaemonIsRunning` proves a document written
+  after the rebuild reaches the NEW index.
 
 ## 4. Lifecycle mode — the decision
 
@@ -72,8 +82,8 @@ lifecycles, and Homeplane reports each one as what it is:
 
 | Half | Mode | What `status` may claim |
 |---|---|---|
-| The engine (indexing + health) | **supervised daemon** (`gno --offline daemon --host 127.0.0.1 --port N`) | pid, restart count, crash-loop |
-| The harness endpoint | **stdio, per client** (`… mcp`) | last-probe result and its timestamp — never a pid |
+| The engine (indexing + health) | **supervised daemon** (`gno --offline daemon --host 127.0.0.1 --port N --mcp-token-file …`) | pid, restart count, crash-loop |
+| The harness endpoint | **stdio, per client**, launched through the agent | the per-launch history — never a pid |
 
 **Why the daemon is supervised.** GNO's `daemon` gives live continuous indexing
 and watch, so the index stays current without anyone remembering to re-index.
@@ -89,6 +99,34 @@ telling anyone.
 weights on first start, so a freshly installed machine would spend its first ten
 minutes pulling 639 MB from a unit that looks like it is hanging. Verified
 empirically — see the probe log in this task's evidence.
+
+`--json` is deliberately NOT passed: upstream accepts it on `daemon` only
+together with `--status`, and refuses the long-running form with a VALIDATION
+error. Passing it made the daemon fail on every start, and only running the real
+binary caught it — the captured contract now records the constraint and a test
+enforces it.
+
+**The gateway is loopback-only, and that is checked rather than documented.**
+`ValidateGateway` refuses anything that is not a literal loopback IP —
+`0.0.0.0`, a LAN address, and even `localhost` (a hostname can be re-pointed in
+`/etc/hosts`) — and validates the port range. It runs at activation, at unit
+write, and again in the supervised process, because the unit is written once and
+then runs for months. The gateway additionally requires a bearer token from a
+0600 file (`--mcp-token-file`); harnesses never use this HTTP path, so nothing
+legitimate needs it open, and an unauthenticated retrieval endpoint over the
+whole vault is the worst thing this component could leave running. The unit
+carries the token's PATH, never its bytes.
+
+**Harnesses launch the agent, not the engine.** The descriptor's command is
+`homeplane-agent gno mcp`, a transparent stdio pass-through that runs the derived
+upstream template with the harness's own pipes attached and records the outcome
+of every launch. The reason is R4: a probe taken once at activation cannot report
+that launches have been failing since, because a harness starts its own server
+whenever it likes and nothing else observes it. The engine's own template is
+published alongside as `underlying`, so the indirection stays debuggable and an
+operator can run it by hand. `status` reads that launch history and reports a
+healthy daemon with failing harness launches as degraded — the two halves fail
+independently.
 
 **Why harness access is stdio, not the daemon's HTTP gateway.** The daemon does
 expose an MCP gateway on loopback, and Homeplane deliberately does not wire
@@ -126,6 +164,22 @@ stating:
 A dry run that reports a real write is refused: that would mean upstream changed
 a harness config behind task .6's back.
 
+**The endpoint probe is held to ground truth.** Activation asks the index
+directly what a correct answer looks like — a document URI from a real lexical
+hit — and then requires the stdio endpoint's `gno_search` response to contain
+that same URI. Without it a probe passes on an empty result, on an in-band MCP
+error (`isError` is reported inside a perfectly successful JSON-RPC response), or
+on a server answering from somebody else's index. All three are now refusals, and
+an index that returns nothing for any candidate query fails activation rather
+than yielding an endpoint nobody verified.
+
+**Installation publishes the descriptor last.** It writes the unit, then the
+config, then the removal plan, and only then the descriptor — because the
+descriptor is the file other components consume, so it must not exist until
+everything it describes does. Any failure along the way rolls back what was
+already written; a failed activation leaves no endpoint for task .6 to wire a
+harness to.
+
 Descriptors are also refused if they carry anything credential-shaped, because
 the descriptor is copied verbatim into harness config files that are not 0600.
 
@@ -150,8 +204,16 @@ With `HOMEPLANE_GNO_BIN` set (`internal/agent/gno/live_test.go`):
 - a real stdio MCP launch completes the handshake, lists tools, and returns the
   corpus's marker phrase from `gno_search` (R6 groundwork);
 - deleting the index and rebuilding recovers retrieval from the corpus alone;
-- the real daemon starts under `RunDaemon`, records its start, survives, and
-  records a clean exit when its context is cancelled.
+- the real daemon starts under `RunDaemon`, **binds its loopback port**, is
+  still running when checked (its goroutine has not completed), and returns
+  `context.Canceled` when stopped — recorded as a CLEAN exit, because a
+  deliberate stop must not inflate the crash-loop signal;
+- a rebuild performed while that daemon is running stops it, replaces the index,
+  resumes it, and a document written afterwards reaches the new index.
+
+That daemon test is what caught the `--json` argv bug: the earlier version
+recorded a start before invoking GNO and never checked whether the process
+survived, so a daemon that failed immediately on every start passed.
 
 **The boundary, recorded honestly:** these tests are skipped when
 `HOMEPLANE_GNO_BIN` is unset, because a CI machine need not carry Bun and a

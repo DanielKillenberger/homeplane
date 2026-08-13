@@ -145,15 +145,22 @@ homeplane-agent gno rebuild                          # discard the index, rebuil
 `gno activate` refuses unless GNO matches its pinned version, the index location
 is outside the vault and outside every known synchronized tree, `gno setup`
 verifies the binding with a real retrieval, and one launch of the stdio MCP
-template answers a tool call with real vault content. It then publishes
+template returns the *same document the index itself just returned* — an
+endpoint that answers with nothing, with an in-band MCP error, or from a
+different index is a refusal. It then publishes
 `~/.homeplane/endpoints/retrieval-engine.json` — the descriptor harness
-configuration is generated from — and registers a removal plan.
+configuration is generated from — and registers a removal plan. The descriptor is
+written last, so a failed activation never leaves an endpoint behind.
 
-Two lifecycles, deliberately not conflated: the indexing **daemon** is
-supervised (pid, restart count, crash-loop surfaced in `status`), while harness
-access is **stdio**, launched per client, so `status` reports the last launch
-probe rather than a pid it does not have. The reasoning, and what was verified
-against the real binary, is in `docs/decisions/d8-gno.md`.
+Two lifecycles, deliberately not conflated: the indexing **daemon** is supervised
+(pid, restart count, crash-loop surfaced in `status`) and binds a
+token-protected, loopback-only gateway, while harness access is **stdio**,
+launched per client through `homeplane-agent gno mcp` so that every launch —
+including the ones that fail instantly — is recorded and reported. `status` never
+claims a pid for the stdio half. `gno rebuild` stops the daemon before replacing
+the index and resumes it afterwards, and refuses rather than racing if it cannot.
+The reasoning, and what was verified against the real binary, is in
+`docs/decisions/d8-gno.md`.
 
 Enrolment is identity-preserving: re-running `enrol` rotates this machine's
 credential on the same server-side record and the previous credential stops

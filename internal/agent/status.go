@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DanielKillenberger/homeplane/internal/agent/gno"
 	"github.com/DanielKillenberger/homeplane/internal/agent/supervise"
 )
 
@@ -332,15 +333,21 @@ func syncComponent(stateDir string, state State, probe supervise.Probe) Componen
 // vault is missing must report the engine as degraded and SAY why, rather than
 // leaving a not_configured that reads like "nobody got round to it yet".
 func gnoComponent(stateDir string, state State, probe supervise.Probe) ComponentReport {
+	// The vault is checked FIRST, and unconditionally.
+	//
+	// R4 makes the engine's dependency explicit: no vault, no engine, and the
+	// state is named. That has to be evaluated before anything else, because the
+	// dangerous case is not the fresh machine — it is the machine that activated
+	// successfully weeks ago and whose vault directory has since vanished. Its
+	// recorded state still says `ok` and its daemon pid is still alive (GNO keeps
+	// serving a stale index), so consulting the recorded state first would report
+	// a healthy retrieval engine over a vault that is gone.
+	if degraded, ok := vaultBlocker(state); ok {
+		return degraded
+	}
+
 	c := localComponent(ComponentGNO, state.GNO, "the retrieval engine is not configured yet")
 	if state.GNO == nil || strings.TrimSpace(state.GNO.State) == "" {
-		if strings.TrimSpace(state.VaultPath) == "" {
-			// Naming the blocker is the whole requirement here (R4): without a
-			// vault the engine was never started, and that is a different
-			// machine state from "not set up yet".
-			return ComponentReport{Name: ComponentGNO, State: StateNotConfigured,
-				Detail: "not started: no vault on this machine — run `homeplane-agent vault detect -record` or `vault retrieve` first"}
-		}
 		return c
 	}
 	// A recorded failure is the whole story: nothing was supervised, so there is
@@ -380,6 +387,60 @@ func gnoComponent(stateDir string, state State, probe supervise.Probe) Component
 	default:
 		c.State = StateOK
 		c.Detail = live.Detail + "; " + ledger.Summary(now) + "; " + c.Detail
+	}
+	return withStdioLaunches(stateDir, c)
+}
+
+// vaultBlocker reports the engine's state when the vault cannot support it.
+//
+// Every branch names both the blocker and the fix, because "not_configured" on
+// its own is indistinguishable from "nobody has got round to it" — and R4 asks
+// for a named degraded state, not a shrug.
+func vaultBlocker(state State) (ComponentReport, bool) {
+	report := func(s, detail string) (ComponentReport, bool) {
+		return ComponentReport{Name: ComponentGNO, State: s, Detail: detail}, true
+	}
+	path := strings.TrimSpace(state.VaultPath)
+	if path == "" {
+		return report(StateDegraded,
+			"not started: no vault on this machine — run `homeplane-agent vault detect -record` or `vault retrieve` first (retryable)")
+	}
+	info, err := os.Stat(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return report(StateDegraded,
+			"not started: the vault at "+path+" no longer exists — the engine cannot index what is not there (retryable)")
+	case err != nil:
+		return report(StateDegraded,
+			"not started: the vault at "+path+" is unreadable: "+err.Error()+" (retryable)")
+	case !info.IsDir():
+		return report(StateDegraded,
+			"not started: the vault path "+path+" is not a directory (retryable)")
+	}
+	return ComponentReport{}, false
+}
+
+// withStdioLaunches folds the harness-launch history into the engine's report.
+//
+// The daemon and the stdio endpoint fail independently: the indexer can be
+// perfectly healthy while every harness launch dies on a missing runtime. A
+// report that only described the daemon would call that machine `ok`.
+func withStdioLaunches(stateDir string, c ComponentReport) ComponentReport {
+	launches, err := gno.LoadLaunchLedger(stateDir)
+	if err != nil {
+		return c
+	}
+	// Never launched is not a fault: harnesses start the endpoint on demand, and
+	// a machine configured this morning has legitimately never seen one.
+	if launches.TotalLaunches == 0 {
+		return c
+	}
+	c.Detail += "; " + launches.Summary()
+	if launches.ConsecutiveFailures() > 0 && c.State == StateOK {
+		// The daemon is fine, so this is specifically the harness path failing —
+		// say which half is broken rather than degrading the whole thing namelessly.
+		c.State = StateDegraded
+		c.Detail = "the indexing daemon is healthy but harness launches are FAILING — " + c.Detail
 	}
 	return c
 }

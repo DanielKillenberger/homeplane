@@ -25,17 +25,18 @@ Usage:
   homeplane-agent gno doctor [-json]       the engine's own health report
   homeplane-agent gno endpoint [-json]     print the published endpoint descriptor
   homeplane-agent gno rebuild [-json]      delete the machine-local index and rebuild it
+  homeplane-agent gno mcp                  the stdio MCP endpoint harnesses launch
   homeplane-agent gno deactivate [flags]   stop the engine and (optionally) drop its state
 
 Two lifecycles, deliberately not conflated:
   the DAEMON is supervised by this agent — it has a pid, a restart count, and a
-    crash-loop threshold, and `+"`status`"+` reports all three;
+    crash-loop threshold, and ` + "`status`" + ` reports all three;
   the HARNESS endpoint is stdio — each client launches its own short-lived
     server, so there is no pid to report, only the result of the last launch.
 
 The index is machine-local and disposable: it lives under the agent state
 directory, never inside the vault or any synchronized tree, and deleting it is a
-supported operation that `+"`gno rebuild`"+` recovers from using the vault alone.
+supported operation that ` + "`gno rebuild`" + ` recovers from using the vault alone.
 `
 
 func runGNO(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -56,6 +57,8 @@ func runGNO(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return runGNOEndpoint(args[1:], stdout, stderr)
 	case "rebuild":
 		return runGNORebuild(ctx, args[1:], stdout, stderr)
+	case "mcp":
+		return runGNOMCP(ctx, args[1:], stdout, stderr)
 	case "deactivate":
 		return runGNODeactivate(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
@@ -120,6 +123,25 @@ func resolveGNO(stateDir, flagValue string, log io.Writer) (gno.CLI, error) {
 	return gno.CLI{Bin: bin, Pin: pin, Dirs: dirs, Index: index, Log: log}, nil
 }
 
+// ErrVaultUnavailable is the daemon's own precondition failure (R4): the engine
+// cannot index a vault that is not there, and starting anyway would serve a
+// stale index while reporting a healthy component.
+var ErrVaultUnavailable = errors.New("the vault is not available")
+
+func requireVault(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("%w: no vault recorded — run `homeplane-agent vault detect -record` first", ErrVaultUnavailable)
+	}
+	info, err := os.Stat(path)
+	switch {
+	case err != nil:
+		return fmt.Errorf("%w: %s: %v", ErrVaultUnavailable, path, err)
+	case !info.IsDir():
+		return fmt.Errorf("%w: %s is not a directory", ErrVaultUnavailable, path)
+	}
+	return nil
+}
+
 func recordGNO(dir string, component *agent.ComponentState) {
 	// A failure to record status must never mask the failure being recorded.
 	_ = mutateState(dir, func(st *agent.State) { st.GNO = component })
@@ -130,6 +152,21 @@ func recordGNO(dir string, component *agent.ComponentState) {
 // is unaffected: a retrieval engine that will not start is not a lost vault.
 func gnoComponentFor(err error) *agent.ComponentState {
 	switch {
+	case errors.Is(err, ErrVaultUnavailable):
+		return &agent.ComponentState{
+			State:  agent.StateDegraded,
+			Detail: "not started: " + firstLine(err.Error()) + " (retryable; nothing was indexed)",
+		}
+	case errors.Is(err, gno.ErrGatewayNotLoopback), errors.Is(err, gno.ErrGatewayPort):
+		return &agent.ComponentState{
+			State:  agent.StateDegraded,
+			Detail: "NOT started: " + firstLine(err.Error()) + " — the engine serves the whole vault and must never bind beyond this machine",
+		}
+	case errors.Is(err, gno.ErrEngineRunning), errors.Is(err, gno.ErrRebuildInProgress):
+		return &agent.ComponentState{
+			State:  agent.StateDegraded,
+			Detail: "index rebuild refused: " + firstLine(err.Error()) + " (retryable)",
+		}
 	case errors.Is(err, gno.ErrNoVaultPath):
 		return &agent.ComponentState{
 			State:  agent.StateDegraded,
@@ -165,10 +202,14 @@ func gnoComponentFor(err error) *agent.ComponentState {
 
 // gnoComponentForResult projects an activation OUTCOME into status. An
 // installed-but-unloaded unit is NOT ok: nothing is keeping the index current.
-func gnoComponentForResult(cfg gno.Config, prepared gno.PrepareResult) *agent.ComponentState {
+func gnoComponentForResult(cfg gno.Config) *agent.ComponentState {
+	// The activation evidence comes from the PERSISTED record, not from whatever
+	// result the calling command happens to hold. `gno apply` has no
+	// PrepareResult — it only loads a unit — and reconstructing the detail from
+	// an empty one used to overwrite a real endpoint probe with "never probed".
 	base := fmt.Sprintf("%s → collection %q (gno %s); index %s; %s; %s",
 		cfg.VaultPath, cfg.Collection, cfg.Version, cfg.IndexDBPath,
-		prepared.Doctor.Summary(), prepared.Probe.Summary())
+		cfg.Activation.Doctor.Summary(), cfg.Activation.Probe.Summary())
 	if !cfg.Applied {
 		return &agent.ComponentState{
 			State:  agent.StateInstalled,
@@ -295,7 +336,7 @@ degraded, because an index nobody is updating is not a current index.
 	}
 
 	// STAGE 4 — project the outcome into status, honestly.
-	recordGNO(dir, gnoComponentForResult(cfg, prepared))
+	recordGNO(dir, gnoComponentForResult(cfg))
 	if *asJSON {
 		return encodeJSON(stdout, stderr, struct {
 			Config     gno.Config          `json:"config"`
@@ -364,7 +405,7 @@ func runGNOApply(args []string, stdout, stderr io.Writer) int {
 		recordGNO(dir, gnoComponentFor(err))
 		return 1
 	}
-	recordGNO(dir, gnoComponentForResult(cfg, gno.PrepareResult{}))
+	recordGNO(dir, gnoComponentForResult(cfg))
 	for _, c := range cmds {
 		fmt.Fprintf(stdout, "  %s\n", c)
 	}
@@ -377,8 +418,9 @@ func runGNOApply(args []string, stdout, stderr io.Writer) int {
 func runGNORun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	f := newGNOFlags("gno run", stderr)
 	var (
-		host = f.set.String("host", "", "loopback address (default: what activation recorded)")
-		port = f.set.Int("port", 0, "gateway port (default: what activation recorded)")
+		host      = f.set.String("host", "", "loopback address (default: what activation recorded)")
+		port      = f.set.Int("port", 0, "gateway port (default: what activation recorded)")
+		tokenFile = f.set.String("gateway-token-file", "", "bearer token file for the engine's own HTTP gateway")
 	)
 	if err := f.set.Parse(args); err != nil {
 		return exitUsage
@@ -406,6 +448,26 @@ func runGNORun(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if *port > 0 {
 		daemonPort = *port
 	}
+	// The unit is written once and then runs for months; re-validating here means
+	// an edited plist cannot quietly turn the engine's gateway into a LAN
+	// service on the next reboot.
+	if err := gno.ValidateGateway(daemonHost, daemonPort); err != nil {
+		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
+		recordGNO(dir, gnoComponentFor(err))
+		return 1
+	}
+	// No vault, no engine (R4). Starting the daemon against a vanished vault
+	// would index nothing and serve a stale index while looking healthy, so the
+	// supervised process refuses at the same gate `status` reports on.
+	if err := requireVault(cfg.VaultPath); err != nil {
+		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
+		recordGNO(dir, gnoComponentFor(err))
+		return 1
+	}
+	gatewayToken := cfg.GatewayToken
+	if strings.TrimSpace(*tokenFile) != "" {
+		gatewayToken = *tokenFile
+	}
 
 	err = gno.RunDaemon(ctx, gno.RunOptions{
 		StateDir: dir,
@@ -415,7 +477,7 @@ func runGNORun(ctx context.Context, args []string, stdout, stderr io.Writer) int
 			}
 			// Continuous indexing is UNBOUNDED: it must not be killed on a timer.
 			return cli.Stream(ctx, gno.Invocation{
-				Args:       gno.DaemonArgs(daemonHost, daemonPort),
+				Args:       gno.DaemonArgs(daemonHost, daemonPort, gatewayToken),
 				WorkingDir: dir,
 			})
 		},
@@ -498,13 +560,21 @@ func runGNOEndpoint(args []string, stdout, stderr io.Writer) int {
 
 func runGNORebuild(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	f := newGNOFlags("gno rebuild", stderr)
-	asJSON := f.set.Bool("json", false, "print the result as JSON")
+	var (
+		unitDir = f.set.String("unit-dir", "", "unit directory (default: the platform's user unit directory)")
+		asJSON  = f.set.Bool("json", false, "print the result as JSON")
+	)
 	f.set.Usage = func() {
 		fmt.Fprint(f.set.Output(), `homeplane-agent gno rebuild — discard the machine-local index and rebuild it
 
 The index is derived state. Deleting it is a supported operation: this command
 removes it and rebuilds from the vault, which is the only thing that syncs. The
 vault is never modified.
+
+The supervised daemon holds the index open continuously, so it is STOPPED for
+the rebuild and started again afterwards — replacing a database underneath a
+running writer leaves it indexing into an unlinked file. If the daemon cannot be
+stopped, the rebuild refuses rather than racing it.
 
 `)
 		f.set.PrintDefaults()
@@ -527,7 +597,28 @@ vault is never modified.
 		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
 		return 1
 	}
-	res, err := gno.Rebuild(ctx, cli, cfg)
+
+	opts := gno.RebuildOptions{StateDir: dir}
+	if cfg.Applied {
+		platform, err := supervise.DetectPlatform("")
+		if err != nil {
+			fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
+			return 1
+		}
+		units := *unitDir
+		if units == "" {
+			if units, err = supervise.DefaultUnitDir(platform, ""); err != nil {
+				fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
+				return 1
+			}
+		}
+		installer := supervise.Installer{
+			Platform: platform, Dir: units, Runner: supervisorRunner(stdout, stderr),
+		}
+		opts.Quiesce = gno.SupervisorQuiesce(dir, cfg, installer, strconv.Itoa(os.Getuid()))
+	}
+
+	res, err := gno.Rebuild(ctx, cli, cfg, opts)
 	if err != nil {
 		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
 		recordGNO(dir, gnoComponentFor(err))
@@ -537,6 +628,58 @@ vault is never modified.
 		return encodeJSON(stdout, stderr, res)
 	}
 	fmt.Fprintf(stdout, "index rebuilt: %s (%d bytes) from %s\n", res.IndexDBPath, res.IndexBytes, res.VaultPath)
+	return 0
+}
+
+// ── mcp: the stdio endpoint harnesses actually launch ────────────────────────
+
+func runGNOMCP(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	f := newGNOFlags("gno mcp", stderr)
+	f.set.Usage = func() {
+		fmt.Fprint(f.set.Output(), `homeplane-agent gno mcp — the retrieval engine's stdio MCP server, wrapped
+
+This is what harness configurations point at, and it is what the endpoint
+descriptor publishes. It runs the engine's own stdio server with this process's
+pipes attached — no parsing, no buffering, no interpretation — and records the
+outcome of every launch.
+
+That recording is the point. A harness starts its own server whenever it likes,
+so a probe taken once at activation cannot tell anyone that launches have been
+failing since. `+"`homeplane-agent status`"+` reads the launch history this writes.
+
+`)
+		f.set.PrintDefaults()
+	}
+	if err := f.set.Parse(args); err != nil {
+		return exitUsage
+	}
+	dir, err := resolveStateDir(*f.stateDir)
+	if err != nil {
+		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
+		return 1
+	}
+	cfg, err := gno.LoadConfig(dir)
+	if err != nil {
+		// Diagnostics go to STDERR only: stdout belongs to the MCP stream, and a
+		// friendly message written there would corrupt the client's parser.
+		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
+		return 1
+	}
+
+	launch := cfg.Activation.Launch
+	if err := gno.RunStdioEndpoint(ctx, gno.StdioOptions{
+		StateDir: dir,
+		Command:  launch.Command,
+		Args:     launch.Args,
+		Env:      launch.Env,
+		Stdin:    os.Stdin,
+		Stdout:   os.Stdout,
+		Stderr:   os.Stderr,
+		Client:   gno.ClientFromEnv(os.Environ()),
+	}); err != nil {
+		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
+		return 1
+	}
 	return 0
 }
 

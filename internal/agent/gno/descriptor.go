@@ -56,6 +56,15 @@ type Descriptor struct {
 	// ServerName is the MCP server name harnesses should register it under.
 	ServerName string `json:"server_name"`
 
+	// Underlying is the engine's own launch template, which Command/Args wrap.
+	//
+	// Harnesses launch the agent rather than the engine directly, so that every
+	// launch — including the ones that fail instantly — is recorded and can
+	// reach `status` (R4). This field keeps that indirection honest and
+	// debuggable: an operator can see exactly what will be executed underneath,
+	// and can run it by hand when diagnosing.
+	Underlying *LaunchTemplate `json:"underlying,omitempty"`
+
 	// Collection and VaultPath say WHAT is reachable through the endpoint.
 	Collection string `json:"collection"`
 	VaultPath  string `json:"vault_path"`
@@ -88,6 +97,12 @@ type SupervisionInfo struct {
 	// HealthCommand is how anything can ask the engine how it is.
 	HealthCommand string   `json:"health_command"`
 	HealthArgs    []string `json:"health_args"`
+}
+
+// StdioWrapperArgs is the argv harnesses run: the agent's own transparent
+// stdio pass-through, pinned to this machine's state directory.
+func StdioWrapperArgs(stateDir string) []string {
+	return []string{"gno", "mcp", "-state-dir", stateDir}
 }
 
 // DescriptorDir is where endpoint descriptors live, one per component role.

@@ -109,7 +109,8 @@ case "$1" in
       printf '{"results":[]}\n'
       exit 0
     fi
-    printf '{"results":[{"docid":"#abc","score":1,"uri":"gno://c/note.md","title":"note","snippet":"%s"}]}\n' "$QUERY"
+    printf '{"results":[{"docid":"#abc","score":1,"uri":"%s","title":"note","snippet":"%s"}]}\n' \
+      "${FAKE_GNO_CALL_URI:-gno://c/note.md}" "$QUERY"
     exit 0
     ;;
   mcp)
@@ -156,8 +157,11 @@ case "$1" in
               if [ -n "$FAKE_GNO_CALL_FAIL" ]; then
                 printf '{"error":{"code":-32000,"message":"tool failed"},"jsonrpc":"2.0","id":3}\n'
               else
-                printf '{"result":{"content":[{"type":"text","text":"Found 1 results: %s"}]},"jsonrpc":"2.0","id":3}\n' \
-                  "${FAKE_GNO_CALL_TEXT:-zarquon-7742-homeplane}"
+                # Upstream renders the document URI into the result text, and the
+                # probe holds the endpoint to exactly that: a stub that answered
+                # without it would let an endpoint serving a different index pass.
+                printf '{"result":{"content":[{"type":"text","text":"Found 1 results for query: [#abc] %s -- %s"}]},"jsonrpc":"2.0","id":3}\n' \
+                  "${FAKE_GNO_CALL_URI:-gno://c/note.md}" "${FAKE_GNO_CALL_TEXT:-zarquon-7742-homeplane}"
               fi
               ;;
             *'"method":"notifications/'*) : ;;

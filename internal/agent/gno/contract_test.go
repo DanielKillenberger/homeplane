@@ -74,7 +74,7 @@ func TestArgvMatchesThePinnedContract(t *testing.T) {
 		"search": SearchArgs("zarquon"),
 		"update": UpdateArgs(),
 		"index":  IndexArgs("daniel-os"),
-		"daemon": DaemonArgs("127.0.0.1", 3077),
+		"daemon": DaemonArgs("127.0.0.1", 3077, "/tmp/token"),
 	}
 	for name, args := range emitted {
 		// Skip leading global flags to find the subcommand.
@@ -124,6 +124,23 @@ func TestArgvMatchesThePinnedContract(t *testing.T) {
 				t.Fatalf("the wrapper emits an argument the pinned build does not accept: %q", a)
 			}
 		}
+	}
+
+	// `--json` on the daemon is STATUS-ONLY upstream: the long-running form
+	// refuses it with a VALIDATION error, which would make the supervised unit
+	// fail on every single start. This assertion exists because that is exactly
+	// what happened, and only the real binary caught it.
+	if !strings.Contains(daemonHelp, "applies to --status") {
+		t.Fatal("`gno daemon --help` no longer documents --json as status-only; re-check DaemonArgs")
+	}
+	if containsString(DaemonArgs("127.0.0.1", 3077, "/tmp/token"), "--json") {
+		t.Fatal("DaemonArgs passes --json to the long-running daemon, which upstream rejects")
+	}
+
+	// The gateway's authentication flag. The daemon serves retrieval over the
+	// whole vault, so losing this upstream would be a silent exposure.
+	if !strings.Contains(daemonHelp, "--mcp-token-file") {
+		t.Fatal("`gno daemon` no longer documents --mcp-token-file")
 	}
 
 	// The setup flag that keeps a first install from downloading a model.
@@ -238,7 +255,7 @@ func TestAgainstTheRealPinnedBuild(t *testing.T) {
 
 	for _, args := range [][]string{
 		SetupArgs("/vault", "c"), DoctorArgs(), StatusArgs(), SearchArgs("q"),
-		UpdateArgs(), IndexArgs("c"), DaemonArgs("127.0.0.1", 3077),
+		UpdateArgs(), IndexArgs("c"), DaemonArgs("127.0.0.1", 3077, "/tmp/token"),
 	} {
 		sub := args
 		for len(sub) > 0 && strings.HasPrefix(sub[0], "-") {
