@@ -40,14 +40,23 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 OUT_DIR="$REPO_ROOT/internal/agent/harness/testdata"
 mkdir -p "$OUT_DIR"
 
-# `grok --version` prints e.g. `grok 1.0.3 (1a29d5bc12d4) [stable]`; the second
-# field is the release the contract is pinned to.
-VERSION="$(perl -e 'alarm shift; exec @ARGV' 30 "$GROK_BIN" --version | awk '{print $2}')"
-[ -n "$VERSION" ] || { echo "capture-grok-contract.sh: could not parse a version" >&2; exit 1; }
-OUT="$OUT_DIR/grok-$VERSION-contract.txt"
-
 WORK="$(mktemp -d)"
-trap 'command rm -rf "$WORK"' EXIT
+
+# The EXIT trap owns cleanup of BOTH the scratch dir and any partial contract.
+# It has to be the trap rather than code after the pipeline: `fail()` exits the
+# pipeline subshell and `set -e` then aborts the script immediately, so
+# anything written after the pipeline would never run and a truncated contract
+# would survive to be committed as a real observation.
+CAPTURE_OK=""
+OUT=""
+cleanup() {
+  if [ -z "$CAPTURE_OK" ] && [ -n "$OUT" ] && [ -e "$OUT" ]; then
+    command rm -f "$OUT"
+    echo "capture-grok-contract.sh: capture incomplete; $OUT removed" >&2
+  fi
+  command rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 # The sealed home, in two DELIBERATELY DIFFERENT roots.
 #
@@ -86,7 +95,14 @@ DECOY
 # and never hanging: every invocation carries its own alarm. The exit status is
 # preserved in GROK_RC rather than propagated, because several probes below are
 # captured precisely FOR their non-zero exit and `set -e` would abort on them.
+# GROK_RC is ALSO written to a file. A probe captured with `$(...)` runs in a
+# subshell, so a plain variable assignment there is lost to the caller and a
+# later check would silently read a PREVIOUS probe's status — which is exactly
+# how a failing probe can be written up as a passing observation. RC_FILE
+# survives the subshell; expect_ok reads it, never the variable.
 GROK_RC=0
+RC_FILE="$WORK/last_rc"
+echo 0 > "$RC_FILE"
 grok_probe() {
   local secs="$1"; shift
   GROK_RC=0
@@ -100,6 +116,7 @@ grok_probe() {
   GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
     perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" \
       --leader-socket "$NO_LEADER" 2>&1 || GROK_RC=$?
+  echo "$GROK_RC" > "$RC_FILE"
   return 0
 }
 
@@ -115,10 +132,40 @@ grok_probe_bare() {
   GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
   GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
     perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" 2>&1 || GROK_RC=$?
+  echo "$GROK_RC" > "$RC_FILE"
   return 0
 }
 
 CONFIG="$GROK_DIR/config.toml"
+
+# `grok --version` prints e.g. `grok 1.0.3 (1a29d5bc12d4) [stable]`; the second
+# field is the release the contract is pinned to. This runs through the SAME
+# sealed, timed environment as every other probe — an earlier revision ran it
+# before the sealed roots existed, which handed the real grok home to the
+# executable and contradicted this script's own sealing claim.
+VERSION="$(HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
+  perl -e 'alarm shift; exec @ARGV' 30 "$GROK_BIN" --version | awk '{print $2}')"
+[ -n "$VERSION" ] || { echo "capture-grok-contract.sh: could not parse a version" >&2; exit 1; }
+OUT="$OUT_DIR/grok-$VERSION-contract.txt"
+
+# fail() aborts the capture loudly. It exists because this script PRODUCES
+# EVIDENCE: a probe that silently failed would otherwise be written up as a
+# passing observation. The body below runs as the left side of a pipeline (a
+# subshell), so `exit 1` there cannot kill the parent on its own — `pipefail`
+# plus the sentinel file make the failure survive back to the top level, and
+# the partial contract is deleted rather than left to be committed.
+fail() {
+  echo "CAPTURE ABORTED: $*" >&2
+  : > "$WORK/CAPTURE_FAILED"
+  exit 1
+}
+
+# expect_ok asserts the LAST probe exited 0. Probes captured precisely for
+# their non-zero exit (the failure-shape section) deliberately do not call it.
+expect_ok() {
+  local rc; rc="$(cat "$RC_FILE")"
+  [ "$rc" -eq 0 ] || fail "$1 exited $rc (expected 0)"
+}
 
 {
   echo "# Captured from grok $VERSION by scripts/capture-grok-contract.sh."
@@ -270,25 +317,44 @@ SEED
   # the two cannot parse the result. Reducing this to one grepped field (as an
   # earlier revision did) would leave the decision record's claims about
   # `sources`, the per-server `checks`, and the handshake failure unevidenced.
+  # $1 = label, $2 = "verbatim"|"classified" for the stderr treatment, rest =
+  # doctor's own arguments.
   doctor_probe() {
-    local label="$1"; shift
+    local label="$1"; local stderr_mode="$2"; shift 2
+    # rc is function-LOCAL and reset per invocation. Reusing the global would
+    # report a previous probe's failure against a later successful one.
+    local rc=0
     echo "=== grok mcp doctor $label | STDOUT ==="
     HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
     GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
       perl -e 'alarm shift; exec @ARGV' 90 "$GROK_BIN" mcp doctor "$@" --json \
-        --leader-socket "$NO_LEADER" 2>"$WORK/doctor.err" || GROK_RC=$?
-    echo "exit: $GROK_RC"
+        --leader-socket "$NO_LEADER" 2>"$WORK/doctor.err" || rc=$?
+    echo "exit: $rc"
     echo
-    echo "=== grok mcp doctor $label | STDERR ==="
-    cat "$WORK/doctor.err"
+    if [ "$stderr_mode" = verbatim ]; then
+      echo "=== grok mcp doctor $label | STDERR ==="
+      cat "$WORK/doctor.err"
+    else
+      # Upstream flushes this tracing line RACILY on exit — it appears on some
+      # runs and not others for the same input. Recording it verbatim would
+      # make the committed contract churn between runs and bury real
+      # behavioural changes in that noise, so this probe records only the fact
+      # the contract actually rests on: the streams are separate, and stdout
+      # parsed as JSON regardless of whether stderr carried anything.
+      echo "=== grok mcp doctor $label | STDERR (classified, see note) ==="
+      echo "stdout parsed as JSON independently of stderr: yes"
+      echo "note: upstream emits an unstructured tracing ERROR line here"
+      echo "      non-deterministically; the verbatim form is captured above"
+      echo "      for the unreachable-host probe."
+    fi
   }
 
   # The broken HTTP entry: an unresolvable host, so the handshake genuinely
   # fails and the failure SHAPE is what gets pinned.
-  doctor_probe "homeplane-edge (unreachable host)" homeplane-edge
+  doctor_probe "homeplane-edge (unreachable host)" verbatim homeplane-edge
   echo
   # The ${VAR} entry, unexpanded then expanded — the load-time expansion proof.
-  doctor_probe "expand-probe (HP_PROBE_HOST unset)" expand-probe
+  doctor_probe "expand-probe (HP_PROBE_HOST unset)" classified expand-probe
   echo
   echo "=== grok mcp doctor expand-probe | target WITH HP_PROBE_HOST set ==="
   HP_PROBE_HOST=expanded.example.invalid grok_probe 90 mcp doctor expand-probe --json \
@@ -299,16 +365,16 @@ SEED
   # Every one of these must fail FAST and LOUD rather than prompt: a writer
   # that hangs on a hidden prompt is the failure mode the timeout guards.
   echo "=== grok mcp remove <unknown> ==="
-  grok_probe 30 mcp remove no-such-server; echo "exit: $GROK_RC"
+  grok_probe 30 mcp remove no-such-server; echo "exit: $(cat "$RC_FILE")"
   echo
   echo "=== grok mcp add <invalid name> ==="
-  grok_probe 30 mcp add 'bad name!' 'https://x.invalid' -t http; echo "exit: $GROK_RC"
+  grok_probe 30 mcp add 'bad name!' 'https://x.invalid' -t http; echo "exit: $(cat "$RC_FILE")"
   echo
   echo "=== grok mcp add -t <invalid transport> ==="
-  grok_probe 30 mcp add x 'https://x.invalid' -t carrier-pigeon; echo "exit: $GROK_RC"
+  grok_probe 30 mcp add x 'https://x.invalid' -t carrier-pigeon; echo "exit: $(cat "$RC_FILE")"
   echo
   echo "=== grok mcp enable <unknown> ==="
-  grok_probe 30 mcp enable no-such; echo "exit: $GROK_RC"
+  grok_probe 30 mcp enable no-such; echo "exit: $(cat "$RC_FILE")"
   echo
 
   # ---- Skills discovery. --------------------------------------------------
@@ -347,33 +413,70 @@ SK
   echo
   echo "=== grok inspect | discovered probe skills ==="
   # Reported NAME is the contract: frontmatter wins, directory name is the
-  # fallback, and the symlinked target is read through the link.
-  grok_probe 90 inspect | grep -E 'hp-probe-alpha|frontmatter-beta-name|gamma-dir-name|directory-beta-name' || true
-  echo
-
-  echo "=== decoy check: did anything from \$HOME/.grok leak in? ==="
-  # A single authoritative check over the surfaces grok reports.
-  decoy_hits="$( { grok_probe 30 mcp list; grok_probe 90 inspect; } \
-    | grep -c 'decoy-must-never-appear\|decoy-skill-must-never-appear' || true)"
-  if [ "$decoy_hits" -eq 0 ]; then
-    echo "0 decoy references: GROK_HOME relocated BOTH config and skills discovery"
-  else
-    echo "$decoy_hits DECOY REFERENCES FOUND: GROK_HOME did NOT relocate — the"
-    echo "relocation claim in docs/decisions/fn3-grok-surfaces.md is FALSIFIED"
-  fi
+  # fallback, and the symlinked target is read through the link. inspect runs
+  # ONCE and its output is reused by the relocation gate below, so the gate
+  # judges the same observation that is reported here.
+  inspect_out="$(grok_probe 90 inspect)"; expect_ok "grok inspect"
+  printf '%s\n' "$inspect_out" \
+    | grep -E 'hp-probe-alpha|frontmatter-beta-name|gamma-dir-name|directory-beta-name' \
+    || fail "inspect returned no probe skills: skills discovery cannot be reported"
   echo
 
   # ---- Leader semantics. --------------------------------------------------
   echo "=== grok leader list (sealed home) ==="
-  grok_probe 30 leader list
+  grok_probe 30 leader list; expect_ok "grok leader list"
   echo
   echo "=== a config change is visible to the very NEXT invocation ==="
   grok_probe 30 mcp add --transport http staleness-probe 'https://stale.example.invalid/mcp' >/dev/null
-  grok_probe 30 mcp list | grep staleness || true
+  expect_ok "mcp add staleness-probe"
+  mcp_out="$(grok_probe 30 mcp list)"; expect_ok "mcp list (staleness)"
+  printf '%s\n' "$mcp_out" | grep staleness \
+    || fail "the entry just added is not visible to the next invocation"
   echo
+
+  # ---- GROK_HOME relocation gate. -----------------------------------------
+  # POSITIVE SENTINELS FIRST. Absence of the decoy proves nothing on its own:
+  # a probe that failed, timed out, or returned empty also contains no decoy
+  # names, and an earlier revision of this script would have reported that as
+  # "relocation proven". So the relocated directory's OWN content must be
+  # present in the same outputs before their silence about the decoy counts.
+  echo "=== relocation gate: positive sentinels ==="
+  for sentinel in homeplane-edge staleness-probe expand-probe; do
+    printf '%s\n' "$mcp_out" | grep -q -- "$sentinel" \
+      || fail "relocation gate: '$sentinel' (written to \$GROK_HOME) missing from mcp list"
+    echo "  present in mcp list:  $sentinel"
+  done
+  for sentinel in hp-probe-alpha frontmatter-beta-name gamma-dir-name; do
+    printf '%s\n' "$inspect_out" | grep -q -- "$sentinel" \
+      || fail "relocation gate: skill '$sentinel' (linked into \$GROK_HOME) missing from inspect"
+    echo "  present in inspect:   $sentinel"
+  done
+  echo
+
+  echo "=== relocation gate: decoy absence ==="
+  decoy_hits="$(printf '%s\n%s\n' "$mcp_out" "$inspect_out" \
+    | grep -c 'decoy-must-never-appear\|decoy-skill-must-never-appear' || true)"
+  [ "$decoy_hits" -eq 0 ] \
+    || fail "$decoy_hits decoy reference(s) found: GROK_HOME did NOT relocate, and the relocation claim in docs/decisions/fn3-grok-surfaces.md is FALSIFIED"
+  echo "0 decoy references, alongside the sentinels above:"
+  echo "GROK_HOME relocated BOTH config and skills discovery"
+  echo
+
+  echo "=== END OF CAPTURE ==="
 } | sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z/<timestamp>/g' \
           -e 's/"[a-z_]*elapsed[a-z_]*": [0-9.]+/"elapsed": <elapsed>/g' \
           -e 's/"detail": "[0-9]+\.[0-9]+s"/"detail": "<duration>"/g' \
     | sed -e "s|$WORK|<work>|g" -e "s|$OS_HOME|<os-home>|g" -e "s|$GROK_DIR|<grok-home>|g" -e "s|$HOME|<home>|g" -e "s|$GROK_BIN|<grok>|g" >"$OUT"
+
+# Belt and braces on the fail-closed path. `set -e` + `pipefail` already abort
+# on a fail() inside the pipeline, but this script writes committed evidence:
+# if it ever exits successfully, the file it points at must be a COMPLETE
+# capture. Only reaching here — with the end marker present — marks it keepable;
+# every other exit path leaves CAPTURE_OK empty and the trap deletes the file.
+if [ -e "$WORK/CAPTURE_FAILED" ] || ! grep -q '^=== END OF CAPTURE ===$' "$OUT"; then
+  echo "capture-grok-contract.sh: capture incomplete" >&2
+  exit 1
+fi
+CAPTURE_OK=1
 
 echo "wrote $OUT"

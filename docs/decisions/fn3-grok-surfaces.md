@@ -44,6 +44,35 @@ wrote to the relocated directory — so `GROK_HOME` demonstrably relocates **bot
 config and skills discovery. If a future grok release stops honoring it, the
 decoy names appear and the capture says so in as many words.
 
+### Ratified limitation: what "left byte-identical" means for this task
+
+The task's acceptance says *"Real `~/.grok` left byte-identical to pre-probe
+state (snapshot-verified)"*. Taken literally over the whole directory, **that
+criterion is not satisfiable on this machine and was not satisfied.** It is
+recorded here as a ratified limitation rather than quietly marked pass.
+
+`~/.grok` is a **live** directory: Daniel's three grok sessions ran throughout
+the probe window and continuously wrote `sessions/`, `logs/`, `memtrace/`,
+`active_sessions.json` and `models_cache.json`. Whole-directory byte identity
+could only be demonstrated by stopping his running sessions, which this task
+deliberately declined to do — the standing instruction was not to disturb them,
+and killing a person's live work to make a checkbox true is the wrong trade.
+
+The criterion actually met, and the one the acceptance evidence records:
+
+- **Non-interference, proven:** every config-bearing surface a probe could
+  touch — `config.toml`, `skills/`, `hooks/` — is byte-identical, and
+  `config.toml`'s mtime predates the probe window by hours.
+- **Attribution, proven:** the one changed stable-surface file
+  (`models_cache.json`) was demonstrated **not ours** by re-running the isolated
+  probes and observing its hash and mtime unchanged.
+
+**Attribution is not identity, and the evidence says so**:
+`whole_grok_home_byte_identical` is recorded **`false`** with this reason, next
+to `config_bearing_grok_surfaces_byte_identical: true`. A reviewer reading the
+artifact sees the weaker claim that was actually established. Anyone wanting
+the literal criterion must re-run against a quiescent home.
+
 **`GROK_HOME` does not relocate everything.** Skill discovery still reads
 `~/.claude/skills`, `~/.cursor/skills` and `~/.agents/skills` relative to
 `HOME`, and MCP discovery still reads `~/.claude.json`. Sealing a probe (or a
@@ -311,11 +340,43 @@ wanted. The alternative — relying on name shadowing alone — was rejected
 because it leaves `mcps` on, so any Claude-scope server Homeplane does not
 shadow still loads, and the guarantee silently depends on names never diverging.
 
-What .2 and .3 may now rely on:
+**Claude is not the only compat source, and D4 covers only Claude.** The
+documented merge order is `config.toml > claude > cursor > .mcp.json`, so
+disabling Claude promotes **Cursor** to the next inheriting source, and a
+project-scope `.mcp.json` is a third. Measured on this machine, today:
+
+- `~/.cursor/mcp.json` exists but is **empty (0 bytes)**, and there is no
+  project-scope `.cursor/mcp.json` in this repo — Cursor contributes **nothing**.
+- With `GROK_CLAUDE_MCPS_ENABLED=false`, `grok inspect` shows `homeplane`, `gno`
+  and `rize` still **listed** but marked **`[disabled]`**, and no Cursor-sourced
+  server appears at all.
+
+So D4 does achieve exclusivity **today** — but as a matter of current contents,
+not as a structural guarantee. `[compat.cursor] mcps` is still ON, so the day
+Daniel populates `~/.cursor/mcp.json`, or any repo he runs grok in grows a
+`.cursor/mcp.json` or `.mcp.json`, inheritance returns silently. That residual
+is **D4b, still open** (below).
+
+Note also for R6: **`[disabled]` entries are still listed.** Status modelling
+must read the disabled marker, not mere presence, or it will report inherited
+servers as active.
+
+What .2 and .3 may rely on:
 
 - The revocation proof (R5) **produces a real denied call** under grok's own
-  identity, because there is no inherited entry left to fall back to.
+  identity — verified against the compat sources as they stand today, which the
+  proof should re-assert rather than assume.
 - Audit attribution (R3) is grok's grant, not Claude Code's.
+
+### D4b (fn-3) — OPEN, needs Daniel: the other compat sources
+
+Recommended: also set **`[compat.cursor] mcps = false`**, making the isolation
+structural instead of contingent on `~/.cursor/mcp.json` staying empty. It costs
+nothing today precisely because Cursor defines nothing — which is the cheapest
+possible moment to close it. `.mcp.json` is project-scope and cannot be settled
+by a user-config key; the honest treatment is for R6's status surface to report
+the active compat sources, so inheritance is always visible rather than assumed
+absent. **Not assumed by .2** — like D4, it is Daniel's call.
 
 Implementation constraints, all inherited from the rest of this document:
 

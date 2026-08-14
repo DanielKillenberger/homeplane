@@ -585,8 +585,11 @@ exit: 1
 }
 exit: 1
 
-=== grok mcp doctor expand-probe (HP_PROBE_HOST unset) | STDERR ===
-[2m<timestamp>[0m [31mERROR[0m worker quit with fatal: Transport channel closed, when Client(reqwest::Error { kind: Builder, url: "https://${hp_probe_host}/mcp", source: "Parsed Url is not a valid Uri" })
+=== grok mcp doctor expand-probe (HP_PROBE_HOST unset) | STDERR (classified, see note) ===
+stdout parsed as JSON independently of stderr: yes
+note: upstream emits an unstructured tracing ERROR line here
+      non-deterministically; the verbatim form is captured above
+      for the unreachable-host probe.
 
 === grok mcp doctor expand-probe | target WITH HP_PROBE_HOST set ===
 target = "https://expanded.example.invalid/mcp"
@@ -621,12 +624,22 @@ exit: 1
   └ gamma-dir-name         user
   └ hp-probe-alpha         user
 
-=== decoy check: did anything from $HOME/.grok leak in? ===
-0 decoy references: GROK_HOME relocated BOTH config and skills discovery
-
 === grok leader list (sealed home) ===
 No leader candidates found.
 
 === a config change is visible to the very NEXT invocation ===
   staleness-probe: https://stale.example.invalid/mcp
 
+=== relocation gate: positive sentinels ===
+  present in mcp list:  homeplane-edge
+  present in mcp list:  staleness-probe
+  present in mcp list:  expand-probe
+  present in inspect:   hp-probe-alpha
+  present in inspect:   frontmatter-beta-name
+  present in inspect:   gamma-dir-name
+
+=== relocation gate: decoy absence ===
+0 decoy references, alongside the sentinels above:
+GROK_HOME relocated BOTH config and skills discovery
+
+=== END OF CAPTURE ===
