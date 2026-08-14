@@ -23,10 +23,43 @@ type Writer interface {
 	// harness we are going to skip is identified BEFORE a grant is minted for
 	// it: authority should not be spent on a file we will not write to.
 	Preflight() error
-	// Apply merges entries into the config, removing any entry named in retire
-	// that a previous run left behind. It returns whether the file's bytes
-	// changed and the backup it took first.
+	// Prepare performs every check that does NOT need a grant, and writes
+	// nothing: containment, entry and retire-name validation, directory
+	// creation, backup and write access, and a full dry-merge whose result is
+	// run through the preservation check.
+	//
+	// It is the first half of the two-phase transaction (see configureOne). Its
+	// entries carry placeholder credentials — only their NAMES and shapes matter
+	// to a merge — so every local reason a write could fail is discovered before
+	// the server is asked to supersede the harness's working grant.
+	Prepare(entries []Entry, retire []string) (Plan, error)
+	// Commit performs the second half: it re-merges with the FINAL entries (the
+	// ones carrying the issued token and endpoint), backs the file up, verifies
+	// preservation, and replaces the file atomically under a race check.
+	Commit(plan Plan, entries []Entry) (ApplyResult, error)
+	// Apply is Prepare followed by Commit against the same entries. It is the
+	// single-phase form, for callers that have nothing to lose between the two.
 	Apply(entries []Entry, retire []string) (ApplyResult, error)
+}
+
+// Plan is what Prepare established: the entry names this write owns. It carries
+// no file bytes on purpose — Commit re-reads the file, because anything cached
+// between the two phases is exactly the stale snapshot the race check exists to
+// refuse.
+type Plan struct {
+	// Managed is the full set of entry names this write owns: the ones being
+	// written plus the ones being retired.
+	Managed []string
+	// Retire names entries a previous run managed and this one removes.
+	Retire []string
+	// BackupPath is the copy Prepare took of the file as it stood. It is taken
+	// BEFORE the parse, so a config too malformed to read still leaves the
+	// operator a copy of exactly what was there (R5) — which is why it is
+	// populated even when Prepare returns an error.
+	BackupPath string
+	// prepared guards against a zero Plan being passed to Commit, which would
+	// silently manage nothing and therefore preserve nothing.
+	prepared bool
 }
 
 // ApplyResult is the record of one config write.
@@ -46,6 +79,15 @@ type format struct {
 	// rewrite produces the new file bytes. It must return ErrMalformedConfig
 	// (wrapped) when the existing bytes cannot be read.
 	rewrite func(before []byte, entries []Entry, managed []string) ([]byte, error)
+	// exempt lists Homeplane-managed key paths that live OUTSIDE the container.
+	// grok has two (`compat.claude.mcps`, `compat.cursor.mcps`); the other
+	// harnesses have none. They are subtracted from both sides of the
+	// preservation equation, and assertAfter proves what they became.
+	exempt [][]string
+	// assertAfter re-checks the parsed result of a write. It is where an exempt
+	// key earns its exemption: subtracting a key from the comparison without
+	// proving its value would let a silently-failed edit pass.
+	assertAfter func(tree map[string]any) error
 }
 
 // fileWriter is the shared, format-independent write procedure. Both harnesses
@@ -79,24 +121,118 @@ func (w fileWriter) Preflight() error {
 }
 
 func (w fileWriter) Apply(entries []Entry, retire []string) (ApplyResult, error) {
+	plan, err := w.Prepare(entries, retire)
+	if err != nil {
+		// The backup survives the failure: the skip contract is "clear message
+		// AND a copy of the original", and a caller that only gets the error
+		// cannot tell the operator where their file went.
+		return ApplyResult{BackupPath: plan.BackupPath}, err
+	}
+	return w.Commit(plan, entries)
+}
+
+// Prepare is the no-authority half of the write: everything that can fail
+// locally, discovered before a grant exists.
+func (w fileWriter) Prepare(entries []Entry, retire []string) (Plan, error) {
 	if err := assertUserScope(w.path); err != nil {
-		return ApplyResult{}, err
+		return Plan{}, err
 	}
 	managed := managedNames(entries, retire)
+	for _, e := range entries {
+		if err := e.Validate(); err != nil {
+			return Plan{}, err
+		}
+	}
+	for _, n := range retire {
+		if err := ValidateServerName(n); err != nil {
+			return Plan{}, err
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(w.path), dirPerm); err != nil {
+		return Plan{}, fmt.Errorf("create %s: %w", filepath.Dir(w.path), err)
+	}
+	// Write access is PROVED, not assumed. The atomic write and the backup both
+	// create a file beside the target, so a directory we cannot create a file in
+	// is a write that will fail — and discovering that after issuance would have
+	// cost the harness its working grant for nothing.
+	if err := assertDirWritable(filepath.Dir(w.path)); err != nil {
+		return Plan{}, err
+	}
+
+	// The backup precedes the parse, for the same reason it does inside the
+	// commit: the config most worth copying is the one we are about to refuse
+	// to touch.
+	backup, err := backupFile(w.path)
+	if err != nil {
+		return Plan{}, err
+	}
+	plan := Plan{BackupPath: backup}
+
+	// The dry merge. It performs the whole rewrite and the whole preservation
+	// check against the CURRENT file, and then throws the bytes away: a config
+	// this writer cannot express — an unparseable file, an entry it cannot
+	// render, a compat setting it cannot edit at key granularity — is a local
+	// failure, and local failures must not cost authority.
+	before, err := readFileAllowingMissing(w.path)
+	if err != nil {
+		return plan, err
+	}
+	if len(bytes.TrimSpace(before)) > 0 {
+		if _, err := w.format.parse(before); err != nil {
+			return plan, fmt.Errorf("%w: %s: %v", ErrMalformedConfig, w.path, err)
+		}
+	}
+	after, err := w.format.rewrite(before, entries, managed)
+	if err != nil {
+		return plan, err
+	}
+	if err := w.check(managed).verify(before, after); err != nil {
+		return plan, err
+	}
+
+	plan.Managed = managed
+	plan.Retire = append([]string(nil), retire...)
+	plan.prepared = true
+	return plan, nil
+}
+
+// assertDirWritable creates and removes a probe file. Asking the filesystem
+// beats reading permission bits: the answer that matters is whether THIS process
+// can create a file there, which ownership, ACLs and read-only mounts all get a
+// vote in.
+func assertDirWritable(dir string) error {
+	probe, err := os.CreateTemp(dir, ".homeplane-preflight-*")
+	if err != nil {
+		return fmt.Errorf("%s is not writable, so no configuration could be written there: %w", dir, err)
+	}
+	name := probe.Name()
+	if err := probe.Close(); err != nil {
+		os.Remove(name)
+		return fmt.Errorf("%s is not writable: %w", dir, err)
+	}
+	if err := os.Remove(name); err != nil {
+		return fmt.Errorf("could not clean up the write probe %s: %w", name, err)
+	}
+	return nil
+}
+
+// Commit is the authority-bearing half: the final entries, and the atomic
+// replacement.
+func (w fileWriter) Commit(plan Plan, entries []Entry) (ApplyResult, error) {
+	if !plan.prepared {
+		return ApplyResult{}, errors.New("harness: Commit was called without a prepared plan")
+	}
+	// The final entries carry the real token and endpoint. Their VALUES were
+	// never seen by Prepare, so they are validated here, before anything is
+	// written.
 	for _, e := range entries {
 		if err := e.Validate(); err != nil {
 			return ApplyResult{}, err
 		}
 	}
-	for _, n := range retire {
-		if err := ValidateServerName(n); err != nil {
-			return ApplyResult{}, err
-		}
-	}
-
-	if err := os.MkdirAll(filepath.Dir(w.path), dirPerm); err != nil {
-		return ApplyResult{}, fmt.Errorf("create %s: %w", filepath.Dir(w.path), err)
-	}
+	managed := plan.Managed
+	retire := plan.Retire
 
 	// The merge is optimistic, and re-tried against fresh bytes when it loses.
 	//
@@ -109,8 +245,9 @@ func (w fileWriter) Apply(entries []Entry, retire []string) (ApplyResult, error)
 	// success. Re-reading immediately before the rename closes that window down
 	// to the rename itself; losing the race is a retry, not a lost edit.
 	var result ApplyResult
+	result.BackupPath = plan.BackupPath
 	for attempt := 0; ; attempt++ {
-		res, retry, err := w.applyOnce(entries, retire, managed)
+		res, retry, err := w.applyOnce(entries, retire, managed, result.BackupPath)
 		if res.BackupPath != "" {
 			result.BackupPath = res.BackupPath
 		}
@@ -128,6 +265,19 @@ func (w fileWriter) Apply(entries []Entry, retire []string) (ApplyResult, error)
 	}
 }
 
+// check builds the preservation equation for this writer and this run's managed
+// set. One constructor, so the dry merge in Prepare and both verifications in
+// Commit can never be checking different things.
+func (w fileWriter) check(managed []string) preservationCheck {
+	return preservationCheck{
+		parse:       w.format.parse,
+		container:   w.format.container,
+		managed:     managed,
+		exempt:      w.format.exempt,
+		assertAfter: w.format.assertAfter,
+	}
+}
+
 // maxMergeAttempts bounds the optimistic retry. A config that loses the race
 // this many times is not racing — something is rewriting it in a loop, and
 // saying so beats spinning.
@@ -135,7 +285,7 @@ const maxMergeAttempts = 5
 
 // applyOnce performs one optimistic merge. retry is true when the file changed
 // between the read and the write and the caller should start over.
-func (w fileWriter) applyOnce(entries []Entry, retire, managed []string) (res ApplyResult, retry bool, err error) {
+func (w fileWriter) applyOnce(entries []Entry, retire, managed []string, existingBackup string) (res ApplyResult, retry bool, err error) {
 	before, err := readFileAllowingMissing(w.path)
 	if err != nil {
 		return res, false, err
@@ -143,7 +293,7 @@ func (w fileWriter) applyOnce(entries []Entry, retire, managed []string) (res Ap
 
 	// The backup precedes the parse, so a config too malformed to read still
 	// leaves the operator a copy of exactly what was there (R5).
-	backup, err := backupFile(w.path)
+	backup, err := ensureBackup(w.path, existingBackup)
 	if err != nil {
 		return res, false, err
 	}
@@ -160,7 +310,7 @@ func (w fileWriter) applyOnce(entries []Entry, retire, managed []string) (res Ap
 		return res, false, err
 	}
 
-	check := preservationCheck{parse: w.format.parse, container: w.format.container, managed: managed}
+	check := w.check(managed)
 	// Verified BEFORE the write. A failure here has touched nothing at all,
 	// which is a strictly better outcome than a correct rollback.
 	if err := check.verify(before, after); err != nil {
@@ -380,7 +530,7 @@ func rewriteCodex(before []byte, entries []Entry, managed []string) ([]byte, err
 	})
 
 	for _, e := range entries {
-		block, err := renderTOMLEntry([]string{codexContainer}, e)
+		block, err := renderTOMLEntry([]string{codexContainer}, e, codexEntryStyle)
 		if err != nil {
 			return nil, err
 		}

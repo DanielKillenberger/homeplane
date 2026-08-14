@@ -21,6 +21,7 @@ type skillsMachine struct {
 	stateDir string
 	claude   string
 	codex    string
+	grok     string
 }
 
 func newSkillsMachine(t *testing.T, profile string, slugs ...string) skillsMachine {
@@ -31,9 +32,10 @@ func newSkillsMachine(t *testing.T, profile string, slugs ...string) skillsMachi
 		stateDir: filepath.Join(base, "state"),
 		claude:   filepath.Join(base, "claude"),
 		codex:    filepath.Join(base, "codex"),
+		grok:     filepath.Join(base, "grok"),
 	}
 	skillsRoot := filepath.Join(m.vault, "skills")
-	for _, d := range []string{skillsRoot, m.stateDir, m.claude, m.codex} {
+	for _, d := range []string{skillsRoot, m.stateDir, m.claude, m.codex, m.grok} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -72,6 +74,7 @@ func newSkillsMachine(t *testing.T, profile string, slugs ...string) skillsMachi
 
 	t.Setenv(skills.EnvClaudeConfigDir, m.claude)
 	t.Setenv(skills.EnvCodexHome, m.codex)
+	t.Setenv(skills.EnvGrokHome, m.grok)
 	return m
 }
 

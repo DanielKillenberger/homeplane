@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -52,10 +53,11 @@ const DefaultVerifyTimeout = 90 * time.Second
 //     frontmatter `name`. The path is a bonus: it is the harness itself saying
 //     the canonical file is in the vault.
 type Verifier struct {
-	// ClaudeBin and CodexBin are the executables to run. Empty means the
-	// harness's own name on PATH.
+	// ClaudeBin, CodexBin and GrokBin are the executables to run. Empty means
+	// the harness's own name on PATH.
 	ClaudeBin string
 	CodexBin  string
+	GrokBin   string
 	// Env is the child's complete environment. Nil means inherit this
 	// process's. Tests set HOME / CLAUDE_CONFIG_DIR / CODEX_HOME here so a
 	// probe runs against a fixture harness rather than the operator's.
@@ -105,6 +107,11 @@ func (v Verifier) binary(harnessID string) string {
 			return v.CodexBin
 		}
 		return "codex"
+	case Grok:
+		if strings.TrimSpace(v.GrokBin) != "" {
+			return v.GrokBin
+		}
+		return "grok"
 	}
 	return ""
 }
@@ -116,6 +123,8 @@ func (v Verifier) Discover(ctx context.Context, harnessID string) (Discovery, er
 		return v.discoverClaude(ctx)
 	case Codex:
 		return v.discoverCodex(ctx)
+	case Grok:
+		return v.discoverGrok(ctx)
 	default:
 		return Discovery{}, fmt.Errorf("skills: verify: unknown harness %q (known: %s)", harnessID, strings.Join(Known(), ", "))
 	}
@@ -248,6 +257,129 @@ func (v Verifier) discoverCodex(ctx context.Context) (Discovery, error) {
 	}
 	sort.Strings(d.Slugs)
 	return d, nil
+}
+
+// ── grok ─────────────────────────────────────────────────────────────────────
+
+// grokProbeWaitDelay bounds how long the probe waits for a killed process's
+// output pipes to close.
+const grokProbeWaitDelay = 2 * time.Second
+
+// grokSkillLine matches one entry of `grok inspect`'s skills list, whose shape
+// was captured verbatim: `└ hp-probe-alpha      user`. A trailing SCOPE word and
+// nothing else is what separates a skill line from an MCP-server line, which
+// carries a transport in parentheses and a source path (`└ gno (stdio)
+// ~/.claude.json [claude]`).
+var grokSkillLine = regexp.MustCompile(`^[│├└─\s]*([A-Za-z0-9][A-Za-z0-9._-]*)\s+(user|project|local|global|builtin)\s*$`)
+
+// grokSectionHeader matches the section headings `grok inspect` prints above
+// each list — `MCP Servers (5)`, and the skills list this probe wants.
+var grokSectionHeader = regexp.MustCompile(`^([A-Za-z][A-Za-z ]*?)\s*\((\d+)\)\s*$`)
+
+// discoverGrok asks a FRESH grok process what skills it can see.
+//
+// "Fresh" is guaranteed BY CONSTRUCTION rather than by luck. grok supports a
+// resident leader process (`--leader-socket <PATH>`, default ~/.grok/leader.sock)
+// which could, in principle, answer from a configuration it read before
+// Homeplane wrote one. No leader exists on this machine today and every
+// invocation was observed to read config from disk — but "no leader today" is a
+// fact about a moment, not a guarantee. So the probe points --leader-socket at a
+// path that DOES NOT EXIST: a leader cannot be attached to a socket that is not
+// there, so no resident process can serve this answer.
+//
+// `grok leader kill` is deliberately never called. It would stop the operator's
+// running sessions, and the construction above means the proof never needs it.
+func (v Verifier) discoverGrok(ctx context.Context) (Discovery, error) {
+	ctx, cancel := context.WithTimeout(ctx, v.timeout())
+	defer cancel()
+
+	socket, cleanup, err := absentLeaderSocket()
+	if err != nil {
+		return Discovery{}, fmt.Errorf("skills: verify grok: %w", err)
+	}
+	defer cleanup()
+
+	cmd := exec.CommandContext(ctx, v.binary(Grok), "--leader-socket", socket, "inspect")
+	cmd.Env = v.Env
+	cmd.Dir = v.Dir
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	// Killing the process on timeout is not enough to unblock Wait: a child the
+	// harness spawned inherits the output pipes and can hold them open long
+	// after its parent is gone, and Wait copies until they close. WaitDelay caps
+	// that, so a probe that hangs costs the timeout plus this — never forever.
+	cmd.WaitDelay = grokProbeWaitDelay
+	if err := cmd.Run(); err != nil {
+		return Discovery{}, fmt.Errorf("skills: verify grok: %s inspect: %w; stderr: %s",
+			v.binary(Grok), err, strings.TrimSpace(truncate(stderr.String(), 400)))
+	}
+
+	slugs, err := parseGrokInspectSkills(stdout.String())
+	if err != nil {
+		return Discovery{}, fmt.Errorf("skills: verify grok: %w", err)
+	}
+	return Discovery{Harness: Grok, Slugs: slugs}, nil
+}
+
+// parseGrokInspectSkills reads the skills list out of `grok inspect`.
+//
+// It is section-scoped: entries are collected only under a heading whose name is
+// "Skills", so an MCP server that happens to be named like a skill can never be
+// reported as one. A run that finds no Skills section at all is an ERROR rather
+// than an empty list — "grok enumerated nothing" and "this build could not read
+// grok's output" are different facts, and reporting the second as the first
+// would turn an output-format change into a silent verification pass.
+func parseGrokInspectSkills(out string) ([]string, error) {
+	var slugs []string
+	section := ""
+	sawSkills := false
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimRight(line, " \t\r")
+		if trimmed == "" {
+			continue
+		}
+		// A section heading is `Name (N)`. Headings are INDENTED in grok's
+		// output, so indentation cannot distinguish them from their entries —
+		// the tree glyph does: every entry line starts with one, and no heading
+		// does.
+		if strings.ContainsAny(string([]rune(strings.TrimLeft(trimmed, " \t"))[0]), "│├└─") {
+			if section == "skills" {
+				if m := grokSkillLine.FindStringSubmatch(trimmed); m != nil {
+					slugs = append(slugs, m[1])
+				}
+			}
+			continue
+		}
+		if m := grokSectionHeader.FindStringSubmatch(strings.TrimSpace(trimmed)); m != nil {
+			section = strings.ToLower(strings.TrimSpace(m[1]))
+			if section == "skills" {
+				sawSkills = true
+			}
+			continue
+		}
+		// A non-heading, non-entry line ends the section it followed, so a
+		// paragraph between lists cannot leak entries into the wrong one.
+		section = ""
+	}
+	if !sawSkills {
+		return nil, fmt.Errorf("grok inspect did not print a Skills section this build can read (output: %q) — "+
+			"re-run scripts/capture-grok-contract.sh and re-check docs/decisions/fn3-grok-surfaces.md §2",
+			truncate(strings.TrimSpace(out), 300))
+	}
+	sort.Strings(slugs)
+	return slugs, nil
+}
+
+// absentLeaderSocket returns a path that is guaranteed not to exist, inside a
+// directory that does. The directory is real so grok can resolve the path's
+// parent; the socket is absent so no leader can be attached to it.
+func absentLeaderSocket() (string, func(), error) {
+	dir, err := os.MkdirTemp("", "homeplane-grok-no-leader-")
+	if err != nil {
+		return "", func() {}, err
+	}
+	return filepath.Join(dir, "absent-leader.sock"), func() { os.RemoveAll(dir) }, nil
 }
 
 // Verify probes every harness in the report and records what it found.

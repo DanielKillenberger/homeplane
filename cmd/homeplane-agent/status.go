@@ -88,6 +88,20 @@ func printReport(w io.Writer, report agent.Report) {
 	}
 	tw.Flush()
 
+	if len(report.Harnesses) > 0 {
+		fmt.Fprintln(w)
+		hw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(hw, "HARNESS\tSTATE\tVERSION\tDETAIL")
+		for _, h := range report.Harnesses {
+			version := h.Version
+			if version == "" {
+				version = "-"
+			}
+			fmt.Fprintf(hw, "%s\t%s\t%s\t%s\n", h.Harness, h.State, version, h.Detail)
+		}
+		hw.Flush()
+	}
+
 	if len(report.Grants) > 0 {
 		fmt.Fprintln(w)
 		gw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)

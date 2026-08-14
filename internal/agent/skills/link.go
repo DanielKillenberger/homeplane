@@ -18,9 +18,13 @@ import (
 // $CLAUDE_CONFIG_DIR/skills and IGNORES ~/.claude/skills; Codex enumerates
 // $CODEX_HOME/skills. Honouring them is not politeness — writing to the wrong
 // directory would provision a harness nobody runs.
+// EnvGrokHome is grok's equivalent, and it relocates skills discovery as well
+// as the config file — proven by the fn-3 capture, which seeds a decoy skill at
+// $HOME/.grok and records zero decoy references from a relocated home.
 const (
 	EnvClaudeConfigDir = "CLAUDE_CONFIG_DIR"
 	EnvCodexHome       = "CODEX_HOME"
+	EnvGrokHome        = "GROK_HOME"
 )
 
 // Locator resolves each harness's skills directory. Every field is a seam, so
@@ -35,6 +39,9 @@ type Locator struct {
 	// CodexHome overrides Codex's configuration directory. Empty means read
 	// EnvCodexHome, then fall back to <Home>/.codex.
 	CodexHome string
+	// GrokHome overrides grok's configuration home. Empty means read
+	// EnvGrokHome, then fall back to <Home>/.grok.
+	GrokHome string
 }
 
 func (l Locator) home() (string, error) {
@@ -71,6 +78,22 @@ func (l Locator) SkillsDir(harnessID string) (string, error) {
 				return "", err
 			}
 			dir = filepath.Join(home, ".codex")
+		}
+		return filepath.Join(dir, "skills"), nil
+	case Grok:
+		// grok's skills root, and the same native-link convention Claude Code
+		// and Codex use: symlinks are FOLLOWED (all three probe skills resolved
+		// through a link to a target outside ~/.grok), so no copy and no adapter.
+		dir := strings.TrimSpace(l.GrokHome)
+		if dir == "" {
+			dir = strings.TrimSpace(os.Getenv(EnvGrokHome))
+		}
+		if dir == "" {
+			home, err := l.home()
+			if err != nil {
+				return "", err
+			}
+			dir = filepath.Join(home, ".grok")
 		}
 		return filepath.Join(dir, "skills"), nil
 	default:

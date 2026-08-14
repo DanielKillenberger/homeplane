@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -69,6 +70,39 @@ func backupFile(path string) (string, error) {
 		}
 		return candidate, nil
 	}
+}
+
+// ensureBackup reuses a backup that still holds the file's CURRENT bytes, and
+// takes a fresh one otherwise.
+//
+// The two-phase write backs the file up in phase one, before a grant is minted,
+// and commits in phase two. Re-copying an unchanged file would litter the
+// directory with a second identical copy on every run; reusing a copy of bytes
+// that have since changed would be worse — the rollback would restore someone
+// else's overwritten edit. So the reuse is CONDITIONAL on the bytes still
+// matching, which is exactly the condition under which the copy is still a
+// faithful "what was there before we wrote".
+func ensureBackup(path, existing string) (string, error) {
+	if existing == "" {
+		return backupFile(path)
+	}
+	current, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			// The file has been deleted since phase one. The existing copy is
+			// still what was there, and there is nothing new to copy.
+			return existing, nil
+		}
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	saved, err := os.ReadFile(existing)
+	if err != nil {
+		return "", fmt.Errorf("read backup %s: %w", existing, err)
+	}
+	if bytes.Equal(current, saved) {
+		return existing, nil
+	}
+	return backupFile(path)
 }
 
 // restoreFromBackup puts the original bytes back. It is the rollback half of

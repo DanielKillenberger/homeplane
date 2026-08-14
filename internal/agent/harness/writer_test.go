@@ -65,6 +65,29 @@ BLENDER_PORT = "9876"
 "gpt-5.6-sol" = 3
 `
 
+// grokFixture is a ~/.grok/config.toml shaped like the one the fn-3 capture
+// seeded and observed: a hand-written preamble comment, an unrelated table, an
+// unrelated pre-existing MCP entry with its own comment — and a [compat.claude]
+// table that already carries OTHER keys, so the `mcps` edit has to be a
+// key-level change rather than a table replacement. [compat.cursor] is
+// deliberately ABSENT, so one compat cell exercises the edit path and the other
+// the append path.
+const grokFixture = `# grok configuration. Hand-written; the comments matter.
+[ui]
+max_thoughts_width = 120
+
+[compat.claude]
+skills = true
+mcps = true   # inherited from Claude Code today
+rules = true
+
+# an unrelated pre-existing MCP entry, with its own comment
+[mcp_servers.preexisting-thing]
+command = "/usr/bin/true"
+args = ["--keep-me"]
+enabled = true
+`
+
 // managedEntries are the two entries every run writes.
 func managedEntries(token string) []Entry {
 	return []Entry{

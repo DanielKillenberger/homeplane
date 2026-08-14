@@ -68,8 +68,10 @@ type machine struct {
 	stateDir   string
 	home       string
 	codexHome  string
+	grokHome   string
 	claudePath string
 	codexPath  string
+	grokPath   string
 	locator    Locator
 }
 
@@ -80,11 +82,13 @@ func newMachine(t *testing.T, withDescriptor bool) *machine {
 		stateDir:  filepath.Join(root, "state"),
 		home:      filepath.Join(root, "home"),
 		codexHome: filepath.Join(root, "home", ".codex"),
+		grokHome:  filepath.Join(root, "home", ".grok"),
 	}
 	m.claudePath = filepath.Join(m.home, ".claude.json")
 	m.codexPath = filepath.Join(m.codexHome, "config.toml")
+	m.grokPath = filepath.Join(m.grokHome, "config.toml")
 
-	for _, dir := range []string{m.stateDir, m.home, m.codexHome} {
+	for _, dir := range []string{m.stateDir, m.home, m.codexHome, m.grokHome} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -93,6 +97,9 @@ func newMachine(t *testing.T, withDescriptor bool) *machine {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(m.codexPath, []byte(codexFixture), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(m.grokPath, []byte(grokFixture), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,8 +129,13 @@ func newMachine(t *testing.T, withDescriptor bool) *machine {
 	m.locator = Locator{
 		Home:            m.home,
 		CodexHome:       m.codexHome,
+		GrokHome:        m.grokHome,
 		ClaudeConfigDir: m.home,
 		LookPath:        func(string) (string, error) { return "", errors.New("not on PATH") },
+		// No CLI is ever run here. The version seam answers for grok so the
+		// support verdict under test is the one the test chose, never the one
+		// the developer's machine happens to have installed.
+		Version: func(string) (string, error) { return "grok " + GrokContractVersion + " (fixture)", nil },
 	}
 	return m
 }
@@ -137,6 +149,15 @@ func (m *machine) claudeTree(t *testing.T) map[string]any {
 	tree, err := parseJSONTree(mustRead(t, m.claudePath))
 	if err != nil {
 		t.Fatalf("parse claude config: %v", err)
+	}
+	return tree
+}
+
+func (m *machine) grokTree(t *testing.T) map[string]any {
+	t.Helper()
+	tree, err := parseTOMLTree(mustRead(t, m.grokPath))
+	if err != nil {
+		t.Fatalf("parse grok config: %v", err)
 	}
 	return tree
 }
@@ -172,8 +193,8 @@ func TestBothHarnessesAreConfiguredWithDistinctGrantTokens(t *testing.T) {
 	if err := report.Err(); err != nil {
 		t.Fatalf("report: %v", err)
 	}
-	if got := report.Configured(); len(got) != 2 {
-		t.Fatalf("configured = %v, want both harnesses", got)
+	if got := report.Configured(); len(got) != len(Known()) {
+		t.Fatalf("configured = %v, want every known harness (%v)", got, Known())
 	}
 
 	claudeAuth := authHeader(t, m.claudeTree(t), claudeContainer, "headers")
@@ -376,10 +397,11 @@ func TestAMalformedConfigSkipsThatHarnessAndCostsNoGrant(t *testing.T) {
 	if got := string(mustRead(t, skipped.BackupPath)); !strings.Contains(got, "[mcp_servers.broken") {
 		t.Error("the backup does not hold the malformed original")
 	}
-	// Exactly one grant was minted — Claude's. A config we will not write to
-	// must not consume authority.
-	if issuer.count() != 1 {
-		t.Errorf("%d grants minted, want 1: a skipped harness asked the server for a token", issuer.count())
+	// One grant per harness that was actually written — never one for the
+	// harness we skipped. A config we will not write to must not consume
+	// authority.
+	if want := len(Known()) - 1; issuer.count() != want {
+		t.Errorf("%d grants minted, want %d: a skipped harness asked the server for a token", issuer.count(), want)
 	}
 	if outcomeFor(t, report, ClaudeCode).Status != StatusConfigured {
 		t.Error("the malformed Codex config blocked Claude Code")
@@ -480,8 +502,8 @@ func TestRecordsHoldNoTokenAndAreOwnerOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 2 {
-		t.Fatalf("%d records, want 2", len(records))
+	if len(records) != len(Known()) {
+		t.Fatalf("%d records, want %d (one per known harness)", len(records), len(Known()))
 	}
 	for _, r := range records {
 		raw := mustRead(t, RecordPath(m.stateDir, r.Harness))

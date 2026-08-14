@@ -56,4 +56,4 @@ skills = [
 
 [unsupported.phone-home-coordinator]
 reason = "Bound to the always-on Clawniel session: it describes how THAT agent answers requests arriving on the palantir bus, and an ordinary harness has no bus, no owner profile and no authority to answer for Daniel. Instructions a harness cannot act on are worse than absent ones."
-harnesses = ["claude-code", "codex"]
+harnesses = ["claude-code", "codex", "grok"]

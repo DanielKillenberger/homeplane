@@ -36,10 +36,11 @@ const (
 	ConnectorSend Capability = "connector.send"
 )
 
-// Known harness identifiers (D1: Claude Code + Codex).
+// Known harness identifiers (D1: Claude Code + Codex; fn-3 adds grok).
 const (
 	HarnessClaudeCode = "claude-code"
 	HarnessCodex      = "codex"
+	HarnessGrok       = "grok"
 )
 
 // Errors returned by Resolve. Callers map these onto HTTP status codes.
@@ -65,15 +66,22 @@ type Policy struct {
 	Harnesses map[string]HarnessPolicy
 }
 
-// Default is the skeleton's policy: both harnesses may read, write, and delete
-// through connectors; neither may send. It is intentionally identical for the
-// two harnesses — per-harness DIFFERENCE is a product decision, while the
-// mechanism (server decides, client asks) is the architectural invariant.
+// Default is the skeleton's policy: every harness may read, write, and delete
+// through connectors; none may send. It is intentionally identical across
+// harnesses — per-harness DIFFERENCE is a product decision, while the mechanism
+// (server decides, client asks) is the architectural invariant.
+//
+// grok joins on exactly those terms. Adding a third harness must be a ROW here
+// and nothing else: if supporting it had required a new capability, a special
+// case in Resolve, or an edge-side branch, that would be the boundary R12 draws
+// being crossed, and the right response would be to surface it rather than to
+// widen the vocabulary quietly.
 func Default() Policy {
 	caps := []Capability{ConnectorRead, ConnectorWrite, ConnectorDelete}
 	return Policy{Harnesses: map[string]HarnessPolicy{
 		HarnessClaudeCode: {Allowed: caps, Default: caps},
 		HarnessCodex:      {Allowed: caps, Default: caps},
+		HarnessGrok:       {Allowed: caps, Default: caps},
 	}}
 }
 

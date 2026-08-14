@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DanielKillenberger/homeplane/internal/agent/gno"
+	"github.com/DanielKillenberger/homeplane/internal/agent/harness"
 	"github.com/DanielKillenberger/homeplane/internal/agent/supervise"
 )
 
@@ -83,8 +84,14 @@ type Report struct {
 	MachineName string            `json:"machine_name,omitempty"`
 	CheckedAt   time.Time         `json:"checked_at"`
 	Components  []ComponentReport `json:"components"`
-	Grants      []GrantReport     `json:"grants"`
-	Server      *HealthReport     `json:"server,omitempty"`
+	// Harnesses is the per-harness reconciliation: live detection against the
+	// local configuration record against the grants the SERVER lists. The
+	// components list says whether the harness LAYER is healthy; this says
+	// which harness is in which of the five states, which is the question an
+	// operator actually asks.
+	Harnesses []HarnessStatus `json:"harnesses"`
+	Grants    []GrantReport   `json:"grants"`
+	Server    *HealthReport   `json:"server,omitempty"`
 }
 
 // ExitCode maps the report onto a process exit status.
@@ -126,6 +133,11 @@ type StatusOptions struct {
 	// GNOLiveness observes the supervised retrieval engine, for the same reason
 	// and with the same default (supervise.ProcessProbe).
 	GNOLiveness supervise.Probe
+	// HarnessLocator resolves harness config paths and observes harness
+	// versions for the per-harness reconciliation. The zero value asks the real
+	// machine; tests point it at fixtures, which is what keeps a status test
+	// off the developer's own harnesses.
+	HarnessLocator harness.Locator
 }
 
 // Status inspects the machine and reports what is actually true right now.
@@ -184,6 +196,7 @@ func Status(ctx context.Context, opts StatusOptions) (Report, error) {
 	report.Components = append(report.Components, grants.component, server.component)
 	report.Grants = grants.grants
 	report.Server = server.health
+	report.Harnesses = harnessStatuses(dir, opts, grants)
 
 	switch {
 	case !report.Enroled:
@@ -194,6 +207,34 @@ func Status(ctx context.Context, opts StatusOptions) (Report, error) {
 		report.Status = OverallOK
 	}
 	return report, nil
+}
+
+// harnessStatuses performs the per-harness reconciliation.
+//
+// Detection failures do not fail the status call: a machine whose harness paths
+// cannot be resolved is a machine an operator still needs a report about, so the
+// error becomes the detail of a not-detected row rather than an empty report.
+func harnessStatuses(stateDir string, opts StatusOptions, grants grantsResult) []HarnessStatus {
+	detections, err := opts.HarnessLocator.DetectAll()
+	if err != nil {
+		rows := make([]HarnessStatus, 0, len(harness.Known()))
+		for _, name := range harness.Known() {
+			rows = append(rows, HarnessStatus{
+				Harness: name, State: HarnessNotDetected,
+				Detail: "this harness could not be inspected: " + err.Error(),
+			})
+		}
+		return rows
+	}
+	records, err := harness.LoadRecords(stateDir)
+	if err != nil {
+		records = nil
+	}
+	// The grants component reads `unknown` exactly when the server could not be
+	// asked, which is the one case a missing grant must not be read as a
+	// revocation.
+	grantsKnown := grants.component.State != StateUnknown
+	return reconcileHarnesses(detections, records, grants.grants, grantsKnown)
 }
 
 func enrolmentComponent(hasState bool, state State, credential string) ComponentReport {

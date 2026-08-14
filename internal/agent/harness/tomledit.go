@@ -352,13 +352,201 @@ func appendTOMLBlock(src []byte, block string) []byte {
 	return out.Bytes()
 }
 
+// ── Single-key editing ───────────────────────────────────────────────────────
+
+// setTOMLKeyLiteral sets one key inside one table to a bare literal, touching
+// nothing else in the document.
+//
+// It exists for grok's `[compat.claude] mcps = false` and `[compat.cursor]
+// mcps = false` (D4/D4b): a SEMANTIC edit of exactly one cell, where the rest of
+// the table — `skills`, `rules`, `agents`, `hooks`, `sessions` — and every
+// comment in the file must survive. That is the same reason the managed entries
+// are spliced by span rather than round-tripped, applied at key granularity.
+//
+// Three shapes are handled, in order of preference:
+//
+//   - the table exists and already assigns the key: only the VALUE bytes are
+//     replaced, so a trailing comment on that line survives;
+//   - the table exists and does not assign the key: the assignment is inserted
+//     directly under the header, where a reader looking for the table's own
+//     settings will find it;
+//   - the table does not exist: it is appended as a new block.
+//
+// Anything else — the key expressed as a dotted key in a parent table, or the
+// table written as an inline table — is NOT rewritten here. It is caught by the
+// caller's post-edit assertion, which re-parses the result and refuses to write
+// when the key did not actually take the value. Failing loudly beats editing a
+// shape this code cannot read.
+// appended reports whether the whole table had to be created, which the caller
+// uses to tell "the key was not there" from "the key is there in a shape this
+// editor cannot reach".
+func setTOMLKeyLiteral(src []byte, table []string, key, literal string) (out []byte, appended bool, err error) {
+	spans, err := scanTOMLTables(src)
+	if err != nil {
+		return nil, false, fmt.Errorf("%w: %v", ErrMalformedConfig, err)
+	}
+	for _, s := range spans {
+		if s.arrayOfTables || !sameKeyPath(s.key, table) {
+			continue
+		}
+		body := src[s.start:s.end]
+		start, end, found := findKeyValueSpan(body, key)
+		var edited []byte
+		if found {
+			edited = concatBytes(body[:start], []byte(literal), body[end:])
+		} else {
+			insert := len(body)
+			if nl := bytes.IndexByte(body, '\n'); nl >= 0 {
+				insert = nl + 1
+			}
+			edited = concatBytes(body[:insert], []byte(key+" = "+literal+"\n"), body[insert:])
+		}
+		return concatBytes(src[:s.start], edited, src[s.end:]), false, nil
+	}
+
+	block := fmt.Sprintf("[%s]\n%s = %s\n", strings.Join(table, "."), key, literal)
+	return appendTOMLBlock(src, block), true, nil
+}
+
+func sameKeyPath(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func concatBytes(parts ...[]byte) []byte {
+	var out bytes.Buffer
+	for _, p := range parts {
+		out.Write(p)
+	}
+	return out.Bytes()
+}
+
+// findKeyValueSpan locates the byte range of the VALUE assigned to a bare key
+// at the top level of a table body, excluding any trailing comment.
+//
+// Header line, comment lines, multi-line strings and nested arrays are all
+// skipped, using the same lexical state the table scanner carries — so a `mcps`
+// appearing inside a string or inside another table's array is never mistaken
+// for the assignment.
+func findKeyValueSpan(body []byte, key string) (start, end int, found bool) {
+	state := lineState{}
+	first := true
+	for pos := 0; pos < len(body); {
+		lineEnd := len(body)
+		next := len(body)
+		if i := bytes.IndexByte(body[pos:], '\n'); i >= 0 {
+			lineEnd, next = pos+i, pos+i+1
+		}
+		text := body[pos:lineEnd]
+
+		if !first && !state.inMulti && state.depth == 0 {
+			if s, e, ok := keyValueSpanInLine(text, key); ok {
+				return pos + s, pos + e, true
+			}
+		}
+		first = false
+		state = scanLine(text, state)
+		pos = next
+	}
+	return 0, 0, false
+}
+
+// keyValueSpanInLine reads `<key> = <value> [# comment]` and returns the span of
+// <value> within the line.
+func keyValueSpanInLine(line []byte, key string) (start, end int, ok bool) {
+	i := 0
+	for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
+		i++
+	}
+	if !bytes.HasPrefix(line[i:], []byte(key)) {
+		return 0, 0, false
+	}
+	i += len(key)
+	// A bare key ends here: `mcpsx = true` must not match `mcps`.
+	if i < len(line) && isBareKeyByte(line[i]) {
+		return 0, 0, false
+	}
+	for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
+		i++
+	}
+	if i >= len(line) || line[i] != '=' {
+		return 0, 0, false
+	}
+	i++
+	for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
+		i++
+	}
+	start = i
+
+	// The value runs to the end of the line or to a comment that is not inside a
+	// string. Reusing scanLine's state machine per byte would be overkill; the
+	// values this function edits are bare literals, and a value that is not one
+	// is rejected by the caller's re-parse assertion rather than mangled here.
+	end = len(line)
+	inBasic, inLiteral := false, false
+	for j := start; j < len(line); j++ {
+		switch {
+		case inBasic:
+			if line[j] == '\\' {
+				j++
+			} else if line[j] == '"' {
+				inBasic = false
+			}
+		case inLiteral:
+			if line[j] == '\'' {
+				inLiteral = false
+			}
+		case line[j] == '"':
+			inBasic = true
+		case line[j] == '\'':
+			inLiteral = true
+		case line[j] == '#':
+			end = j
+			j = len(line)
+		}
+	}
+	for end > start && (line[end-1] == ' ' || line[end-1] == '\t' || line[end-1] == '\r') {
+		end--
+	}
+	if end == start {
+		return 0, 0, false
+	}
+	return start, end, true
+}
+
 // ── Rendering ────────────────────────────────────────────────────────────────
+
+// tomlEntryStyle is the per-harness spelling of one managed entry. Both
+// harnesses that use TOML put their MCP servers under `[mcp_servers.<name>]`,
+// and then disagree about two details — which is exactly the kind of difference
+// that must be DATA rather than a forked renderer, or the two copies drift.
+type tomlEntryStyle struct {
+	// headersTable is the sub-table HTTP headers live in: `http_headers` for
+	// Codex, `headers` for grok (fn3-grok-surfaces.md §1, captured verbatim).
+	headersTable string
+	// writeEnabled emits `enabled = true`. grok's own `mcp add` writes it
+	// explicitly and an entry lands enabled, so Homeplane renders what grok
+	// renders rather than relying on grok's default staying true.
+	writeEnabled bool
+}
+
+var (
+	codexEntryStyle = tomlEntryStyle{headersTable: "http_headers"}
+	grokEntryStyle  = tomlEntryStyle{headersTable: "headers", writeEnabled: true}
+)
 
 // renderTOMLEntry writes one managed entry as `[mcp_servers.<name>]` plus the
 // sub-tables it needs. Sub-tables rather than inline tables: that is the shape
-// Codex's own tooling writes, so a config Homeplane touched still looks like a
-// config a human wrote.
-func renderTOMLEntry(prefix []string, e Entry) (string, error) {
+// both harnesses' own tooling writes, so a config Homeplane touched still looks
+// like a config a human wrote.
+func renderTOMLEntry(prefix []string, e Entry, style tomlEntryStyle) (string, error) {
 	if err := e.Validate(); err != nil {
 		return "", err
 	}
@@ -379,10 +567,13 @@ func renderTOMLEntry(prefix []string, e Entry) (string, error) {
 			fmt.Fprintf(&b, "args = [%s]\n", strings.Join(quoted, ", "))
 		}
 	}
+	if style.writeEnabled {
+		b.WriteString("enabled = true\n")
+	}
 
 	if len(e.Headers) > 0 {
 		b.WriteString("\n")
-		fmt.Fprintf(&b, "[%s.http_headers]\n", strings.Join(path, "."))
+		fmt.Fprintf(&b, "[%s.%s]\n", strings.Join(path, "."), style.headersTable)
 		writeTOMLPairs(&b, e.Headers)
 	}
 	if len(e.Env) > 0 {

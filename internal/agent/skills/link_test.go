@@ -34,6 +34,7 @@ func newFixture(t *testing.T) *fixture {
 	f.locator = Locator{
 		ClaudeConfigDir: filepath.Join(f.home, ".claude"),
 		CodexHome:       filepath.Join(f.home, ".codex"),
+		GrokHome:        filepath.Join(f.home, ".grok"),
 	}
 	return f
 }

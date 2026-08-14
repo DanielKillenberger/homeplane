@@ -50,9 +50,17 @@ import (
 const (
 	ClaudeCode = harness.ClaudeCode
 	Codex      = harness.Codex
+	Grok       = harness.Grok
 )
 
 // Known lists the harnesses this package provisions, in a stable order.
+//
+// It DELEGATES rather than keeping its own list, and that is load-bearing: a
+// harness present in one registry and absent from the other is a harness that
+// is configured for MCP and invisible to skills provisioning (or the reverse),
+// which is a half-configured machine that reports itself healthy. The
+// delegation makes the lockstep structural, and a test asserts it stays that
+// way.
 func Known() []string { return harness.Known() }
 
 // Permissions for everything this package creates. Nothing here holds a secret

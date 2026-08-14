@@ -323,7 +323,7 @@ their origins in one fresh process, and it is what proved §2 and §5.
 ## 5. FINDING — grok already inherits Claude Code's MCP servers (R12 / R5)
 
 **Surfaced by the probe under the spec's R12 boundary, then RESOLVED by Daniel
-— see D4 at the end of this section.**
+— see D4 and D4b at the end of this section.**
 
 grok scans other vendors' configs **by default**: `[compat.claude] mcps = true`
 reads `~/.claude.json`, and `[compat.cursor] mcps = true` reads `~/.cursor/mcp.json`.
@@ -383,8 +383,8 @@ project-scope `.mcp.json` is a third. Measured on this machine, today:
 So D4 does achieve exclusivity **today** — but as a matter of current contents,
 not as a structural guarantee. `[compat.cursor] mcps` is still ON, so the day
 Daniel populates `~/.cursor/mcp.json`, or any repo he runs grok in grows a
-`.cursor/mcp.json` or `.mcp.json`, inheritance returns silently. That residual
-is **D4b, still open** (below).
+`.cursor/mcp.json` or `.mcp.json`, inheritance returns silently. That residual is
+closed by **D4b** (below), ratified the following day.
 
 Note also for R6: **`[disabled]` entries are still listed.** Status modelling
 must read the disabled marker, not mere presence, or it will report inherited
@@ -397,22 +397,27 @@ What .2 and .3 may rely on:
   proof should re-assert rather than assume.
 - Audit attribution (R3) is grok's grant, not Claude Code's.
 
-### D4b (fn-3) — OPEN, needs Daniel: the other compat sources
+### D4b (fn-3) — RESOLVED by Daniel: `[compat.cursor] mcps = false`
 
-Recommended: also set **`[compat.cursor] mcps = false`**, making the isolation
-structural instead of contingent on `~/.cursor/mcp.json` staying empty. It costs
-nothing today precisely because Cursor defines nothing — which is the cheapest
-possible moment to close it. `.mcp.json` is project-scope and cannot be settled
-by a user-config key; the honest treatment is for R6's status surface to report
-the active compat sources, so inheritance is always visible rather than assumed
-absent. **Not assumed by .2** — like D4, it is Daniel's call.
+**Ratified 2026-08-15. The .2 writer also sets `[compat.cursor] mcps = false`.**
+That makes the isolation **structural** instead of contingent on
+`~/.cursor/mcp.json` staying empty: the day Daniel populates it, or a repo he
+runs grok in grows a `.cursor/mcp.json`, inheritance does not silently return.
+It cost nothing to close precisely because Cursor defines nothing today, which
+was the cheapest possible moment to do it.
+
+`.mcp.json` is project-scope and cannot be settled by a user-config key. It is
+therefore **reported rather than closed**: R6's status and `-detect` surfaces
+list the active compat sources, and the project-scope one is listed
+unconditionally — claiming a source absent that no setting of ours can disable
+would be the one dishonest thing that list could do.
 
 Implementation constraints, all inherited from the rest of this document:
 
 - **The byte-span discipline applies to this key too.** It is a
-  semantic-preserving edit of one key: the rest of `[compat.claude]`
-  (`skills`, `rules`, `agents`, `hooks`, `sessions`) is left untouched, and so
-  is every comment — which is, again, why the CLI verbs are not the writer (§1).
+  semantic-preserving edit of one key per table: the rest of `[compat.claude]`
+  and `[compat.cursor]` (`skills`, `rules`, `agents`, `hooks`, `sessions`) is
+  left untouched, and so is every comment — which is, again, why the CLI verbs are not the writer (§1).
 - **It must be re-asserted on idempotent re-runs**, exactly like the 0600 mode
   (§3). Both are settings grok's own tooling can undo, so "we set it once" is
   not a guarantee; each configure run re-establishes them and converges.
@@ -458,6 +463,8 @@ contents, never on the directory's existence.
 - A `contract_test.go` for the harness package asserts our argv and entry shape
   against `testdata/grok-1.0.3-contract.txt` — the gno pattern. **.2 owns that
   test**; .1 committed the testdata and the capture script it comes from.
-- **D4:** the writer also sets `[compat.claude] mcps = false` (§5) — one key,
-  semantic-preserving, re-asserted on every run like the 0600 mode. `skills`
-  stays on.
+- **D4 + D4b:** the writer also sets `[compat.claude] mcps = false` AND
+  `[compat.cursor] mcps = false` (§5) — one key per table, semantic-preserving,
+  re-asserted on every run like the 0600 mode. `skills` stays on. The
+  project-scope `.mcp.json` source cannot be closed from user config and is
+  reported by detection (`Detection.CompatSources`) instead.

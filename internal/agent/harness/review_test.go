@@ -407,7 +407,10 @@ func TestAConfigThatNeverStopsChangingIsReportedRatherThanSpunOn(t *testing.T) {
 	if !strings.Contains(err.Error(), "kept changing") {
 		t.Errorf("err = %v", err)
 	}
-	if attempts > maxMergeAttempts+1 {
+	// The write is two-phase: one dry merge in Prepare, then the bounded retry
+	// in Commit. So the ceiling is one more than the retry bound plus the
+	// attempt that discovers it — what matters is that it TERMINATES.
+	if attempts > maxMergeAttempts+2 {
 		t.Errorf("%d merge attempts; the retry is not bounded", attempts)
 	}
 }

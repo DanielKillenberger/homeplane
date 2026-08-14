@@ -82,8 +82,9 @@ func TestRealHarnessesDiscoverRealVaultSkills(t *testing.T) {
 	base := t.TempDir()
 	claudeHome := filepath.Join(base, "claude")
 	codexHome := filepath.Join(base, "codex")
+	grokHome := filepath.Join(base, "grok")
 	stateDir := filepath.Join(base, "state")
-	for _, d := range []string{claudeHome, codexHome, stateDir} {
+	for _, d := range []string{claudeHome, codexHome, grokHome, stateDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -99,7 +100,7 @@ func TestRealHarnessesDiscoverRealVaultSkills(t *testing.T) {
 	}
 
 	p := Provisioner{
-		Locator:  Locator{ClaudeConfigDir: claudeHome, CodexHome: codexHome},
+		Locator:  Locator{ClaudeConfigDir: claudeHome, CodexHome: codexHome, GrokHome: grokHome},
 		StateDir: stateDir,
 		Machine:  "test",
 	}
@@ -139,7 +140,7 @@ func TestRealHarnessesDiscoverRealVaultSkills(t *testing.T) {
 	v := Verifier{
 		ClaudeBin: claudeBin,
 		CodexBin:  codexBin,
-		Env:       append(os.Environ(), "CLAUDE_CONFIG_DIR="+claudeHome, "CODEX_HOME="+codexHome),
+		Env:       append(os.Environ(), "CLAUDE_CONFIG_DIR="+claudeHome, "CODEX_HOME="+codexHome, "GROK_HOME="+grokHome),
 		Dir:       base,
 	}
 	if err := v.Verify(context.Background(), &report); err != nil {
@@ -198,7 +199,7 @@ func TestRealVaultHarnessSpecificSkillsAreMarkedUnsupported(t *testing.T) {
 		}
 		base := t.TempDir()
 		p := Provisioner{
-			Locator:  Locator{ClaudeConfigDir: filepath.Join(base, "claude"), CodexHome: filepath.Join(base, "codex")},
+			Locator:  Locator{ClaudeConfigDir: filepath.Join(base, "claude"), CodexHome: filepath.Join(base, "codex"), GrokHome: filepath.Join(base, "grok")},
 			StateDir: filepath.Join(base, "state"),
 		}
 		// Assign it deliberately, alongside the profile's own marking.
@@ -283,7 +284,7 @@ func TestCredentialBearingSkillIsRejectedAgainstRealHarnesses(t *testing.T) {
 	// And it must not reach a harness even when a profile asks for it.
 	base := t.TempDir()
 	p := Provisioner{
-		Locator:  Locator{ClaudeConfigDir: filepath.Join(base, "claude"), CodexHome: filepath.Join(base, "codex")},
+		Locator:  Locator{ClaudeConfigDir: filepath.Join(base, "claude"), CodexHome: filepath.Join(base, "codex"), GrokHome: filepath.Join(base, "grok")},
 		StateDir: filepath.Join(base, "state"),
 	}
 	profilePath := filepath.Join(root, ProfileFileName)

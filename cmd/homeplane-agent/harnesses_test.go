@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -54,12 +55,13 @@ func newControlPlaneWithEdge(t *testing.T) *httptest.Server {
 	return hs
 }
 
-// fakeMachine points HOME and CODEX_HOME at temporary directories holding
+// fakeMachine points HOME, CODEX_HOME and GROK_HOME at temporary directories holding
 // pre-existing harness configuration, and returns the paths.
 type fakeMachine struct {
 	home       string
 	claudePath string
 	codexPath  string
+	grokPath   string
 	stateDir   string
 }
 
@@ -72,8 +74,11 @@ func newFakeMachine(t *testing.T) fakeMachine {
 	}
 	m.claudePath = filepath.Join(m.home, ".claude.json")
 	m.codexPath = filepath.Join(m.home, ".codex", "config.toml")
-	if err := os.MkdirAll(filepath.Dir(m.codexPath), 0o700); err != nil {
-		t.Fatal(err)
+	m.grokPath = filepath.Join(m.home, ".grok", "config.toml")
+	for _, dir := range []string{filepath.Dir(m.codexPath), filepath.Dir(m.grokPath)} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := os.WriteFile(m.claudePath, []byte(`{"numStartups":7,"mcpServers":{"rize":{"type":"http","url":"https://mcp.rize.io/mcp"}}}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -81,9 +86,13 @@ func newFakeMachine(t *testing.T) fakeMachine {
 	if err := os.WriteFile(m.codexPath, []byte("model = \"gpt-5.6-sol\"\n\n# keep me\n[mcp_servers.blender]\ncommand = \"/x\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(m.grokPath, []byte("[ui]\nmax_thoughts_width = 120\n\n# keep me\n[mcp_servers.preexisting-thing]\ncommand = \"/usr/bin/true\"\nenabled = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("HOME", m.home)
 	t.Setenv("CODEX_HOME", filepath.Dir(m.codexPath))
+	t.Setenv("GROK_HOME", filepath.Dir(m.grokPath))
 	// Pinned rather than inherited: an ambient CLAUDE_CONFIG_DIR would
 	// otherwise aim these tests at the developer's own configuration.
 	t.Setenv("CLAUDE_CONFIG_DIR", m.home)
@@ -121,7 +130,7 @@ func TestConfigureHarnessesEndToEndAgainstTheRealControlPlane(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.stdout), &report); err != nil {
 		t.Fatalf("report is not JSON: %v\n%s", err, res.stdout)
 	}
-	if len(report.Outcomes) != 2 {
+	if len(report.Outcomes) != len(harness.Known()) {
 		t.Fatalf("outcomes = %+v", report.Outcomes)
 	}
 	for _, o := range report.Outcomes {
@@ -274,7 +283,7 @@ func TestConfigureHarnessesDetectReportsWithoutWriting(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, res.stdout)
 	}
-	if len(out.Harnesses) != 2 {
+	if len(out.Harnesses) != len(harness.Known()) {
 		t.Fatalf("detections = %+v", out.Harnesses)
 	}
 	for _, d := range out.Harnesses {
@@ -387,7 +396,7 @@ func TestATargetedRunDoesNotEraseTheOtherHarnessFromStatus(t *testing.T) {
 	if err := json.Unmarshal(raw, &state); err != nil {
 		t.Fatal(err)
 	}
-	if len(state.Harnesses) != 2 {
+	if len(state.Harnesses) != len(harness.Known()) {
 		t.Fatalf("harnesses = %v after a targeted run; the untouched harness was erased", state.Harnesses)
 	}
 }
@@ -449,5 +458,69 @@ func TestAPartiallyConfiguredMachineReportsDegraded(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("status reports no harness component at all")
+	}
+}
+
+// R1's acceptance surface is the EXISTING read-only mode, `configure-harnesses
+// -detect` — not a new subcommand. Both of its output forms must carry the
+// version and the support verdict, because "grok is installed" and "this build
+// knows how to write grok's configuration" are different facts and an operator
+// acts on them differently.
+func TestDetectReportsVersionSupportAndInheritedSources(t *testing.T) {
+	home := t.TempDir()
+	grokHome := filepath.Join(home, ".grok")
+	if err := os.MkdirAll(grokHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(grokHome, "config.toml"), []byte("[ui]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Every source is pinned, including the version probe: this test asserts
+	// what the surface RENDERS, and must not depend on which grok the developer
+	// happens to have installed.
+	locator := harness.Locator{
+		Home:            home,
+		ClaudeConfigDir: home,
+		CodexHome:       filepath.Join(home, ".codex"),
+		GrokHome:        grokHome,
+		LookPath:        func(string) (string, error) { return "/fake/bin/grok", nil },
+		Version:         func(string) (string, error) { return "grok 2.0.0 (future)", nil },
+	}
+
+	var jsonOut, stderr bytes.Buffer
+	if code := reportDetection(locator, true, &jsonOut, &stderr); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	var machine struct {
+		Harnesses []harness.Detection `json:"harnesses"`
+	}
+	if err := json.Unmarshal(jsonOut.Bytes(), &machine); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, jsonOut.String())
+	}
+	var grok harness.Detection
+	for _, d := range machine.Harnesses {
+		if d.Harness == harness.Grok {
+			grok = d
+		}
+		if d.Support == "" {
+			t.Errorf("%s carries no support verdict", d.Harness)
+		}
+	}
+	if grok.Version != "2.0.0" || grok.Support != harness.SupportUnsupported {
+		t.Fatalf("grok detection = %+v, want the observed version and an unsupported verdict", grok)
+	}
+	if len(grok.CompatSources) == 0 {
+		t.Error("the machine-readable form hides which sources grok still inherits MCP servers from")
+	}
+
+	var humanOut bytes.Buffer
+	if code := reportDetection(locator, false, &humanOut, &stderr); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	human := humanOut.String()
+	for _, want := range []string{"grok", "UNSUPPORTED", "2.0.0", "support:", "inherits MCP servers from:"} {
+		if !strings.Contains(human, want) {
+			t.Errorf("the human output does not mention %q:\n%s", want, human)
+		}
 	}
 }

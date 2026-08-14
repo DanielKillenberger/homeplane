@@ -45,10 +45,16 @@ import (
 const (
 	ClaudeCode = "claude-code"
 	Codex      = "codex"
+	Grok       = "grok"
 )
 
 // Known lists the harnesses this task configures, in a stable order.
-func Known() []string { return []string{ClaudeCode, Codex} }
+//
+// skills.Known() delegates to this function rather than keeping its own list:
+// the two registries drifting apart is exactly how a harness ends up configured
+// for MCP and invisible to skills provisioning (or the reverse), and
+// TestKnownRegistriesAreInLockstep fails if the delegation is ever broken.
+func Known() []string { return []string{ClaudeCode, Codex, Grok} }
 
 // ConnectorServerName is the MCP server name the connector edge is registered
 // under inside each harness. The retrieval engine's name is NOT a constant

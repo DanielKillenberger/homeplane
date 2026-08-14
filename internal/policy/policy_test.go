@@ -2,6 +2,7 @@ package policy
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -84,4 +85,68 @@ func TestNoHarnessMaySendInTheSkeleton(t *testing.T) {
 			t.Errorf("harness %q was granted connector.send", harness)
 		}
 	}
+}
+
+// Adding a harness must be a ROW, not a widening.
+//
+// The mechanism this package exists for is "the server decides what a grant
+// carries". A third harness that needed its own capability, its own default, or
+// its own branch in Resolve would mean the vocabulary was per-harness after all
+// — which is the R12 boundary being crossed, and a finding to surface rather
+// than an implementation to write. So the set is asserted EQUAL across all
+// three, not merely non-empty.
+func TestEveryHarnessHoldsTheIdenticalCapabilitySet(t *testing.T) {
+	p := Default()
+	if len(p.Harnesses) != 3 {
+		t.Fatalf("harnesses = %v, want exactly the three known harnesses", p.KnownHarnesses())
+	}
+	reference, ok := p.Harnesses[HarnessClaudeCode]
+	if !ok {
+		t.Fatal("claude-code has no policy row")
+	}
+	for _, name := range []string{HarnessCodex, HarnessGrok} {
+		hp, ok := p.Harnesses[name]
+		if !ok {
+			t.Fatalf("%s has no policy row", name)
+		}
+		if !sameCapabilitySet(hp.Allowed, reference.Allowed) {
+			t.Errorf("%s allowed = %v, want the same set as claude-code (%v)", name, hp.Allowed, reference.Allowed)
+		}
+		if !sameCapabilitySet(hp.Default, reference.Default) {
+			t.Errorf("%s default = %v, want the same set as claude-code (%v)", name, hp.Default, reference.Default)
+		}
+	}
+	// grok resolves like the others, through the same code path, with no
+	// per-harness special case.
+	got, err := p.Resolve(HarnessGrok, nil)
+	if err != nil {
+		t.Fatalf("Resolve(grok): %v", err)
+	}
+	want, err := p.Resolve(HarnessClaudeCode, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("grok resolves to %v, claude-code to %v", got, want)
+	}
+	// And the over-policy refusal is not weakened by the new row.
+	if _, err := p.Resolve(HarnessGrok, []string{string(ConnectorSend)}); !errors.Is(err, ErrNotPermitted) {
+		t.Errorf("grok was allowed to ask for send: %v", err)
+	}
+}
+
+func sameCapabilitySet(a, b []Capability) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := map[Capability]bool{}
+	for _, c := range a {
+		seen[c] = true
+	}
+	for _, c := range b {
+		if !seen[c] {
+			return false
+		}
+	}
+	return true
 }

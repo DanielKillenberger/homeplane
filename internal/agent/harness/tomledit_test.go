@@ -160,7 +160,7 @@ func TestRenderedEntriesParseBackToWhatWentIn(t *testing.T) {
 	}
 	doc := []byte("root = 1\n")
 	for _, e := range entries {
-		block, err := renderTOMLEntry([]string{"mcp_servers"}, e)
+		block, err := renderTOMLEntry([]string{"mcp_servers"}, e, codexEntryStyle)
 		if err != nil {
 			t.Fatalf("render %s: %v", e.Name, err)
 		}
@@ -227,7 +227,7 @@ func TestRemovingAdjacentManagedTablesStrandsNoSeparators(t *testing.T) {
 		{Name: "gno", Transport: TransportStdio, Command: "/bin/agent", Args: []string{"gno", "mcp"}},
 	}
 	for _, e := range entries {
-		block, err := renderTOMLEntry([]string{"mcp_servers"}, e)
+		block, err := renderTOMLEntry([]string{"mcp_servers"}, e, codexEntryStyle)
 		if err != nil {
 			t.Fatalf("render: %v", err)
 		}

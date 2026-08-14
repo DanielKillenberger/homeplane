@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -28,6 +30,59 @@ const EnvCodexHome = "CODEX_HOME"
 // `$HOME/.claude.json` when the two differ.
 const EnvClaudeConfigDir = "CLAUDE_CONFIG_DIR"
 
+// EnvGrokHome is grok's CODEX_HOME-equivalent: it relocates grok's entire
+// configuration home, config file and skills directory alike.
+//
+// That it relocates BOTH was proven, not assumed — the fn-3 capture points HOME
+// and GROK_HOME at different roots, seeds a decoy config and skill at
+// $HOME/.grok, and records zero decoy references next to the entries written
+// into the relocated home (docs/decisions/fn3-grok-surfaces.md §0).
+const EnvGrokHome = "GROK_HOME"
+
+// GrokContractVersion is the grok release the CLI/config contract in
+// docs/decisions/fn3-grok-surfaces.md was captured against, pinned verbatim in
+// testdata/grok-1.0.3-contract.txt.
+//
+// It is not decoration. Everything this package writes for grok — the
+// `[mcp_servers.<name>]` shape, the `headers` sub-table name, `enabled = true`,
+// the `[compat.*] mcps` keys — is what THAT release was observed to read. A
+// machine running something else is a machine whose config surface nobody
+// verified, so the version is observed and reported rather than assumed.
+const GrokContractVersion = "1.0.3"
+
+// GrokMinVersion is the oldest grok this package will write to. It is the
+// contract version: nothing older was ever observed, and writing a shape into a
+// CLI whose behaviour is unknown is the failure mode this gate exists to stop.
+const GrokMinVersion = "1.0.3"
+
+// Support verdicts. They are DISTINCT from Installed on purpose: "grok is on
+// this machine" and "this build knows how to write grok's config" are different
+// facts, and collapsing them is how a version bump silently corrupts a config.
+const (
+	// SupportSupported means the observed version is exactly the captured
+	// contract version.
+	SupportSupported = "supported"
+	// SupportDrifted means a version within the contract's major line but not
+	// the captured one. Writing proceeds — the config surface is stable across a
+	// patch line and refusing would strand every future release — but the drift
+	// is reported in both output forms so an operator can re-capture.
+	SupportDrifted = "drifted"
+	// SupportUnsupported means positive evidence the CLI is outside the
+	// contract: older than the minimum, or a different major. Configure REFUSES
+	// such a harness before any grant is issued.
+	SupportUnsupported = "unsupported"
+	// SupportUnknown means no version could be observed, or the harness has no
+	// pinned contract at all (Claude Code and Codex, which fn-1 did not
+	// version-gate). It never blocks: absence of an observation is not evidence
+	// of drift, and the local write is verified by re-parse and preservation
+	// regardless.
+	SupportUnknown = "unknown"
+)
+
+// versionProbeTimeout bounds `<harness> --version`. It is a local, non-network
+// call, so anything slower than this is stuck rather than slow.
+const versionProbeTimeout = 10 * time.Second
+
 // Locator resolves harness configuration paths and decides what is installed.
 //
 // Both fields are seams. Tests point Home at a temporary directory and stub
@@ -43,8 +98,18 @@ type Locator struct {
 	// `.claude.json`. Empty means read EnvClaudeConfigDir, then fall back to
 	// Home.
 	ClaudeConfigDir string
+	// GrokHome overrides grok's configuration home. Empty means read
+	// EnvGrokHome, then fall back to <Home>/.grok.
+	GrokHome string
 	// LookPath finds an executable. Empty means exec.LookPath.
 	LookPath func(string) (string, error)
+	// Version reports a harness CLI's self-declared version string, given the
+	// resolved binary path. Empty means run `<binary> --version` with a timeout.
+	//
+	// It is a seam for the same reason LookPath is: the support verdict must be
+	// testable across every version a machine could be running, and no unit test
+	// may depend on which grok happens to be installed on the developer's box.
+	Version func(binary string) (string, error)
 }
 
 // Detection is what the machine says about one harness.
@@ -62,9 +127,39 @@ type Detection struct {
 	ConfigExists bool `json:"config_exists"`
 	// BinaryPath is the CLI found on PATH, when there is one.
 	BinaryPath string `json:"binary_path,omitempty"`
+	// Version is the harness CLI's self-declared version, when one could be
+	// observed. Empty means the probe did not run or did not answer — never
+	// "the harness has no version".
+	Version string `json:"version,omitempty"`
+	// Support is the verdict about this build's ability to write that version's
+	// configuration: SupportSupported, SupportDrifted, SupportUnsupported or
+	// SupportUnknown.
+	Support string `json:"support"`
+	// SupportReason explains the verdict in the operator's words. It is present
+	// for every verdict except a plain "supported".
+	SupportReason string `json:"support_reason,omitempty"`
+	// NeverLaunched means the CLI is installed and has never written its
+	// configuration. It is DETECTED, not absent: grok's first launch creates
+	// docs/, logs/ and active_sessions.json but no config.toml, and a first
+	// write creates the file (fn3-grok-surfaces.md §6). Treating this as absent
+	// would refuse to configure a freshly installed harness.
+	NeverLaunched bool `json:"never_launched,omitempty"`
+	// CompatSources names the OTHER vendors' configurations this harness still
+	// inherits MCP servers from. It exists because "configured" must never
+	// silently mean "also reachable through someone else's grant": grok merges
+	// `config.toml > claude > cursor > .mcp.json`, so an inherited entry would
+	// carry another harness's bearer token and corrupt audit attribution
+	// (fn3-grok-surfaces.md §5). Homeplane closes the two user-config sources
+	// (D4/D4b); the project-scope one cannot be closed from user config, so it
+	// is REPORTED rather than claimed absent.
+	CompatSources []string `json:"compat_sources,omitempty"`
 	// Reason explains a negative detection in the operator's words.
 	Reason string `json:"reason,omitempty"`
 }
+
+// Usable reports whether configure may write to this harness. Only positive
+// evidence of drift blocks: an unobserved version is not an unsupported one.
+func (d Detection) Usable() bool { return d.Support != SupportUnsupported }
 
 func (l Locator) home() (string, error) {
 	if l.Home != "" {
@@ -117,9 +212,38 @@ func (l Locator) CodexConfigPath() (string, error) {
 	return filepath.Join(dir, "config.toml"), nil
 }
 
+// GrokHomeDir is grok's configuration home, honouring GROK_HOME.
+func (l Locator) GrokHomeDir() (string, error) {
+	dir := strings.TrimSpace(l.GrokHome)
+	if dir == "" {
+		dir = strings.TrimSpace(os.Getenv(EnvGrokHome))
+	}
+	if dir == "" {
+		home, err := l.home()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(home, ".grok")
+	}
+	return dir, nil
+}
+
+// GrokConfigPath is grok's user-scope configuration file, honouring GROK_HOME.
+//
+// A missing file is normal rather than exceptional: a grok that has never been
+// launched has no config.toml at all, and its read verbs answer cleanly on an
+// empty home. The writer creates the file, at 0600.
+func (l Locator) GrokConfigPath() (string, error) {
+	dir, err := l.GrokHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config.toml"), nil
+}
+
 // Detect reports what the machine says about one harness.
 func (l Locator) Detect(harness string) (Detection, error) {
-	d := Detection{Harness: harness}
+	d := Detection{Harness: harness, Support: SupportUnknown}
 	var binary string
 	var err error
 
@@ -127,9 +251,14 @@ func (l Locator) Detect(harness string) (Detection, error) {
 	case ClaudeCode:
 		d.ConfigPath, err = l.ClaudeConfigPath()
 		binary = "claude"
+		d.SupportReason = "no version contract is pinned for claude-code, so its CLI surface is not version-gated"
 	case Codex:
 		d.ConfigPath, err = l.CodexConfigPath()
 		binary = "codex"
+		d.SupportReason = "no version contract is pinned for codex, so its CLI surface is not version-gated"
+	case Grok:
+		d.ConfigPath, err = l.GrokConfigPath()
+		binary = "grok"
 	default:
 		return Detection{}, fmt.Errorf("harness: unknown harness %q (known: %s)", harness, strings.Join(Known(), ", "))
 	}
@@ -156,8 +285,144 @@ func (l Locator) Detect(harness string) (Detection, error) {
 	d.Installed = d.ConfigExists || d.BinaryPath != ""
 	if !d.Installed {
 		d.Reason = fmt.Sprintf("no %s executable on PATH and no configuration at %s", binary, d.ConfigPath)
+		return d, nil
+	}
+	d.NeverLaunched = d.BinaryPath != "" && !d.ConfigExists
+	if d.NeverLaunched {
+		d.Reason = fmt.Sprintf("%s is installed and has never been launched (no configuration at %s yet); "+
+			"configuring it creates the file", binary, d.ConfigPath)
+	}
+
+	if harness == Grok {
+		d.Version, d.Support, d.SupportReason = l.grokSupport(d.BinaryPath)
+		d.CompatSources = grokCompatSources(d.ConfigPath)
 	}
 	return d, nil
+}
+
+// grokSupport observes grok's version and judges it against the captured
+// contract. The binary path may be empty — a machine whose grok config exists
+// but whose CLI is not on PATH — and that is UNKNOWN, never unsupported: a
+// version we could not observe is not evidence of drift, and refusing would
+// strand a repairable config behind a PATH problem.
+func (l Locator) grokSupport(binaryPath string) (version, support, reason string) {
+	if binaryPath == "" {
+		return "", SupportUnknown,
+			"grok's version could not be observed (no grok executable on PATH), so the CLI contract could not be checked; " +
+				"the write is still verified by re-parsing the configuration"
+	}
+	raw, err := l.probeVersion(binaryPath)
+	if err != nil {
+		return "", SupportUnknown, fmt.Sprintf("grok's version could not be observed (%v), so the CLI contract could not be checked", err)
+	}
+	version = parseGrokVersion(raw)
+	if version == "" {
+		return "", SupportUnknown, fmt.Sprintf("grok reported a version this build cannot read (%q), so the CLI contract could not be checked",
+			truncateForMessage(raw, 80))
+	}
+	support, reason = judgeGrokVersion(version)
+	return version, support, reason
+}
+
+func (l Locator) probeVersion(binary string) (string, error) {
+	if l.Version != nil {
+		return l.Version(binary)
+	}
+	return runVersion(binary)
+}
+
+// runVersion asks a CLI what it is. Timed out rather than trusted: a harness
+// binary is a third-party program, and `--version` hanging must not hang a
+// status call.
+func runVersion(binary string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), versionProbeTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, binary, "--version").Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// grokVersionRE reads the version out of grok's `--version` line, captured
+// verbatim as `grok 1.0.3 (1a29d5bc12d4)`. The build hash is deliberately not
+// captured: it identifies a build, and the config contract is a property of the
+// release.
+var grokVersionRE = regexp.MustCompile(`(?m)^\s*grok\s+v?(\d+\.\d+\.\d+)`)
+
+func parseGrokVersion(raw string) string {
+	m := grokVersionRE.FindStringSubmatch(raw)
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+// judgeGrokVersion is the whole version policy, in one place so the reason an
+// operator reads and the gate configure applies can never disagree.
+func judgeGrokVersion(version string) (support, reason string) {
+	got, ok := parseSemver(version)
+	if !ok {
+		return SupportUnknown, fmt.Sprintf("grok %s is not a version this build can compare against the captured contract (grok %s)",
+			version, GrokContractVersion)
+	}
+	contract, _ := parseSemver(GrokContractVersion)
+	minimum, _ := parseSemver(GrokMinVersion)
+
+	if got[0] != contract[0] {
+		return SupportUnsupported, fmt.Sprintf(
+			"grok %s is a different major version than the captured contract (grok %s): its configuration surface has not been "+
+				"observed, so Homeplane refuses to write it. Re-run scripts/capture-grok-contract.sh and re-ratify "+
+				"docs/decisions/fn3-grok-surfaces.md to support it", version, GrokContractVersion)
+	}
+	if compareSemver(got, minimum) < 0 {
+		return SupportUnsupported, fmt.Sprintf(
+			"grok %s is older than the oldest release this build was verified against (grok %s), so Homeplane refuses to write it",
+			version, GrokMinVersion)
+	}
+	if got == contract {
+		return SupportSupported, ""
+	}
+	return SupportDrifted, fmt.Sprintf(
+		"grok %s differs from the captured contract (grok %s) within the same major line: the entry shape is written as captured "+
+			"and verified by re-parsing, but nobody has observed THIS release — re-run scripts/capture-grok-contract.sh if it misbehaves",
+		version, GrokContractVersion)
+}
+
+func parseSemver(s string) ([3]int, bool) {
+	var out [3]int
+	parts := strings.SplitN(strings.TrimSpace(s), ".", 3)
+	if len(parts) != 3 {
+		return out, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+func compareSemver(a, b [3]int) int {
+	for i := 0; i < 3; i++ {
+		switch {
+		case a[i] < b[i]:
+			return -1
+		case a[i] > b[i]:
+			return 1
+		}
+	}
+	return 0
+}
+
+func truncateForMessage(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 // DetectAll reports every known harness, in Known() order.

@@ -75,12 +75,54 @@ func stripManaged(tree map[string]any, container string, names []string) map[str
 	return tree
 }
 
+// stripPath removes one dotted key path from the tree, and then prunes every
+// ancestor table the removal left empty.
+//
+// The pruning is the same asymmetry stripManaged handles for the container: a
+// config with no `[compat]` table at all has nothing before and a
+// Homeplane-created `compat.claude = {mcps: false}` after, and treating an
+// emptied ancestor as absent is what makes "we set only our own cell" and "we
+// changed nothing else" the same statement. A table the USER already had stays,
+// because removing our key from it leaves their other keys behind.
+func stripPath(tree map[string]any, path []string) map[string]any {
+	if len(path) == 0 {
+		return tree
+	}
+	if len(path) == 1 {
+		delete(tree, path[0])
+		return tree
+	}
+	sub, ok := tree[path[0]]
+	if !ok {
+		return tree
+	}
+	m, ok := sub.(map[string]any)
+	if !ok {
+		// Not a table: nothing of ours can be inside it, and it must compare
+		// as-is rather than be quietly dropped.
+		return tree
+	}
+	m = stripPath(m, path[1:])
+	if len(m) == 0 {
+		delete(tree, path[0])
+	} else {
+		tree[path[0]] = m
+	}
+	return tree
+}
+
 // preservationCheck compares before and after under the managed-entry
 // subtraction, and returns a message naming the first difference it finds.
 type preservationCheck struct {
 	parse     parseFn
 	container string
 	managed   []string
+	// exempt are Homeplane-managed key paths outside the container (grok's
+	// compat cells). They are subtracted from BOTH sides — an edit we meant to
+	// make is not a preservation failure — and assertAfter proves the value.
+	exempt [][]string
+	// assertAfter checks the parsed result. Nil means nothing to prove.
+	assertAfter func(tree map[string]any) error
 }
 
 func (p preservationCheck) verify(before, after []byte) error {
@@ -94,9 +136,20 @@ func (p preservationCheck) verify(before, after []byte) error {
 		// never reach the user's file.
 		return fmt.Errorf("%w: the rewritten configuration does not parse: %v", ErrPreservationFailed, err)
 	}
+	if p.assertAfter != nil {
+		// Proven before the comparison, so a subtracted key can never be
+		// subtracted without also being checked.
+		if err := p.assertAfter(afterTree); err != nil {
+			return err
+		}
+	}
 
 	residualBefore := stripManaged(beforeTree, p.container, p.managed)
 	residualAfter := stripManaged(afterTree, p.container, p.managed)
+	for _, path := range p.exempt {
+		residualBefore = stripPath(residualBefore, path)
+		residualAfter = stripPath(residualAfter, path)
+	}
 	if reflect.DeepEqual(residualBefore, residualAfter) {
 		return nil
 	}

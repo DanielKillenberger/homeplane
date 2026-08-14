@@ -176,12 +176,34 @@ func reportDetection(locator harness.Locator, asJSON bool, stdout, stderr io.Wri
 	}
 	for _, d := range found {
 		state := "not installed"
-		if d.Installed {
+		switch {
+		case d.Installed && !d.Usable():
+			state = "UNSUPPORTED"
+		case d.Installed && d.NeverLaunched:
+			state = "installed (never launched)"
+		case d.Installed:
 			state = "installed"
 		}
-		fmt.Fprintf(stdout, "%-12s %-14s %s\n", d.Harness, state, d.ConfigPath)
+		version := d.Version
+		if version == "" {
+			version = "-"
+		}
+		fmt.Fprintf(stdout, "%-12s %-26s %-8s %s\n", d.Harness, state, version, d.ConfigPath)
 		if d.Reason != "" {
 			fmt.Fprintf(stdout, "%-12s %s\n", "", d.Reason)
+		}
+		// The support verdict is printed whenever it is not a plain "supported",
+		// because "we could not check" and "we checked and it drifted" are
+		// different things an operator must be able to tell apart.
+		if d.SupportReason != "" {
+			fmt.Fprintf(stdout, "%-12s support: %s — %s\n", "", d.Support, d.SupportReason)
+		}
+		// Inherited MCP sources are reported even when Homeplane has closed the
+		// ones it can: a harness that reaches the edge through ANOTHER harness's
+		// grant is the failure R5's revocation proof turns on, so it is never
+		// left implicit.
+		if len(d.CompatSources) > 0 {
+			fmt.Fprintf(stdout, "%-12s inherits MCP servers from: %s\n", "", strings.Join(d.CompatSources, ", "))
 		}
 	}
 	return 0

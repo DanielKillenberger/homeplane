@@ -170,6 +170,15 @@ func (c Configurator) configureOne(ctx context.Context, h string, engine Entry, 
 		out.Message = detection.Reason
 		return out
 	}
+	// A harness whose CLI contract this build has not verified is SKIPPED before
+	// any authority moves. Writing a config shape into a version nobody observed
+	// is how a harness silently stops working, and doing it after issuance would
+	// also have superseded the grant that was working.
+	if !detection.Usable() {
+		out.Status = StatusSkipped
+		out.Message = detection.SupportReason
+		return out
+	}
 
 	writer, err := c.writerFor(h, detection.ConfigPath)
 	if err != nil {
@@ -203,6 +212,51 @@ func (c Configurator) configureOne(ctx context.Context, h string, engine Entry, 
 		return failed(out, err.Error())
 	}
 
+	// ── Phase one: everything that can fail locally, before any authority moves.
+	//
+	// Issuance SUPERSEDES this harness's previous grant server-side. So every
+	// local reason the write could fail — the destination being inside a git
+	// checkout, an entry this writer cannot render, a config whose compat
+	// settings it cannot edit, an unwritable directory, a state directory it
+	// cannot record into — must be discovered HERE. Learning any of them after
+	// issuance would leave a harness that WAS working holding a dead token, with
+	// nothing written to replace it: a purely local problem that revoked a
+	// working capability.
+	//
+	// The provisional entries carry a placeholder token and endpoint. Only the
+	// entry NAMES and shapes matter to a merge, and the real values are
+	// validated again in Commit before anything is written.
+	provisional := c.entriesFor(placeholderGrant(h), engine, engineErr)
+	desired := map[string]bool{}
+	for _, e := range provisional {
+		desired[e.Name] = true
+		out.Managed = append(out.Managed, e.Name)
+	}
+	sort.Strings(out.Managed)
+	for _, n := range prior.ManagedServers {
+		if !desired[n] {
+			out.Retired = append(out.Retired, n)
+		}
+	}
+	sort.Strings(out.Retired)
+
+	plan, err := writer.Prepare(provisional, out.Retired)
+	if err != nil {
+		if errors.Is(err, ErrMalformedConfig) {
+			out.Status = StatusSkipped
+			out.Message = fmt.Sprintf("%s was left untouched: %v", detection.ConfigPath, err)
+			return out
+		}
+		return failed(out, err.Error())
+	}
+	// The record is the machine's memory of which entries a previous run
+	// managed. A state directory we cannot write is a run that would configure
+	// the harness and then forget it did — so it is proved before issuance too.
+	if err := assertRecordWritable(c.StateDir); err != nil {
+		return failed(out, err.Error())
+	}
+
+	// ── Phase two: authority moves, then only substitution and the commit.
 	grant, err := c.Issuer.IssueGrant(ctx, h)
 	if err != nil {
 		return failed(out, "requesting a grant failed: "+err.Error())
@@ -215,30 +269,15 @@ func (c Configurator) configureOne(ctx context.Context, h string, engine Entry, 
 	out.EndpointURL = grant.EndpointURL
 	out.Capabilities = grant.Capabilities
 
-	entries := []Entry{connectorEntry(grant)}
-	if engineErr == nil {
-		entries = append(entries, engine)
-	} else {
+	entries := c.entriesFor(grant, engine, engineErr)
+	if engineErr != nil {
 		// The only error that reaches here is ErrNoDescriptor; Configure
 		// refused the run before any issuance for every other kind.
 		out.Message = "the local retrieval engine is not activated on this machine, so only the connector endpoint was written " +
 			"(run `homeplane-agent gno activate`, then re-run this command)"
 	}
 
-	desired := map[string]bool{}
-	for _, e := range entries {
-		desired[e.Name] = true
-		out.Managed = append(out.Managed, e.Name)
-	}
-	sort.Strings(out.Managed)
-	for _, n := range prior.ManagedServers {
-		if !desired[n] {
-			out.Retired = append(out.Retired, n)
-		}
-	}
-	sort.Strings(out.Retired)
-
-	applied, err := writer.Apply(entries, out.Retired)
+	applied, err := writer.Commit(plan, entries)
 	out.BackupPath = applied.BackupPath
 	if err != nil {
 		if errors.Is(err, ErrMalformedConfig) {
@@ -267,6 +306,42 @@ func (c Configurator) configureOne(ctx context.Context, h string, engine Entry, 
 	return out
 }
 
+// entriesFor is the entry set one harness gets: the connector edge, plus the
+// retrieval engine when one is published. Both phases build it through this
+// function, so the dry merge and the real one can never manage different names.
+func (c Configurator) entriesFor(g Grant, engine Entry, engineErr error) []Entry {
+	entries := []Entry{connectorEntry(g)}
+	if engineErr == nil {
+		entries = append(entries, engine)
+	}
+	return entries
+}
+
+// placeholderGrant is the stand-in phase one merges with.
+//
+// Its token and URL are structurally valid and semantically inert: they never
+// reach disk, because Commit re-renders from the issued grant. The URL is under
+// `.invalid`, which by RFC 6761 resolves nowhere, so a bug that DID write one
+// fails loudly at connect time instead of quietly pointing a harness somewhere
+// real.
+func placeholderGrant(harnessName string) Grant {
+	return Grant{
+		Harness:     harnessName,
+		EndpointURL: "https://preflight.homeplane.invalid/mcp",
+		Token:       "preflight-placeholder-never-written",
+	}
+}
+
+// assertRecordWritable proves the per-harness record could be written, without
+// writing one.
+func assertRecordWritable(stateDir string) error {
+	dir := RecordDir(stateDir)
+	if err := os.MkdirAll(dir, dirPerm); err != nil {
+		return fmt.Errorf("create %s: %w", dir, err)
+	}
+	return assertDirWritable(dir)
+}
+
 func failed(out Outcome, message string) Outcome {
 	out.Status = StatusFailed
 	out.Message = message
@@ -279,6 +354,8 @@ func (c Configurator) writerFor(harness, configPath string) (Writer, error) {
 		return NewClaudeWriter(configPath), nil
 	case Codex:
 		return NewCodexWriter(configPath), nil
+	case Grok:
+		return NewGrokWriter(configPath), nil
 	default:
 		return nil, fmt.Errorf("harness: no writer for %q", harness)
 	}
