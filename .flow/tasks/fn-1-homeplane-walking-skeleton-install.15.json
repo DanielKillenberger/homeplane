@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-08-13T14:40:17.634552Z",
+  "depends_on": [
+    "fn-1-homeplane-walking-skeleton-install.16"
+  ],
+  "id": "fn-1-homeplane-walking-skeleton-install.15",
+  "priority": null,
+  "spec": "fn-1-homeplane-walking-skeleton-install",
+  "spec_path": ".flow/tasks/fn-1-homeplane-walking-skeleton-install.15.md",
+  "status": "todo",
+  "title": "Server deployment: homeplane-server + gateway on the real Tailnet server",
+  "updated_at": "2026-08-13T14:40:17.634552Z"
+}

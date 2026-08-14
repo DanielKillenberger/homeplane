@@ -1,0 +1,17 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-08-13T14:12:44.470173Z",
+  "depends_on": [
+    "fn-1-homeplane-walking-skeleton-install.8",
+    "fn-1-homeplane-walking-skeleton-install.16"
+  ],
+  "id": "fn-1-homeplane-walking-skeleton-install.12",
+  "priority": null,
+  "spec": "fn-1-homeplane-walking-skeleton-install",
+  "spec_path": ".flow/tasks/fn-1-homeplane-walking-skeleton-install.12.md",
+  "status": "todo",
+  "title": "Live Google Drive connector: manifest entry, test folder, real-credential proof",
+  "updated_at": "2026-08-13T14:12:44.470173Z"
+}

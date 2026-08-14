@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "connectors": [
+    {
+      "provider": "google-drive",
+      "credential_ref": "google/oauth-session",
+      "credential_acquisition": {
+        "driver": "oauth2-authcode",
+        "params": {
+          "auth_endpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+          "token_endpoint": "https://oauth2.googleapis.com/token",
+          "client_id_ref": "google/client-id",
+          "client_secret_ref": "google/client-secret",
+          "access_type": "offline"
+        },
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.readonly",
+          "https://www.googleapis.com/auth/calendar.events"
+        ]
+      },
+      "mcp_server": {
+        "name": "google-drive",
+        "transport": "streamable-http",
+        "source": "ghcr.io/example/mcp-google-drive:pinned"
+      },
+      "tool_inventory": [
+        "search_files",
+        "get_file_metadata",
+        "read_file_content",
+        "create_file",
+        "update_file",
+        "delete_file"
+      ],
+      "tools": [
+        {
+          "tool": "search_files",
+          "action_class": "read"
+        },
+        {
+          "tool": "get_file_metadata",
+          "action_class": "read",
+          "artifact_id": { "source": "request", "pointer": "$.file_id" }
+        },
+        {
+          "tool": "read_file_content",
+          "action_class": "read",
+          "artifact_id": { "source": "request", "pointer": "$.file_id" }
+        }
+      ],
+      "excluded_tools": [
+        { "tool": "create_file", "reason": "D18: Drive is read-only in Homeplane" },
+        { "tool": "update_file", "reason": "D18: Drive is read-only in Homeplane" },
+        { "tool": "delete_file", "reason": "D18: Drive is read-only in Homeplane" }
+      ]
+    },
+    {
+      "provider": "google-calendar",
+      "credential_ref": "google/oauth-session",
+      "credential_acquisition": {
+        "driver": "oauth2-authcode",
+        "params": {
+          "auth_endpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+          "token_endpoint": "https://oauth2.googleapis.com/token",
+          "client_id_ref": "google/client-id",
+          "client_secret_ref": "google/client-secret",
+          "access_type": "offline"
+        },
+        "scopes": ["https://www.googleapis.com/auth/calendar.events"]
+      },
+      "mcp_server": {
+        "name": "google-calendar",
+        "transport": "streamable-http",
+        "source": "ghcr.io/example/mcp-google-calendar:pinned"
+      },
+      "tool_inventory": [
+        "list_events",
+        "get_event",
+        "create_event",
+        "update_event",
+        "delete_event"
+      ],
+      "tools": [
+        { "tool": "list_events", "action_class": "read" },
+        {
+          "tool": "get_event",
+          "action_class": "read",
+          "artifact_id": { "source": "request", "pointer": "$.event_id" }
+        },
+        {
+          "tool": "create_event",
+          "action_class": "write",
+          "artifact_id": { "source": "response", "pointer": "$.event.id" }
+        },
+        {
+          "tool": "update_event",
+          "action_class": "write",
+          "artifact_id": { "source": "request", "pointer": "$.event_id" }
+        },
+        {
+          "tool": "delete_event",
+          "action_class": "delete",
+          "artifact_id": { "source": "request", "pointer": "$.event_id" }
+        }
+      ]
+    }
+  ]
+}

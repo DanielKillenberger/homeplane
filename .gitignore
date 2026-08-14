@@ -1,0 +1,24 @@
+# flow-next worker scratch
+.flow/tmp/
+
+# spike build artifacts (disposable)
+spike/edge-proxy/edge-proxy
+
+# Go build output
+/homeplane-server
+/homeplane-agent
+/bin/
+
+# Local server state (database, age key, tsnet state) — never commit
+/.homeplane-state/
+*.db
+*.db-wal
+*.db-shm
+*.age-key
+
+# staged release artifacts (rebuildable via scripts/stage-release.sh)
+/dist/
+
+# Python bytecode from scripts/
+__pycache__/
+*.pyc

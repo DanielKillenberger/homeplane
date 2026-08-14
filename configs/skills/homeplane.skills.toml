@@ -1,0 +1,59 @@
+# Homeplane skill profile — the pinned D15 format.
+#
+# This file BELONGS IN THE VAULT, at `<vault>/skills/homeplane.skills.toml`.
+# The copy here is the reference: it is what `homeplane-agent skills` reads,
+# documented so a profile can be written without reading the parser. Keeping the
+# original in the vault means the assignment syncs to every machine along with
+# the skills it names, and Daniel edits it in Obsidian like anything else.
+#
+# Resolution is MOST-SPECIFIC-WINS, and a block REPLACES the less specific set
+# rather than adding to it:
+#
+#   [machine."<name>".harness.<harness>]  →  [machine."<name>"]  →  [harness.<harness>]  →  [defaults]
+#
+# Replacement is the honest semantic: a rule has to be able to say "nothing on
+# this harness", and an additive model cannot subtract.
+
+schema  = 1
+profile = "daniel-skeleton"
+
+# The skeleton profile (Daniel, 2026-08-14): three writing and thinking skills
+# that are pure instructions, provisioned to BOTH harnesses.
+[defaults]
+skills = [
+  "professional-writing",
+  "casual-writing",
+  "karpathy-guidelines",
+]
+
+# Per-harness override. Uncomment to give one harness a different set.
+# [harness.codex]
+# skills = ["professional-writing"]
+
+# Per-machine override, keyed by the machine name this agent enrolled under
+# (`homeplane-agent status` prints it). Uncomment to narrow a machine.
+# [machine."studio"]
+# skills = ["professional-writing", "casual-writing"]
+
+# Per-machine, per-harness override — the narrowest rule.
+# [machine."studio".harness.claude-code]
+# skills = []
+
+# ── Unsupported ──────────────────────────────────────────────────────────────
+#
+# Skills that must NOT be linked, with the reason. This BEATS every assignment
+# above: a skill named here and in [defaults] is refused, not linked. Omit
+# `harnesses` to mark it unsupported everywhere, or list the harnesses it is
+# unsupported on.
+#
+# Discovery already catches the mechanical cases on its own — a directory of
+# skills rather than a skill (`hermes`), and a skill whose text drives the
+# host's scheduler or service manager (`restart`, `session-monitor`). This
+# block is for the case no rule can see: a skill that is bound to a particular
+# agent's runtime rather than to any harness that reads it. That is a judgement
+# about what the skill IS, so the vault owner states it and Homeplane enforces
+# it, instead of a classifier guessing and being wrong in both directions.
+
+[unsupported.phone-home-coordinator]
+reason = "Bound to the always-on Clawniel session: it describes how THAT agent answers requests arriving on the palantir bus, and an ordinary harness has no bus, no owner profile and no authority to answer for Daniel. Instructions a harness cannot act on are worse than absent ones."
+harnesses = ["claude-code", "codex"]

@@ -1,0 +1,12 @@
+# Pinned ToolHive CLI release archives (upstream SHA-256, from the GitHub
+# release assets of stacklok/toolhive v0.42.1 — the version the D6 spike
+# validated). install-server.sh refuses to install a `thv` whose archive does
+# not match one of these lines: the gateway runtime is the process every
+# connector workload is supervised by, so an unverified download would be the
+# softest link in the whole deployment.
+#
+# Bumping ToolHive = replace both lines AND re-run the isolation check in
+# deploy/server/verify.sh (the loopback-only default is a ToolHive behavior, not
+# a Homeplane guarantee).
+9c8a86be78ee21c29cf12c1bcf70bce3cc7b4de2fc3ef56e58f4d51b875ed0f1  toolhive_0.42.1_linux_amd64.tar.gz
+5ec06673066be9c540bcc119896314f391861c112429cdda900bb8d1cb437ef8  toolhive_0.42.1_linux_arm64.tar.gz

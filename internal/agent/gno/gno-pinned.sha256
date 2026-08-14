@@ -1,0 +1,20 @@
+# The exact GNO build this agent is allowed to run (D8, spec fn-1).
+#
+# `tarball` is the SHA-256 of the npm tarball for `version`, verified at
+# PROVISIONING time by scripts/fetch-gno.sh before anything is installed.
+#
+# There is deliberately no per-file `checksum` here, and that difference from
+# obsidian-headless-pinned.sha256 is honest rather than lazy: obsidian-headless
+# executes ONE file (cli.js), so checksumming that file at every run is a real
+# integrity check. GNO's entrypoint is a TypeScript module that imports several
+# hundred files from its package tree, so hashing the entrypoint alone would
+# prove nothing about the code that actually runs — it would be theatre. The
+# run-time check is therefore the version probe (`gno --version` must equal
+# `version`), and the install-time check is this tarball checksum.
+#
+# Bumping GNO: fetch the new tarball, record its sha256 here, re-run
+# scripts/capture-gno-contract.sh, and re-run the tests — the captured contract
+# is version-named, so a stale capture fails loudly rather than silently.
+version = 1.29.6
+package = @gmickel/gno
+tarball = 7e5a1cd4485d0c6d11aef277ce87f4685a5d7abb80bc013e15fe8bc8db9e0bde

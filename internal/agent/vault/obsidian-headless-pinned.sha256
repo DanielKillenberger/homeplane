@@ -1,0 +1,43 @@
+# Pinned obsidian-headless CLI: exact version + SHA-256 of the artifacts.
+#
+# WHY A PIN AT ALL. Obsidian Sync rewrites the vault in place. An upstream
+# data-loss report against obsidian-headless 0.0.12 is the reason this file
+# exists: the agent will only ever run the ONE build whose contract was captured
+# and whose bytes were attested, never "whatever `ob` happens to be on PATH".
+#
+# TWO CHECKSUMS, because two different things get verified at two different
+# times:
+#
+#   tarball    the npm artifact `npm pack obsidian-headless@<version>` produces.
+#              scripts/fetch-obsidian-headless.sh verifies THIS before it will
+#              install anything, so a tampered registry mirror is caught at
+#              staging time.
+#   entrypoint the SHA-256 of the package's `cli.js`, which is the file node
+#              actually executes. `vault.CLI.Verify` resolves the `ob` shim (an
+#              npm symlink) to this file and checksums it on EVERY run, so a
+#              binary swapped after installation is caught at run time. The
+#              value is identical before and after `npm install` — the install
+#              adds dependencies around cli.js, it does not rewrite it.
+#
+# The contract this exact build accepts is captured in
+# internal/agent/vault/testdata/ob-<version>-contract.txt and asserted by
+# TestArgvMatchesThePinnedContract, so the argv the agent emits cannot drift
+# from the parser the pinned build ships.
+#
+# Bumping the pin:
+#   1. scripts/fetch-obsidian-headless.sh --version <new> --record   (downloads,
+#      prints both checksums; verify the tarball against upstream's own
+#      published integrity value before recording it)
+#   2. scripts/capture-ob-contract.sh <path-to-ob>                   (re-capture
+#      the parser contract; review the diff — a removed flag is a breaking
+#      change, not a formatting change)
+#   3. Update this file and internal/agent/vault/cli_test.go's pin assertions.
+#   4. Re-run the AUTHENTICATED disposable-vault smoke (task .7, needs Daniel's
+#      Obsidian account) before pointing it at the real vault.
+#
+# Format: `key = value`, one per line, `#` comments ignored.
+# `checksum = PENDING` is a hard refusal, not a warning (vault.ErrPinUnset).
+
+version = 0.0.13
+tarball = 9b8e1ad3917a65d53c5ab74d06acf5ec8d941e3b02bd9bd5d035d6800e533198
+checksum = c7a0b843cd18f1164305a569d56164723a670b9ebcb66e6a445bb9fbf9555637

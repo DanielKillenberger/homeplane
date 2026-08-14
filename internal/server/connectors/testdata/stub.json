@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "connectors": [
+    {
+      "provider": "stub-notes",
+      "credential_ref": "stub/oauth-session",
+      "credential_acquisition": {
+        "driver": "oauth2-authcode",
+        "params": {
+          "auth_endpoint": "https://auth.stub.test/authorize",
+          "token_endpoint": "https://auth.stub.test/token",
+          "client_id_ref": "stub/client-id",
+          "client_secret_ref": "stub/client-secret"
+        },
+        "scopes": ["notes.read", "notes.write"]
+      },
+      "mcp_server": {
+        "name": "stub-notes",
+        "transport": "stdio",
+        "source": "stub://in-process"
+      },
+      "tool_inventory": [
+        "list_notes",
+        "get_note",
+        "create_note",
+        "update_note",
+        "delete_note",
+        "share_note",
+        "export_archive"
+      ],
+      "tools": [
+        { "tool": "list_notes", "action_class": "read" },
+        {
+          "tool": "get_note",
+          "action_class": "read",
+          "artifact_id": { "source": "request", "pointer": "$.note_id" }
+        },
+        {
+          "tool": "create_note",
+          "action_class": "write",
+          "artifact_id": { "source": "response", "pointer": "$.note.id" }
+        },
+        {
+          "tool": "update_note",
+          "action_class": "write",
+          "artifact_id": { "source": "request", "pointer": "$.note_id" }
+        },
+        {
+          "tool": "delete_note",
+          "action_class": "delete",
+          "artifact_id": { "source": "request", "pointer": "$.note_id" }
+        },
+        {
+          "tool": "share_note",
+          "action_class": "send",
+          "artifact_id": { "source": "request", "pointer": "$.note_id" }
+        }
+      ],
+      "excluded_tools": [
+        { "tool": "export_archive", "reason": "bulk export is out of scope for the skeleton" }
+      ]
+    }
+  ]
+}
