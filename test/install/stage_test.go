@@ -195,6 +195,7 @@ func TestStagedReleaseInstallsOntoAMachineWithNoNodeAtAll(t *testing.T) {
 		"HOMEPLANE_INIT_OVERRIDE="+defaultInit(),
 		"HOMEPLANE_NODE_BIN="+filepath.Join(t.TempDir(), "no-such-node"),
 	)
+	cmd.Env = append(cmd.Env, supportedHostEnv()...)
 	raw, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("install from the staged release failed: %v\n%s", err, raw)
@@ -249,6 +250,7 @@ func TestSkipNodeStagesAnAgentOnlyRelease(t *testing.T) {
 		"HOMEPLANE_INIT_OVERRIDE="+defaultInit(),
 		"HOMEPLANE_NODE_BIN="+filepath.Join(t.TempDir(), "no-such-node"),
 	)
+	install.Env = append(install.Env, supportedHostEnv()...)
 	raw, err := install.CombinedOutput()
 	if err == nil {
 		t.Fatalf("installing an agent-only release onto a Node-less machine succeeded:\n%s", raw)

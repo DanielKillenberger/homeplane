@@ -21,8 +21,9 @@
 # release therefore cannot destroy a working machine, and it cannot leave a
 # machine with a new runtime and no agent.
 #
-# Supported platforms: macOS (launchd) and systemd-based Linux with
-# `systemctl --user`. Everything else is rejected before step 2.
+# Supported platforms: macOS 13+ (launchd) and systemd-based Linux whose user
+# service manager is actually running and can linger. Everything else is
+# rejected before step 2.
 #
 # Artifacts are consumed from a locally staged, checksummed release-form
 # directory produced by scripts/stage-release.sh (spec Boundaries: the
@@ -42,6 +43,9 @@
 #   HOMEPLANE_INIT_OVERRIDE                 override detected init system
 #   HOMEPLANE_NODE_BIN                      node binary to probe
 #   HOMEPLANE_BUN_BIN                       bun binary to probe
+#   HOMEPLANE_MACOS_VERSION                 override the detected macOS version
+#   HOMEPLANE_USER_MANAGER_STATE            override `systemctl --user` state
+#   HOMEPLANE_LINGER_STATE                  override the logind lingering state
 
 set -euo pipefail
 
@@ -73,7 +77,7 @@ die() {
 info() { echo "$PROGRAM: $*"; }
 
 usage() {
-  sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # --- argument parsing --------------------------------------------------------
@@ -186,17 +190,117 @@ detect_init() {
   esac
 }
 
+# MIN_MACOS_MAJOR is R1's supported floor: macOS 13 (Ventura). An older macOS
+# is rejected rather than half-installed — its launchd, its TLS stack and its
+# Node builds are not what the agent is built against.
+MIN_MACOS_MAJOR=13
+
+# macos_version echoes the running product version ("14.6.1"), or nothing when
+# it cannot be read. The override exists for the installer tests, which have to
+# exercise the gate on whatever machine they run on.
+macos_version() {
+  if [[ -n "${HOMEPLANE_MACOS_VERSION:-}" ]]; then
+    echo "$HOMEPLANE_MACOS_VERSION"
+    return
+  fi
+  command -v sw_vers >/dev/null 2>&1 || return 0
+  sw_vers -productVersion 2>/dev/null || return 0
+}
+
+# require_supported_macos enforces the version floor.
+#
+# An unreadable version is a REFUSAL, not a pass: "we could not tell" must never
+# resolve to "supported", or an unsupported machine gets a binary it cannot run.
+require_supported_macos() {
+  local version major
+  version="$(macos_version)"
+  if [[ -z "$version" ]]; then
+    die "could not determine this machine's macOS version (sw_vers did not answer). Homeplane requires macOS $MIN_MACOS_MAJOR or newer; nothing has been installed."
+  fi
+  major="${version%%.*}"
+  if [[ ! "$major" =~ ^[0-9]+$ ]]; then
+    die "could not read this machine's macOS version (sw_vers said '$version'). Homeplane requires macOS $MIN_MACOS_MAJOR or newer; nothing has been installed."
+  fi
+  if (( major < MIN_MACOS_MAJOR )); then
+    die "macOS $version is not supported. Homeplane requires macOS $MIN_MACOS_MAJOR (Ventura) or newer; nothing has been installed."
+  fi
+}
+
+# user_manager_state echoes what `systemctl --user is-system-running` says about
+# THIS user's service manager: `running`, `degraded`, `offline`, `starting`, and
+# so on. The command exits non-zero for every state but `running`, so its exit
+# code is deliberately ignored — the state word is the answer. An empty answer
+# means the user bus could not be reached at all.
+user_manager_state() {
+  if [[ -n "${HOMEPLANE_USER_MANAGER_STATE+x}" ]]; then
+    echo "$HOMEPLANE_USER_MANAGER_STATE"
+    return
+  fi
+  systemctl --user is-system-running 2>/dev/null || true
+}
+
+# linger_state echoes `yes`, `no`, or nothing when logind could not answer for
+# this user. Nothing is the interesting case: it means lingering can neither be
+# read nor enabled here, which is the condition R1 excludes.
+linger_state() {
+  if [[ -n "${HOMEPLANE_LINGER_STATE+x}" ]]; then
+    echo "$HOMEPLANE_LINGER_STATE"
+    return
+  fi
+  command -v loginctl >/dev/null 2>&1 || return 0
+  loginctl show-user "$(id -un)" --property=Linger --value 2>/dev/null || true
+}
+
+# require_user_service_manager proves — without changing anything — that this
+# Linux machine can actually run per-user services that survive logout.
+#
+# The presence of the binaries is not the property that matters: a container, a
+# chroot or a session without a user bus all have `systemctl` on PATH and no
+# user manager behind it. So the manager is asked whether it is running, and
+# logind is asked whether it knows this user, before anything is written.
+require_user_service_manager() {
+  # The probes below are seams (see linger_state); the binary check applies to
+  # the machine that will actually be asked.
+  if [[ -z "${HOMEPLANE_LINGER_STATE+x}" ]] && ! command -v loginctl >/dev/null 2>&1; then
+    die "this Linux machine has systemd but no loginctl, so 'systemctl --user' services cannot be made to survive logout. Homeplane needs a user service manager with lingering."
+  fi
+
+  local state
+  state="$(user_manager_state)"
+  case "$state" in
+    # `degraded` means some unrelated user unit failed; the manager itself is up
+    # and can run Homeplane's units, so it is accepted rather than refused.
+    running|degraded) : ;;
+    "")
+      die "'systemctl --user' could not reach a user service manager for $(id -un). Homeplane supervises the vault sync and the retrieval engine as user services, so this machine cannot run the plane. Have an administrator run 'loginctl enable-linger $(id -un)' (and log in once) and re-run $PROGRAM. Nothing has been installed." ;;
+    *)
+      die "this machine's user service manager is '$state', not running. Homeplane supervises the vault sync and the retrieval engine as user services, so it cannot install here yet. Fix the user session (an administrator may need 'loginctl enable-linger $(id -un)') and re-run $PROGRAM. Nothing has been installed." ;;
+  esac
+
+  # Lingering is what keeps those units alive when nobody is logged in. The
+  # agent enables it at activation, so `no` is not a refusal — but a logind that
+  # cannot answer for this user at all is: enable-linger would fail later, and
+  # the services would silently stop at logout.
+  local linger
+  linger="$(linger_state)"
+  if [[ -z "$linger" ]]; then
+    die "logind could not report the lingering state for $(id -un), so 'loginctl enable-linger' cannot be relied on here and Homeplane's services would stop at logout. Nothing has been installed."
+  fi
+  if [[ "$linger" != "yes" ]]; then
+    info "lingering is off for $(id -un); the agent enables it when it activates its services (or run 'sudo loginctl enable-linger $(id -un)' yourself)"
+  fi
+}
+
 require_supported_init() {
   local os="$1" init="$2"
   case "$os:$init" in
-    darwin:launchd) : ;;
+    darwin:launchd)
+      require_supported_macos ;;
     linux:systemd)
       # `systemctl --user` plus linger is what lets Homeplane's services run
-      # without an interactive login session. Absent tooling is reported now,
-      # not discovered later by a service that silently never starts.
-      if ! command -v loginctl >/dev/null 2>&1; then
-        die "this Linux machine has systemd but no loginctl, so 'systemctl --user' services cannot be made to survive logout. Homeplane needs a user service manager with lingering."
-      fi
+      # without an interactive login session. A machine that only LOOKS like it
+      # has them is caught now, not later by a service that never starts.
+      require_user_service_manager
       ;;
     darwin:*)
       die "launchd was not found on this macOS machine; Homeplane cannot supervise its services here." ;;

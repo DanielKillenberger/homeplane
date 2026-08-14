@@ -120,6 +120,7 @@ func runInstaller(t *testing.T, opts runOpts) runResult {
 		// happens to have.
 		"HOMEPLANE_BUN_BIN="+fakeBun(t, "1.3.11"),
 	)
+	cmd.Env = append(cmd.Env, supportedHostEnv()...)
 	for k, v := range opts.env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
@@ -149,6 +150,19 @@ func defaultInit() string {
 		return "launchd"
 	}
 	return "systemd"
+}
+
+// supportedHostEnv pins the supported-host probes to a supported answer, for
+// the same reason the runtimes are faked: otherwise every unrelated installer
+// test would depend on the macOS version, the user bus and the logind state of
+// whatever machine runs the suite. The gate itself is exercised by the tests
+// that override these.
+func supportedHostEnv() []string {
+	return []string{
+		"HOMEPLANE_MACOS_VERSION=14.0",
+		"HOMEPLANE_USER_MANAGER_STATE=running",
+		"HOMEPLANE_LINGER_STATE=yes",
+	}
 }
 
 // fakeNode writes a stand-in `node` that reports the given major version, so
@@ -310,6 +324,141 @@ func TestUnsupportedInitSystemIsRejectedBeforeInstalling(t *testing.T) {
 		t.Errorf("rejection does not explain the requirement:\n%s", res.output)
 	}
 	assertNotInstalled(t, prefix)
+}
+
+// The supported set (R1) is macOS 13+ and a Linux whose user service manager
+// actually works. The three tests below are the negative half of that gate:
+// each machine has the right OS and the right binaries on PATH and is still
+// outside the supported set, which is exactly the case a presence check misses.
+
+func TestOldMacOSIsRejectedBeforeInstalling(t *testing.T) {
+	s, _ := stagedAgent(t)
+	prefix := filepath.Join(t.TempDir(), "homeplane")
+
+	res := runInstaller(t, runOpts{
+		stage:  s,
+		prefix: prefix,
+		env: map[string]string{
+			"HOMEPLANE_UNAME_S":       "Darwin",
+			"HOMEPLANE_INIT_OVERRIDE": "launchd",
+			"HOMEPLANE_MACOS_VERSION": "12.7.4",
+		},
+	})
+	if res.code == 0 {
+		t.Fatalf("installer accepted macOS 12:\n%s", res.output)
+	}
+	if !strings.Contains(res.output, "macOS 12.7.4 is not supported") {
+		t.Errorf("rejection does not name the version floor:\n%s", res.output)
+	}
+	assertNotInstalled(t, prefix)
+}
+
+func TestUnreadableMacOSVersionIsRejectedBeforeInstalling(t *testing.T) {
+	s, _ := stagedAgent(t)
+	prefix := filepath.Join(t.TempDir(), "homeplane")
+
+	res := runInstaller(t, runOpts{
+		stage:  s,
+		prefix: prefix,
+		env: map[string]string{
+			"HOMEPLANE_UNAME_S":       "Darwin",
+			"HOMEPLANE_INIT_OVERRIDE": "launchd",
+			"HOMEPLANE_MACOS_VERSION": "not-a-version",
+		},
+	})
+	if res.code == 0 {
+		t.Fatalf("an unreadable macOS version was treated as supported:\n%s", res.output)
+	}
+	if !strings.Contains(res.output, "could not read this machine's macOS version") {
+		t.Errorf("rejection message = %q", res.output)
+	}
+	assertNotInstalled(t, prefix)
+}
+
+func TestLinuxWithoutAUsableUserManagerIsRejectedBeforeInstalling(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		state string
+		want  string
+	}{
+		{name: "no user bus", state: "", want: "could not reach a user service manager"},
+		{name: "offline", state: "offline", want: "is 'offline', not running"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := stagedAgent(t)
+			prefix := filepath.Join(t.TempDir(), "homeplane")
+
+			res := runInstaller(t, runOpts{
+				stage:  s,
+				prefix: prefix,
+				env: map[string]string{
+					"HOMEPLANE_UNAME_S":            "Linux",
+					"HOMEPLANE_INIT_OVERRIDE":      "systemd",
+					"HOMEPLANE_USER_MANAGER_STATE": tc.state,
+					"HOMEPLANE_LINGER_STATE":       "yes",
+				},
+			})
+			if res.code == 0 {
+				t.Fatalf("installer accepted a Linux machine with no usable user manager:\n%s", res.output)
+			}
+			if !strings.Contains(res.output, tc.want) {
+				t.Errorf("rejection does not name the fault (want %q):\n%s", tc.want, res.output)
+			}
+			assertNotInstalled(t, prefix)
+		})
+	}
+}
+
+func TestLinuxWithoutLingerAvailabilityIsRejectedBeforeInstalling(t *testing.T) {
+	s, _ := stagedAgent(t)
+	prefix := filepath.Join(t.TempDir(), "homeplane")
+
+	res := runInstaller(t, runOpts{
+		stage:  s,
+		prefix: prefix,
+		env: map[string]string{
+			"HOMEPLANE_UNAME_S":            "Linux",
+			"HOMEPLANE_INIT_OVERRIDE":      "systemd",
+			"HOMEPLANE_USER_MANAGER_STATE": "running",
+			// logind cannot answer for this user at all: enable-linger would
+			// fail later and the services would stop at logout.
+			"HOMEPLANE_LINGER_STATE": "",
+		},
+	})
+	if res.code == 0 {
+		t.Fatalf("installer accepted a machine where lingering cannot be read:\n%s", res.output)
+	}
+	if !strings.Contains(res.output, "could not report the lingering state") {
+		t.Errorf("rejection message = %q", res.output)
+	}
+	assertNotInstalled(t, prefix)
+}
+
+// Lingering that is merely OFF is not a refusal: the agent enables it when it
+// activates its services, so the installer says so and proceeds.
+func TestLingerOffIsAcceptedWithANotice(t *testing.T) {
+	s, _ := stagedAgent(t)
+	prefix := filepath.Join(t.TempDir(), "homeplane")
+
+	res := runInstaller(t, runOpts{
+		stage:  s,
+		prefix: prefix,
+		env: map[string]string{
+			"HOMEPLANE_UNAME_S":            "Linux",
+			"HOMEPLANE_INIT_OVERRIDE":      "systemd",
+			"HOMEPLANE_USER_MANAGER_STATE": "running",
+			"HOMEPLANE_LINGER_STATE":       "no",
+		},
+	})
+	if !strings.Contains(res.output, "lingering is off") {
+		t.Errorf("installer did not mention that lingering is off:\n%s", res.output)
+	}
+	// The run itself stops later for a platform reason (the staged artifact is
+	// this host's, not the faked Linux one); what matters is that the host gate
+	// did not reject the machine.
+	if strings.Contains(res.output, "Nothing has been installed.") {
+		t.Errorf("lingering being off was treated as an unsupported host:\n%s", res.output)
+	}
 }
 
 func TestUnsupportedOperatingSystemIsRejected(t *testing.T) {
