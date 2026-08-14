@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -8,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // EnvCodexHome mirrors Codex's own override for its configuration directory.
@@ -134,11 +136,7 @@ func (l Locator) Detect(harness string) (Detection, error) {
 	if err != nil {
 		return Detection{}, err
 	}
-	home, homeErr := l.home()
-	if homeErr != nil {
-		home = ""
-	}
-	if err := assertUserScope(d.ConfigPath, home); err != nil {
+	if err := assertUserScope(d.ConfigPath); err != nil {
 		return Detection{}, err
 	}
 
@@ -185,35 +183,35 @@ var projectScopedNames = map[string]bool{
 // assertUserScope refuses a path a grant token must not reach.
 //
 // The name check alone is not enough, because the DIRECTORY is attacker- or
-// accident-controlled: `CODEX_HOME` is an environment variable, and `~/.codex`
+// accident-controlled: `CODEX_HOME` is an environment variable and `~/.codex`
 // can be a symlink. Either can land `config.toml` — with its inline bearer
 // token — and its timestamped backups inside a git working tree, where 0600 does
-// nothing to stop `git add`. So the destination is resolved through symlinks
-// and then checked for a repository above it.
+// nothing to stop `git add`. So the destination is resolved through symlinks and
+// then checked for a repository ABOVE it, all the way to the filesystem root.
+// A home directory that is itself a dotfiles repository is not exempt: R5 says
+// a token never lands in a git-shared file, and "the user chose to version their
+// home" does not make the token less committable.
 //
-// The walk stops AT the home directory rather than at the filesystem root. A
-// home directory that is itself a dotfiles repository is a deliberate choice by
-// its owner about their own home, and refusing to configure any harness on such
-// a machine would be a false positive that breaks the normal case; a config
-// path nested inside a PROJECT checkout is the actual hazard, and it is always
-// found strictly below home.
-func assertUserScope(path, home string) error {
+// The one thing that DOES make it safe is the file being ignored, so that is
+// what gets asked — of git itself, via `check-ignore`, rather than by
+// reimplementing ignore precedence. A dotfiles user who already ignores their
+// secrets is not blocked; one who does not is told exactly what to add. When
+// git cannot answer (not installed, an error), the answer is refusal: we cannot
+// prove the file is safe, and an unprovable secret is treated as exposed.
+func assertUserScope(path string) error {
 	if projectScopedNames[filepath.Base(path)] {
 		return fmt.Errorf("%w: %s", ErrProjectScope, path)
 	}
 
-	dir := resolveExisting(filepath.Dir(path))
-	stop := ""
-	if home != "" {
-		stop = resolveExisting(home)
-	}
-
-	for cur := dir; ; {
-		if cur == stop {
-			return nil
-		}
+	resolved := filepath.Join(resolveExisting(filepath.Dir(path)), filepath.Base(path))
+	for cur := filepath.Dir(resolved); ; {
 		if isRepositoryRoot(cur) {
-			return fmt.Errorf("%w: %s is inside the repository at %s", ErrProjectScope, path, cur)
+			if gitIgnores(cur, resolved) {
+				return nil
+			}
+			return fmt.Errorf("%w: %s is inside the git repository at %s and is not ignored there "+
+				"(add it to .gitignore, or point the harness's config directory outside the checkout)",
+				ErrProjectScope, path, cur)
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur { // filesystem root
@@ -222,6 +220,32 @@ func assertUserScope(path, home string) error {
 		cur = parent
 	}
 }
+
+// gitIgnores asks git whether path is ignored in the repository at root.
+//
+// Exit 0 means ignored, 1 means not ignored, anything else is an error — and an
+// error is NOT ignored, because this answer is used to permit a secret to be
+// written.
+//
+// `--no-index` is deliberately NOT passed. Without it, git refuses to call a
+// TRACKED file ignored even when an ignore rule matches it — which is exactly
+// the answer we want, because a file already in the index is already
+// committable no matter what `.gitignore` says. Passing the flag would turn a
+// tracked, force-added config into a permitted destination.
+func gitIgnores(root, path string) bool {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), gitCheckTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, git, "-C", root, "check-ignore", "--quiet", "--", path)
+	return cmd.Run() == nil
+}
+
+// gitCheckTimeout bounds the ignore check. It consults local files only, so a
+// slow answer means something is wrong and refusing beats hanging a CLI.
+const gitCheckTimeout = 5 * time.Second
 
 // isRepositoryRoot reports whether dir holds a `.git` entry. Both shapes count:
 // a directory for an ordinary clone, and a file for a worktree or submodule —

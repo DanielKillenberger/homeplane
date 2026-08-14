@@ -397,11 +397,8 @@ func TestCodexReadsBothConfiguredEndpointsFromWhatWeWrote(t *testing.T) {
 // close that loop end-to-end — it authenticates against the stub and fails on a
 // wrong token — so the authenticated-call path IS proven for one real harness,
 // and the residual obligation is Codex-specific.
-const codexProofBoundary = `authenticated Codex tool call: deferred to task .7 (Codex CLI has no ` +
-	`non-model MCP invocation; doctor probes reachability without the auth header)`
-
-func TestTheCodexProofBoundaryIsRecorded(t *testing.T) {
-	if codexProofBoundary == "" {
-		t.Fatal("the boundary must be stated, not silently assumed")
-	}
-}
+// The deferral is recorded where acceptance lives — in the task file's
+// acceptance criterion (.flow/tasks/fn-1-homeplane-walking-skeleton-install.6.md),
+// amended during impl-review round 2 and marked as inherited by task .7. This
+// comment is the pointer to it, not the deferral itself: a constant in a test
+// file cannot amend acceptance, and should not look like it does.

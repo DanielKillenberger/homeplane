@@ -164,6 +164,7 @@ func (c Configurator) configureOne(ctx context.Context, h string, engine Entry, 
 		return failed(out, err.Error())
 	}
 	out.ConfigPath = detection.ConfigPath
+	out.Installed = detection.Installed
 	if !detection.Installed {
 		out.Status = StatusSkipped
 		out.Message = detection.Reason
@@ -273,15 +274,11 @@ func failed(out Outcome, message string) Outcome {
 }
 
 func (c Configurator) writerFor(harness, configPath string) (Writer, error) {
-	home, err := c.Locator.home()
-	if err != nil {
-		home = ""
-	}
 	switch harness {
 	case ClaudeCode:
-		return NewClaudeWriter(configPath, home), nil
+		return NewClaudeWriter(configPath), nil
 	case Codex:
-		return NewCodexWriter(configPath, home), nil
+		return NewCodexWriter(configPath), nil
 	default:
 		return nil, fmt.Errorf("harness: no writer for %q", harness)
 	}

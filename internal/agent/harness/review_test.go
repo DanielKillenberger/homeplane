@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -37,10 +38,10 @@ func TestAConfigPathInsideARepositoryIsRefused(t *testing.T) {
 	}
 	for name, path := range cases {
 		t.Run(name, func(t *testing.T) {
-			if err := assertUserScope(path, home); !errors.Is(err, ErrProjectScope) {
+			if err := assertUserScope(path); !errors.Is(err, ErrProjectScope) {
 				t.Fatalf("err = %v, want ErrProjectScope for %s", err, path)
 			}
-			if _, err := NewCodexWriter(path, home).Apply(managedEntries("tok"), nil); !errors.Is(err, ErrProjectScope) {
+			if _, err := NewCodexWriter(path).Apply(managedEntries("tok"), nil); !errors.Is(err, ErrProjectScope) {
 				t.Fatalf("the writer accepted %s (err = %v)", path, err)
 			}
 			if _, err := os.Stat(path); err == nil {
@@ -62,9 +63,10 @@ func TestALinkedWorktreeIsRefusedToo(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(worktree, ".git"), []byte("gitdir: /elsewhere\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := assertUserScope(filepath.Join(worktree, ".codex", "config.toml"), home); !errors.Is(err, ErrProjectScope) {
+	if err := assertUserScope(filepath.Join(worktree, ".codex", "config.toml")); !errors.Is(err, ErrProjectScope) {
 		t.Fatalf("err = %v, want ErrProjectScope", err)
 	}
+	_ = home
 }
 
 func TestASymlinkedConfigDirIsJudgedByWhereItActuallyLands(t *testing.T) {
@@ -88,26 +90,85 @@ func TestASymlinkedConfigDirIsJudgedByWhereItActuallyLands(t *testing.T) {
 
 	// The path LOOKS like a plain ~/.codex/config.toml. Only resolving the
 	// symlink reveals that it lands inside a checkout.
-	if err := assertUserScope(filepath.Join(link, "config.toml"), home); !errors.Is(err, ErrProjectScope) {
+	if err := assertUserScope(filepath.Join(link, "config.toml")); !errors.Is(err, ErrProjectScope) {
 		t.Fatalf("err = %v, want ErrProjectScope — the symlink was not resolved", err)
+	}
+	_ = home
+}
+
+// A home directory that is itself a dotfiles repository gets no exemption:
+// R5 says a token never lands in a git-shared file, and the owner having chosen
+// to version their home does not make the token less committable. What DOES
+// make it safe is the file being ignored — so that is the question asked, of
+// git itself.
+func TestAGitManagedHomeIsRefusedUnlessTheConfigIsIgnored(t *testing.T) {
+	home := initRepo(t, t.TempDir())
+	claude := filepath.Join(home, ".claude.json")
+	codex := filepath.Join(home, ".codex", "config.toml")
+
+	for _, path := range []string{claude, codex} {
+		err := assertUserScope(path)
+		if !errors.Is(err, ErrProjectScope) {
+			t.Fatalf("assertUserScope(%s) = %v, want ErrProjectScope", path, err)
+		}
+		if !strings.Contains(err.Error(), ".gitignore") {
+			t.Errorf("the refusal does not tell the operator how to fix it: %v", err)
+		}
+	}
+
+	// Ignore them, and the same paths become writable — no false positive for a
+	// dotfiles user who already protects their secrets.
+	if err := os.WriteFile(filepath.Join(home, ".gitignore"), []byte(".claude.json\n.codex/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{claude, codex} {
+		if err := assertUserScope(path); err != nil {
+			t.Errorf("assertUserScope(%s) = %v after it was gitignored, want nil", path, err)
+		}
 	}
 }
 
-// The check must not fire on a home directory that is itself a dotfiles
-// repository: that is a deliberate choice by its owner about their own home,
-// and refusing there would break the ordinary case to prevent nothing.
-func TestAHomeDirectoryThatIsItselfARepositoryIsStillUsable(t *testing.T) {
-	home := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(home, ".git"), 0o755); err != nil {
+// A file git is already TRACKING must never be treated as safe, whatever the
+// ignore rules say.
+func TestATrackedConfigIsRefusedEvenWhenAnIgnoreRuleWouldMatch(t *testing.T) {
+	home := initRepo(t, t.TempDir())
+	path := filepath.Join(home, ".claude.json")
+	if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{
-		filepath.Join(home, ".claude.json"),
-		filepath.Join(home, ".codex", "config.toml"),
-	} {
-		if err := assertUserScope(path, home); err != nil {
-			t.Errorf("assertUserScope(%s) = %v, want nil", path, err)
-		}
+	if err := os.WriteFile(filepath.Join(home, ".gitignore"), []byte(".claude.json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, home, "add", "-f", ".claude.json")
+	git(t, home, "commit", "-m", "track it")
+
+	if err := assertUserScope(path); !errors.Is(err, ErrProjectScope) {
+		t.Fatalf("a tracked config was accepted (err = %v); its token is already committable", err)
+	}
+}
+
+// initRepo makes dir a real git repository — real, because the containment
+// check asks git itself and a hand-made `.git` directory would not answer.
+func initRepo(t *testing.T, dir string) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed; the containment check delegates to it")
+	}
+	git(t, dir, "init", "-q")
+	git(t, dir, "config", "user.email", "test@example.invalid")
+	git(t, dir, "config", "user.name", "test")
+	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func git(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }
 

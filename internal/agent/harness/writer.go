@@ -55,11 +55,7 @@ type format struct {
 type fileWriter struct {
 	harness string
 	path    string
-	// home bounds the project-scope walk in assertUserScope. Empty means walk
-	// to the filesystem root, which is the strict reading and the right default
-	// for a caller that did not say where home is.
-	home   string
-	format format
+	format  format
 }
 
 func (w fileWriter) Harness() string    { return w.harness }
@@ -83,7 +79,7 @@ func (w fileWriter) Preflight() error {
 }
 
 func (w fileWriter) Apply(entries []Entry, retire []string) (ApplyResult, error) {
-	if err := assertUserScope(w.path, w.home); err != nil {
+	if err := assertUserScope(w.path); err != nil {
 		return ApplyResult{}, err
 	}
 	managed := managedNames(entries, retire)
@@ -255,8 +251,8 @@ const claudeContainer = "mcpServers"
 // NewClaudeWriter builds the Claude Code writer for an explicit config path.
 // Callers normally reach it through Locator, which only ever produces the
 // user-scope path.
-func NewClaudeWriter(configPath, home string) Writer {
-	return fileWriter{harness: ClaudeCode, path: configPath, home: home, format: format{
+func NewClaudeWriter(configPath string) Writer {
+	return fileWriter{harness: ClaudeCode, path: configPath, format: format{
 		container: claudeContainer,
 		parse:     parseJSONTree,
 		rewrite:   rewriteClaude,
@@ -357,8 +353,8 @@ func errs(list ...error) error {
 const codexContainer = "mcp_servers"
 
 // NewCodexWriter builds the Codex writer for an explicit config path.
-func NewCodexWriter(configPath, home string) Writer {
-	return fileWriter{harness: Codex, path: configPath, home: home, format: format{
+func NewCodexWriter(configPath string) Writer {
+	return fileWriter{harness: Codex, path: configPath, format: format{
 		container: codexContainer,
 		parse:     parseTOMLTree,
 		rewrite:   rewriteCodex,

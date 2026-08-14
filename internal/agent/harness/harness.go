@@ -197,6 +197,11 @@ type Outcome struct {
 	Harness string `json:"harness"`
 	// Status is "configured", "skipped" or "failed".
 	Status string `json:"status"`
+	// Installed reports whether the harness is present on this machine. It
+	// separates the two skips that must NOT be reported the same way: a machine
+	// without Codex is healthy, a machine whose Codex config we could not read
+	// is degraded.
+	Installed bool `json:"installed"`
 	// ConfigPath is the file that was (or would have been) written.
 	ConfigPath string `json:"config_path,omitempty"`
 	// BackupPath is the timestamped copy taken before the write.
@@ -234,6 +239,22 @@ const (
 // Report is the result of one configure run.
 type Report struct {
 	Outcomes []Outcome `json:"harnesses"`
+}
+
+// Degraded returns the harnesses this run attempted, found installed, and
+// failed to configure — the ones a machine must not describe as healthy.
+func (r Report) Degraded() []string {
+	out := []string{}
+	for _, o := range r.Outcomes {
+		if !o.Installed {
+			continue
+		}
+		if o.Status == StatusFailed || o.Status == StatusSkipped {
+			out = append(out, o.Harness)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Configured returns the harnesses that ended the run configured, sorted.

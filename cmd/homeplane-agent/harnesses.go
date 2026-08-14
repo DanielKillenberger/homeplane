@@ -115,6 +115,7 @@ func runConfigureHarnesses(ctx context.Context, args []string, stdout, stderr io
 	// and did not configure must drop OUT of it, or a half-failed run would keep
 	// reporting a healthy machine.
 	state.Harnesses = mergeHarnessState(state.Harnesses, report)
+	state.Harness = harnessComponentState(report)
 	if err := store.Save(state); err != nil {
 		fmt.Fprintln(stderr, "homeplane-agent configure-harnesses: "+err.Error())
 		return 1
@@ -244,4 +245,26 @@ func mergeHarnessState(previous []string, report harness.Report) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// harnessComponentState records whether this run left the machine's harnesses
+// healthy, so `status` can report a PARTIAL configuration as degraded.
+//
+// Without it, a run where Claude Code succeeded and Codex failed persists the
+// same harness list as a run that only attempted Claude Code, and status —
+// which reads that list — calls both machines fine. An installed harness that
+// could not be configured is exactly the case an operator needs told.
+func harnessComponentState(report harness.Report) *agent.ComponentState {
+	degraded := report.Degraded()
+	if len(degraded) == 0 {
+		return &agent.ComponentState{State: agent.StateOK}
+	}
+	reasons := make([]string, 0, len(degraded))
+	for _, o := range report.Outcomes {
+		if !o.Installed || o.Status == harness.StatusConfigured {
+			continue
+		}
+		reasons = append(reasons, o.Harness+" is installed but NOT configured ("+o.Status+")")
+	}
+	return &agent.ComponentState{State: agent.StateDegraded, Detail: strings.Join(reasons, "; ")}
 }

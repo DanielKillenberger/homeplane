@@ -391,3 +391,63 @@ func TestATargetedRunDoesNotEraseTheOtherHarnessFromStatus(t *testing.T) {
 		t.Fatalf("harnesses = %v after a targeted run; the untouched harness was erased", state.Harnesses)
 	}
 }
+
+// A run where one harness works and the other fails must report DEGRADED. The
+// configured list alone cannot carry that: it looks identical to a run that
+// only attempted the harness that worked.
+func TestAPartiallyConfiguredMachineReportsDegraded(t *testing.T) {
+	cp := newControlPlaneWithEdge(t)
+	m := newFakeMachine(t)
+	if res := invoke(t, "enrol", "-server", cp.URL, "-name", "harness-machine", "-state-dir", m.stateDir); res.code != 0 {
+		t.Fatalf("enrol: %s", res.stderr)
+	}
+	publishStubDescriptor(t, m.stateDir)
+
+	// Codex is installed and its config cannot be written: the directory is
+	// read-only, so the atomic write has nowhere to put its temporary file.
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: a read-only directory would still be writable")
+	}
+	if err := os.Chmod(filepath.Dir(m.codexPath), 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(m.codexPath), 0o700) })
+
+	res := invoke(t, "configure-harnesses", "-state-dir", m.stateDir, "-json")
+	if res.code == 0 {
+		t.Fatalf("a half-failed run exited 0:\n%s", res.stdout)
+	}
+
+	status := invoke(t, "status", "-state-dir", m.stateDir, "-json")
+	var report struct {
+		Components []struct {
+			Name   string `json:"name"`
+			State  string `json:"state"`
+			Detail string `json:"detail"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal([]byte(status.stdout), &report); err != nil {
+		t.Fatalf("status is not JSON: %v\n%s", err, status.stdout)
+	}
+	var found bool
+	for _, c := range report.Components {
+		if c.Name != "harnesses" {
+			continue
+		}
+		found = true
+		if c.State != "degraded" {
+			t.Errorf("harness component = %q (%s); one harness is installed and NOT configured",
+				c.State, c.Detail)
+		}
+		if !strings.Contains(c.Detail, "codex") {
+			t.Errorf("the detail does not name the broken harness: %q", c.Detail)
+		}
+		// The one that DID work must still be visible; degradation is not amnesia.
+		if !strings.Contains(c.Detail, "claude-code") {
+			t.Errorf("the detail lost the harness that succeeded: %q", c.Detail)
+		}
+	}
+	if !found {
+		t.Fatal("status reports no harness component at all")
+	}
+}

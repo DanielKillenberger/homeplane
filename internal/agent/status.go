@@ -177,7 +177,7 @@ func Status(ctx context.Context, opts StatusOptions) (Report, error) {
 	report.Components = append(report.Components, vaultComponent(state))
 	report.Components = append(report.Components, syncComponent(dir, state, opts.SyncLiveness))
 	report.Components = append(report.Components, gnoComponent(dir, state, opts.GNOLiveness))
-	report.Components = append(report.Components, listComponent(ComponentHarnesses, state.Harnesses, "no harness is configured yet"))
+	report.Components = append(report.Components, harnessComponent(state))
 	report.Components = append(report.Components, listComponent(ComponentSkills, state.Skills, "no skills are provisioned yet"))
 
 	grants, server := serverComponents(ctx, opts, report.Enroled, state, credential)
@@ -452,6 +452,26 @@ func localComponent(name string, recorded *ComponentState, absentDetail string) 
 		return ComponentReport{Name: name, State: StateNotConfigured, Detail: absentDetail}
 	}
 	return ComponentReport{Name: name, State: recorded.State, Detail: recorded.Detail}
+}
+
+// harnessComponent reports the harnesses, degrading on a partial run.
+//
+// The configured LIST alone cannot carry that: a run where Claude Code
+// succeeded and Codex failed leaves exactly the same list as a run where only
+// Claude Code was attempted, and reporting the first as ok would tell an
+// operator their machine is fine while half of it cannot reach the plane.
+func harnessComponent(state State) ComponentReport {
+	c := listComponent(ComponentHarnesses, state.Harnesses, "no harness is configured yet")
+	if state.Harness == nil || state.Harness.State != StateDegraded {
+		return c
+	}
+	c.State = StateDegraded
+	if c.Detail == "" || len(state.Harnesses) == 0 {
+		c.Detail = state.Harness.Detail
+		return c
+	}
+	c.Detail = "configured: " + c.Detail + "; " + state.Harness.Detail
+	return c
 }
 
 func listComponent(name string, values []string, absentDetail string) ComponentReport {

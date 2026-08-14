@@ -38,7 +38,7 @@ func TestTheCodexEntryCarriesItsTokenWithNoEnvironmentIndirection(t *testing.T) 
 	if err := os.WriteFile(path, []byte(codexFixture), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewCodexWriter(path, "").Apply(managedEntries("fresh-tree-token"), nil); err != nil {
+	if _, err := NewCodexWriter(path).Apply(managedEntries("fresh-tree-token"), nil); err != nil {
 		t.Fatal(err)
 	}
 	tree, err := parseTOMLTree(mustRead(t, path))
@@ -77,7 +77,7 @@ func TestCodexResolvesTheTokenInAnEmptyEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	const token = "fresh-tree-token-9f2a"
-	if _, err := NewCodexWriter(path, "").Apply(managedEntries(token), nil); err != nil {
+	if _, err := NewCodexWriter(path).Apply(managedEntries(token), nil); err != nil {
 		t.Fatal(err)
 	}
 

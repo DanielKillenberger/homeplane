@@ -30,6 +30,20 @@ Detect installed harnesses (Claude Code, Codex per D1) and configure each with (
 - [ ] Codex token propagation passes fresh-process-tree test
 - [ ] Malformed-config path: harness skipped, message clear, original untouched
 - [ ] From each harness: local GNO call (per descriptor) and server stub-connector call succeed
+  <!-- Amended during .6 implementation (impl-review round 2, 2026-08-14), scoped to what a
+  harness CLI can actually be made to do without a model turn — NOT a weakening of R6/R7,
+  which the spec's coverage table already assigns jointly to .11 · .6 · .7 and .16 · .12 · .6 · .7.
+  Claude Code: FULLY proven in-suite — `claude mcp list` opens a real MCP session against both
+  written entries, launching the stdio engine and authenticating to the connector stub with that
+  harness's own grant token; a wrong token fails the test (negative control run).
+  Codex: proven in-suite — config resolution, inline-bearer resolution under an EMPTY environment,
+  the descriptor's exact command/argv, and a real outbound connection to the endpoint URL we wrote
+  (`codex doctor` reachability). NOT provable in-suite — an AUTHENTICATED Codex tool call: codex-cli
+  0.146 exposes no non-model MCP invocation (`mcp` only lists/gets/adds/removes; `doctor`'s probe
+  deliberately carries no Authorization header, verified by the stub recording it arriving with
+  none), so the only path is a `codex exec` model turn needing live credentials.
+  INHERITED BY .7, whose live end-to-end proof drives real harnesses against the deployed server.
+  Needs product-owner confirmation at .7 time; recorded here rather than left implied. -->
 - [ ] `go test ./...` green
 - [ ] Emits versioned evidence artifact `test/evidence/<task-id>.json` (commit SHA, platform, commands run, assertions, timestamps)
 

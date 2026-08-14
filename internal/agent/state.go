@@ -82,7 +82,12 @@ type State struct {
 	Sync      *ComponentState `json:"sync,omitempty"`
 	GNO       *ComponentState `json:"gno,omitempty"`
 	Harnesses []string        `json:"harnesses,omitempty"`
-	Skills    []string        `json:"skills,omitempty"`
+	// Harness records whether the last configuration run left this machine's
+	// harnesses in a good state. The list above says WHICH harnesses are
+	// configured; it cannot say that one of them FAILED, and a machine where
+	// one harness works and the other is broken must not report as healthy.
+	Harness *ComponentState `json:"harness,omitempty"`
+	Skills  []string        `json:"skills,omitempty"`
 }
 
 // Enroled reports whether the state names an enrolled machine.
@@ -186,7 +191,7 @@ func (s *Store) Load() (State, bool, error) {
 var knownStateKeys = []string{
 	"schema_version", "server_url", "machine_id", "machine_name", "os",
 	"credential_version", "enroled_at", "rotated_at",
-	"vault_path", "vault", "sync", "gno", "harnesses", "skills",
+	"vault_path", "vault", "sync", "gno", "harnesses", "harness", "skills",
 }
 
 // Save writes state.json atomically, preserving unrecognised keys.
