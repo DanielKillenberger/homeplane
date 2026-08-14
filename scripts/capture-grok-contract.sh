@@ -47,12 +47,20 @@ WORK="$(mktemp -d)"
 # pipeline subshell and `set -e` then aborts the script immediately, so
 # anything written after the pipeline would never run and a truncated contract
 # would survive to be committed as a real observation.
+# The capture is written to a TEMPORARY file and only renamed over the
+# committed contract once it has been validated. Writing straight to $OUT would
+# truncate the last known-good artifact before the new one is known to be any
+# good, so a transient failure — a grok that will not start, a network blip in
+# `doctor` — would destroy the committed evidence and leave nothing.
 CAPTURE_OK=""
 OUT=""
+OUT_TMP=""
 cleanup() {
-  if [ -z "$CAPTURE_OK" ] && [ -n "$OUT" ] && [ -e "$OUT" ]; then
-    command rm -f "$OUT"
-    echo "capture-grok-contract.sh: capture incomplete; $OUT removed" >&2
+  if [ -n "$OUT_TMP" ] && [ -e "$OUT_TMP" ]; then
+    command rm -f "$OUT_TMP"
+  fi
+  if [ -z "$CAPTURE_OK" ]; then
+    echo "capture-grok-contract.sh: capture incomplete; the committed contract was left untouched" >&2
   fi
   command rm -rf "$WORK"
 }
@@ -147,6 +155,8 @@ VERSION="$(HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
   perl -e 'alarm shift; exec @ARGV' 30 "$GROK_BIN" --version | awk '{print $2}')"
 [ -n "$VERSION" ] || { echo "capture-grok-contract.sh: could not parse a version" >&2; exit 1; }
 OUT="$OUT_DIR/grok-$VERSION-contract.txt"
+# Same directory as $OUT so the final rename is atomic (same filesystem).
+OUT_TMP="$OUT_DIR/.grok-$VERSION-contract.txt.$$"
 
 # fail() aborts the capture loudly. It exists because this script PRODUCES
 # EVIDENCE: a probe that silently failed would otherwise be written up as a
@@ -160,11 +170,34 @@ fail() {
   exit 1
 }
 
-# expect_ok asserts the LAST probe exited 0. Probes captured precisely for
-# their non-zero exit (the failure-shape section) deliberately do not call it.
+# TIMEOUT_RC is what `perl -e alarm` leaves behind when a probe runs long:
+# SIGALRM kills the process and the shell reports 128+14. It gets its own
+# rejection everywhere, including on probes we EXPECT to fail — a probe that
+# hung for 30s and got killed is not evidence of a "fast, non-interactive
+# failure", it is the exact opposite, and recording it as one would invert the
+# finding the failure-shape section exists to establish.
+TIMEOUT_RC=142
+
+reject_timeout() {
+  [ "$2" -ne "$TIMEOUT_RC" ] || fail "$1 TIMED OUT (exit $TIMEOUT_RC): it hung rather than failing fast"
+}
+
+# expect_ok asserts the LAST probe exited 0.
 expect_ok() {
   local rc; rc="$(cat "$RC_FILE")"
+  reject_timeout "$1" "$rc"
   [ "$rc" -eq 0 ] || fail "$1 exited $rc (expected 0)"
+}
+
+# expect_rc asserts an EXACT status, for the probes captured precisely for
+# their non-zero exit. "non-zero" alone is too weak: it cannot tell grok's own
+# refusal (1) from a clap parse error (2) from a timeout (142), and those are
+# three different findings.
+expect_rc() {
+  local label="$1" want="$2" rc
+  rc="$(cat "$RC_FILE")"
+  reject_timeout "$label" "$rc"
+  [ "$rc" -eq "$want" ] || fail "$label exited $rc (expected $want)"
 }
 
 {
@@ -173,7 +206,7 @@ expect_ok() {
   echo
 
   echo "=== grok --version ==="
-  grok_probe_bare 30 --version
+  grok_probe_bare 30 --version; expect_ok "grok --version"
   echo
 
   # ---- Surface: the parser's own account of itself. -----------------------
@@ -181,16 +214,16 @@ expect_ok() {
   # prints the ROOT help), exactly as gno behaves. The child surfaces are
   # therefore captured through `grok help mcp <verb>`, which does route.
   echo "=== grok --help ==="
-  grok_probe_bare 30 --help
+  grok_probe_bare 30 --help; expect_ok "grok --help"
   echo
 
   echo "=== grok mcp --help ==="
-  grok_probe_bare 30 mcp --help
+  grok_probe_bare 30 mcp --help; expect_ok "grok mcp --help"
   echo
 
   for verb in add list remove enable disable doctor; do
     echo "=== grok help mcp $verb ==="
-    grok_probe_bare 30 help mcp "$verb"
+    grok_probe_bare 30 help mcp "$verb"; expect_ok "grok help mcp $verb"
     echo
   done
 
@@ -215,10 +248,10 @@ expect_ok() {
   echo "${sealed_entries:-(empty)}"
   echo
   echo "=== never-launched: grok mcp list --json ==="
-  grok_probe 30 mcp list --json
+  grok_probe 30 mcp list --json; expect_ok "never-launched mcp list --json"
   echo
   echo "=== never-launched: grok mcp list ==="
-  grok_probe 30 mcp list
+  grok_probe 30 mcp list; expect_ok "never-launched mcp list"
   echo
 
   # The single quotes below are load-bearing: `${HOMEPLANE_GROK_TOKEN}` and
@@ -253,6 +286,7 @@ SEED
   # shellcheck disable=SC2016
   grok_probe 30 mcp add --transport http homeplane-edge 'https://edge.example.invalid/mcp' \
     --header 'Authorization: Bearer ${HOMEPLANE_GROK_TOKEN}'
+  expect_ok "mcp add homeplane-edge"
   echo
   echo "=== config.toml after the add ==="
   cat "$CONFIG"
@@ -277,6 +311,7 @@ SEED
   # shellcheck disable=SC2016
   grok_probe 30 mcp add --transport http homeplane-edge 'https://edge.example.invalid/mcp' \
     --header 'Authorization: Bearer ${HOMEPLANE_GROK_TOKEN}'
+  expect_ok "identical re-add"
   echo
   echo "=== diff after the identical re-run (expected: byte-identical) ==="
   if diff -u --label "before the re-add" --label "after the re-add" \
@@ -286,6 +321,7 @@ SEED
   echo
   echo "=== re-add the SAME name with a different url and NO --header ==="
   grok_probe 30 mcp add --transport http homeplane-edge 'https://edge2.example.invalid/mcp'
+  expect_ok "differing re-add"
   echo
   echo "=== config.toml after the differing re-add (the headers table is GONE) ==="
   cat "$CONFIG"
@@ -295,20 +331,22 @@ SEED
   # shellcheck disable=SC2016
   grok_probe 30 mcp add --transport http homeplane-edge 'https://edge.example.invalid/mcp' \
     --header 'Authorization: Bearer ${HOMEPLANE_GROK_TOKEN}' >/dev/null
+  expect_ok "restore homeplane-edge entry"
   echo "=== grok mcp list --json ==="
   # NOTE: header VALUES are echoed verbatim. A literal bearer token in the
   # config would be printed here in full — which is why fn-3 keeps this output
   # out of logs and model context.
-  grok_probe 30 mcp list --json
+  grok_probe 30 mcp list --json; expect_ok "mcp list --json"
   echo
   echo "=== grok mcp list ==="
-  grok_probe 30 mcp list
+  grok_probe 30 mcp list; expect_ok "mcp list"
   echo
 
   # ---- Behaviour 4: ${VAR} is verbatim on disk, expanded at load. ---------
   echo "=== \${VAR} in a url: stored verbatim ==="
   # shellcheck disable=SC2016
   grok_probe 30 mcp add --transport http expand-probe 'https://${HP_PROBE_HOST}/mcp' >/dev/null
+  expect_ok "mcp add expand-probe"
   grep -A2 'expand-probe' "$CONFIG" || true
   echo
   # doctor is captured with stdout and stderr SEPARATED, in full, with its exit
@@ -323,14 +361,25 @@ SEED
     local label="$1"; local stderr_mode="$2"; shift 2
     # rc is function-LOCAL and reset per invocation. Reusing the global would
     # report a previous probe's failure against a later successful one.
-    local rc=0
+    local rc=0 doctor_stdout=""
+    # stdout is captured rather than streamed so it can be VALIDATED before it
+    # is reported, and so stderr stays genuinely separate.
+    doctor_stdout="$(HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
+      GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
+        perl -e 'alarm shift; exec @ARGV' 90 "$GROK_BIN" mcp doctor "$@" --json \
+          --leader-socket "$NO_LEADER" 2>"$WORK/doctor.err")" || rc=$?
     echo "=== grok mcp doctor $label | STDOUT ==="
-    HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
-    GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
-      perl -e 'alarm shift; exec @ARGV' 90 "$GROK_BIN" mcp doctor "$@" --json \
-        --leader-socket "$NO_LEADER" 2>"$WORK/doctor.err" || rc=$?
+    printf '%s\n' "$doctor_stdout"
     echo "exit: $rc"
     echo
+    # The claim "stdout is JSON, independently of stderr" is VERIFIED here, not
+    # asserted: an earlier revision printed that line without ever parsing the
+    # output. doctor exits non-zero for an unhealthy server, so a non-zero rc is
+    # expected - but its stdout must still be well-formed JSON either way.
+    reject_timeout "mcp doctor $label" "$rc"
+    if ! printf '%s' "$doctor_stdout" | python3 -m json.tool >/dev/null 2>&1; then
+      fail "mcp doctor $label did not emit parseable JSON on stdout"
+    fi
     if [ "$stderr_mode" = verbatim ]; then
       echo "=== grok mcp doctor $label | STDERR ==="
       cat "$WORK/doctor.err"
@@ -365,16 +414,16 @@ SEED
   # Every one of these must fail FAST and LOUD rather than prompt: a writer
   # that hangs on a hidden prompt is the failure mode the timeout guards.
   echo "=== grok mcp remove <unknown> ==="
-  grok_probe 30 mcp remove no-such-server; echo "exit: $(cat "$RC_FILE")"
+  grok_probe 30 mcp remove no-such-server; echo "exit: $(cat "$RC_FILE")"; expect_rc "mcp remove <unknown>" 1
   echo
   echo "=== grok mcp add <invalid name> ==="
-  grok_probe 30 mcp add 'bad name!' 'https://x.invalid' -t http; echo "exit: $(cat "$RC_FILE")"
+  grok_probe 30 mcp add 'bad name!' 'https://x.invalid' -t http; echo "exit: $(cat "$RC_FILE")"; expect_rc "mcp add <invalid name>" 1
   echo
   echo "=== grok mcp add -t <invalid transport> ==="
-  grok_probe 30 mcp add x 'https://x.invalid' -t carrier-pigeon; echo "exit: $(cat "$RC_FILE")"
+  grok_probe 30 mcp add x 'https://x.invalid' -t carrier-pigeon; echo "exit: $(cat "$RC_FILE")"; expect_rc "mcp add <invalid transport>" 2
   echo
   echo "=== grok mcp enable <unknown> ==="
-  grok_probe 30 mcp enable no-such; echo "exit: $(cat "$RC_FILE")"
+  grok_probe 30 mcp enable no-such; echo "exit: $(cat "$RC_FILE")"; expect_rc "mcp enable <unknown>" 1
   echo
 
   # ---- Skills discovery. --------------------------------------------------
@@ -466,17 +515,23 @@ SK
 } | sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z/<timestamp>/g' \
           -e 's/"[a-z_]*elapsed[a-z_]*": [0-9.]+/"elapsed": <elapsed>/g' \
           -e 's/"detail": "[0-9]+\.[0-9]+s"/"detail": "<duration>"/g' \
-    | sed -e "s|$WORK|<work>|g" -e "s|$OS_HOME|<os-home>|g" -e "s|$GROK_DIR|<grok-home>|g" -e "s|$HOME|<home>|g" -e "s|$GROK_BIN|<grok>|g" >"$OUT"
+    | sed -e "s|$WORK|<work>|g" -e "s|$OS_HOME|<os-home>|g" -e "s|$GROK_DIR|<grok-home>|g" -e "s|$HOME|<home>|g" -e "s|$GROK_BIN|<grok>|g" >"$OUT_TMP"
 
 # Belt and braces on the fail-closed path. `set -e` + `pipefail` already abort
 # on a fail() inside the pipeline, but this script writes committed evidence:
 # if it ever exits successfully, the file it points at must be a COMPLETE
 # capture. Only reaching here — with the end marker present — marks it keepable;
 # every other exit path leaves CAPTURE_OK empty and the trap deletes the file.
-if [ -e "$WORK/CAPTURE_FAILED" ] || ! grep -q '^=== END OF CAPTURE ===$' "$OUT"; then
+if [ -e "$WORK/CAPTURE_FAILED" ] || ! grep -q '^=== END OF CAPTURE ===$' "$OUT_TMP"; then
   echo "capture-grok-contract.sh: capture incomplete" >&2
   exit 1
 fi
+
+# Only now is the new capture known-good, so only now does it replace the
+# committed one. mv within the same directory is atomic: a reader either sees
+# the whole old contract or the whole new one, never a half-written file.
+mv -f "$OUT_TMP" "$OUT"
+OUT_TMP=""
 CAPTURE_OK=1
 
 echo "wrote $OUT"

@@ -35,35 +35,39 @@ func stubGrok(t *testing.T, body string) (pathEnv string) {
 	return dir + string(os.PathListSeparator) + os.Getenv("PATH")
 }
 
+// stagedScript copies the capture script into a throwaway "repo" and returns
+// that root plus the copied script's path. The copy matters: the script writes
+// to <script>/../internal/agent/harness/testdata, so running the real one in
+// place would let a deliberately-failing test scribble on committed testdata.
+func stagedScript(t *testing.T) (scratch, script string) {
+	t.Helper()
+	repoRoot, err := filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	real := filepath.Join(repoRoot, "scripts", "capture-grok-contract.sh")
+	src, err := os.ReadFile(real)
+	if err != nil {
+		t.Skipf("capture script not present: %v", err)
+	}
+
+	scratch = t.TempDir()
+	if err := os.MkdirAll(filepath.Join(scratch, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script = filepath.Join(scratch, "scripts", "capture-grok-contract.sh")
+	if err := os.WriteFile(script, src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return scratch, script
+}
+
 // runCapture runs the capture script against a stub grok, into a throwaway
 // repo root so a failing run can never touch the committed testdata.
 func runCapture(t *testing.T, pathEnv string) (combined string, err error) {
 	t.Helper()
-	repoRoot, rootErr := filepath.Abs("../../..")
-	if rootErr != nil {
-		t.Fatal(rootErr)
-	}
-	script := filepath.Join(repoRoot, "scripts", "capture-grok-contract.sh")
-	if _, statErr := os.Stat(script); statErr != nil {
-		t.Skipf("capture script not present: %v", statErr)
-	}
-
-	// Copy the script into a scratch "repo" so its OUT_DIR
-	// (<script>/../internal/agent/harness/testdata) lands in the temp tree.
-	scratch := t.TempDir()
-	if mkErr := os.MkdirAll(filepath.Join(scratch, "scripts"), 0o755); mkErr != nil {
-		t.Fatal(mkErr)
-	}
-	src, readErr := os.ReadFile(script)
-	if readErr != nil {
-		t.Fatal(readErr)
-	}
-	copied := filepath.Join(scratch, "scripts", "capture-grok-contract.sh")
-	if wErr := os.WriteFile(copied, src, 0o755); wErr != nil {
-		t.Fatal(wErr)
-	}
-
-	cmd := exec.Command("bash", copied)
+	_, script := stagedScript(t)
+	cmd := exec.Command("bash", script)
 	cmd.Env = append(os.Environ(), "PATH="+pathEnv)
 	out, runErr := cmd.CombinedOutput()
 	return string(out), runErr
@@ -112,6 +116,96 @@ exit 0
 	}
 }
 
+// Failures early in the run matter as much as late ones. Help capture happens
+// before any assertion-heavy section, and an earlier revision checked exit
+// status only for a few late probes — so a grok whose `--help` was broken
+// still produced a contract full of empty sections.
+func TestTheCaptureFailsWhenAnEarlyHelpProbeFails(t *testing.T) {
+	stub := `
+case "$1" in
+  --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  --help)    echo "help is broken" >&2; exit 1 ;;
+esac
+exit 0
+`
+	out, err := runCapture(t, stubGrok(t, stub))
+	if err == nil {
+		t.Fatalf("the capture SUCCEEDED with a failing `grok --help`;\noutput:\n%s", out)
+	}
+	if !strings.Contains(out, "CAPTURE ABORTED") {
+		t.Errorf("the capture failed but never said why; output:\n%s", out)
+	}
+}
+
+// The failure-shape section captures probes precisely FOR their non-zero exit.
+// A probe that HUNG and got killed by the alarm also exits non-zero — and
+// recording that as a "fast, non-interactive failure" would invert the very
+// finding the section exists to establish, since the whole point is that grok
+// does not sit waiting on a hidden prompt.
+func TestTheCaptureRejectsATimedOutProbeRatherThanCallingItAFastFailure(t *testing.T) {
+	// 142 is 128+SIGALRM: exactly what the perl alarm leaves behind when a
+	// probe runs long. Exiting it directly tests the rejection faithfully and
+	// instantly, instead of making the suite sit through a real 30s hang.
+	// reject_timeout is shared by expect_ok and expect_rc, so proving it fires
+	// on one path proves it for the deliberate-failure probes too.
+	stub := `
+case "$1" in
+  --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  --help)    exit 142 ;;
+esac
+exit 0
+`
+	out, err := runCapture(t, stubGrok(t, stub))
+	if err == nil {
+		t.Fatalf("the capture SUCCEEDED with a probe that hung until its alarm;\n"+
+			"a killed probe is not evidence of a fast non-interactive failure.\noutput:\n%s", out)
+	}
+	if !strings.Contains(out, "TIMED OUT") {
+		t.Errorf("the capture failed but not with a timeout diagnosis; output:\n%s", out)
+	}
+}
+
+// A transient failure must not destroy the last known-good contract. Writing
+// straight to the committed path would truncate it before the replacement is
+// known to be any good.
+func TestAFailedRecaptureLeavesAnExistingContractByteIdentical(t *testing.T) {
+	scratch, script := stagedScript(t)
+
+	// Stand in a previous, known-good contract.
+	testdata := filepath.Join(scratch, "internal", "agent", "harness", "testdata")
+	if err := os.MkdirAll(testdata, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	existing := filepath.Join(testdata, "grok-9.9.9-contract.txt")
+	golden := []byte("the previous, known-good capture\n=== END OF CAPTURE ===\n")
+	if err := os.WriteFile(existing, golden, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A grok that reports its version (so the script targets the SAME file)
+	// but then fails partway through.
+	stub := `
+case "$1" in
+  --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  inspect)   exit 1 ;;
+esac
+exit 0
+`
+	cmd := exec.Command("bash", script)
+	cmd.Env = append(os.Environ(), "PATH="+stubGrok(t, stub))
+	if out, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("expected the recapture to fail; output:\n%s", out)
+	}
+
+	after, err := os.ReadFile(existing)
+	if err != nil {
+		t.Fatalf("the previous contract is GONE after a failed recapture: %v", err)
+	}
+	if string(after) != string(golden) {
+		t.Errorf("a failed recapture modified the previous contract.\nwant:\n%s\ngot:\n%s", golden, after)
+	}
+}
+
 // A failed capture must not leave a partial contract behind for someone to
 // commit as though it were a real observation.
 func TestAFailedCaptureLeavesNoContractFile(t *testing.T) {
@@ -123,29 +217,9 @@ esac
 exit 0
 `
 	pathEnv := stubGrok(t, stub)
+	scratch, script := stagedScript(t)
 
-	repoRoot, err := filepath.Abs("../../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, statErr := os.Stat(filepath.Join(repoRoot, "scripts", "capture-grok-contract.sh")); statErr != nil {
-		t.Skipf("capture script not present: %v", statErr)
-	}
-
-	scratch := t.TempDir()
-	if mkErr := os.MkdirAll(filepath.Join(scratch, "scripts"), 0o755); mkErr != nil {
-		t.Fatal(mkErr)
-	}
-	src, readErr := os.ReadFile(filepath.Join(repoRoot, "scripts", "capture-grok-contract.sh"))
-	if readErr != nil {
-		t.Fatal(readErr)
-	}
-	copied := filepath.Join(scratch, "scripts", "capture-grok-contract.sh")
-	if wErr := os.WriteFile(copied, src, 0o755); wErr != nil {
-		t.Fatal(wErr)
-	}
-
-	cmd := exec.Command("bash", copied)
+	cmd := exec.Command("bash", script)
 	cmd.Env = append(os.Environ(), "PATH="+pathEnv)
 	if out, runErr := cmd.CombinedOutput(); runErr == nil {
 		t.Fatalf("expected the capture to fail; output:\n%s", out)

@@ -223,12 +223,30 @@ does not involve moving files.
 that Homeplane forces to 0600. No environment indirection. The token never
 touches argv, because Homeplane writes the file itself (§1).**
 
-grok *does* offer env-var indirection: `${VAR}` (and `${VAR:-default}`) inside
-any `[mcp_servers.*]` string — `url`, `command`, `args`, `env`, `headers` — is
-stored **verbatim** on disk and expanded at **load** time. Proven both ways: a
-url of `https://${HP_PROBE_HOST}/mcp` reported its `target` as the literal
-placeholder with the variable unset, and as `https://expanded.example.invalid/mcp`
-with it set.
+grok *does* offer env-var indirection. Being precise about what is **observed**
+versus what is **documented**, because the two are not the same claim:
+
+- **Observed here, for `url`:** `${VAR}` is stored **verbatim** on disk and
+  expanded at **load** time. Proven both ways in the committed contract — a url
+  of `https://${HP_PROBE_HOST}/mcp` reported its `target` as the literal
+  placeholder with the variable unset, and as
+  `https://expanded.example.invalid/mcp` with it set.
+- **Observed here, for `headers`:** only that a `${VAR}` placeholder is stored
+  **verbatim** rather than expanded at write time. The capture does **not**
+  independently observe an expanded `Authorization` header arriving at a
+  server. An end-to-end probe against a local endpoint was attempted and
+  abandoned: grok's streamable-HTTP client would not complete a handshake with
+  a stub cheap enough to keep in a capture script, and every re-capture paid
+  minutes of retry for it.
+- **Documented upstream, not verified here:** that the same expansion applies
+  to every `[mcp_servers.*]` string — `url`, `command`, `args`, `env` and
+  `headers` (`~/.grok/docs/user-guide/07-mcp-servers.md`).
+
+**This gap changes no decision, which is why it was left open rather than
+chased.** D3 rejects env indirection for *any* field, so whether header
+expansion works is not load-bearing for what .2 writes. If a future task ever
+wants to rely on header indirection, it must first observe it — this document
+does not license the assumption.
 
 **It is deliberately not used**, for the reason fn-1 already recorded and
 tested. `codex_token_test.go` states it: a config that names an environment
