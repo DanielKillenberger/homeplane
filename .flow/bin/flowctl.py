@@ -4353,7 +4353,7 @@ def run_codex_exec(
                 capture_output=True,
                 text=True, encoding="utf-8",
                 check=True,
-                timeout=600,
+                timeout=3600,
                 # cwd=repo_root so codex resolves repo-relative changed-file paths
                 # when launched from a subdir (mirrors run_cursor_exec). repo_root
                 # is computed by the handler; --skip-git-repo-check still allows /tmp.
@@ -4397,7 +4397,7 @@ def run_codex_exec(
                 capture_output=True,
                 text=True, encoding="utf-8",
                 check=False,  # Don't raise on non-zero exit
-                timeout=600,
+                timeout=3600,
                 # cwd=repo_root so codex resolves repo-relative changed-file paths
                 # when launched from a subdir (mirrors run_cursor_exec). repo_root
                 # is computed by the handler; --skip-git-repo-check still allows /tmp.

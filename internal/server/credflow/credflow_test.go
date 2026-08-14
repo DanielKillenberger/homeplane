@@ -711,13 +711,12 @@ func TestCommitHookRunsBeforeTheFlowReportsCompleted(t *testing.T) {
 	}
 }
 
-// TestCommitHookFailureIsVisibleInTheFlowsOutcome. The credential IS stored, so
-// the flow completes and no human is sent back through a consent screen. But
-// this flow's whole contract is that a client which polls its way to
-// `completed` can use the credential next — so a delivery that failed has to
-// travel with the outcome, or `add-credentials` reports a clean success on a
-// deployment that cannot make a single call.
-func TestCommitHookFailureIsVisibleInTheFlowsOutcome(t *testing.T) {
+// TestCommitHookFailureEndsTheFlowUndelivered. `completed` is the promise that
+// a client which polls its way there can use the credential next, so a delivery
+// that failed must not reach it — a conforming client stops polling on
+// `completed` and would walk straight into an unusable connector. It ends in
+// its own terminal state instead: stored, not ready, and not a consent problem.
+func TestCommitHookFailureEndsTheFlowUndelivered(t *testing.T) {
 	p := newFakeProvider(t, "google")
 	h := newHarness(t, harnessOptions{
 		providers: []*fakeProvider{p},
@@ -727,12 +726,12 @@ func TestCommitHookFailureIsVisibleInTheFlowsOutcome(t *testing.T) {
 	})
 
 	_, terminal := h.runFlow(machineA, p, false)
-	if got := terminal.str("state"); got != string(credflow.StateCompleted) {
-		t.Fatalf("flow state %q, want completed: the credential IS stored", got)
+	if got := terminal.str("state"); got != string(credflow.StateUndelivered) {
+		t.Fatalf("flow state %q, want undelivered", got)
 	}
 	diag := terminal.diagnostic()
 	if diag == nil || diag["error_code"] != credflow.CodeDeliveryFailed {
-		t.Fatalf("completed flow carries diagnostic %v, want %q", diag, credflow.CodeDeliveryFailed)
+		t.Fatalf("undelivered flow carries diagnostic %v, want %q", diag, credflow.CodeDeliveryFailed)
 	}
 	// Re-authorizing would change nothing, so the fault must not invite a retry.
 	if retryable, _ := diag["retryable"].(bool); retryable {
@@ -766,9 +765,10 @@ func TestSuccessfulDeliveryLeavesACleanOutcome(t *testing.T) {
 }
 
 // TestCommitHookFailureDoesNotUnstoreTheCredential. The provider has already
-// issued the credential; a delivery fault is an operational problem an operator
-// fixes, and reporting the flow as failed would contradict the store — the
-// agent would tell a human to re-consent for a credential that is right there.
+// issued the credential and the store already committed it; a delivery fault is
+// an operational problem an operator fixes. Reporting `failed` would contradict
+// the store — `failed` means nothing was changed — and would send a human back
+// through consent for a credential that is right there.
 func TestCommitHookFailureDoesNotUnstoreTheCredential(t *testing.T) {
 	p := newFakeProvider(t, "google")
 	h := newHarness(t, harnessOptions{
@@ -779,8 +779,22 @@ func TestCommitHookFailureDoesNotUnstoreTheCredential(t *testing.T) {
 	})
 
 	_, terminal := h.runFlow(machineA, p, false)
-	if got := terminal.str("state"); got != string(credflow.StateCompleted) {
-		t.Fatalf("flow state %q, want completed: the credential IS stored", got)
+	if got := terminal.str("state"); got != string(credflow.StateUndelivered) {
+		t.Fatalf("flow state %q, want undelivered", got)
+	}
+	// Both facts are on the record: the credential was committed, and the flow
+	// did not end usable.
+	committed, terminals := 0, 0
+	for _, e := range h.auditEvents() {
+		switch e.Event {
+		case store.EventCredentialFlowCommitted:
+			committed++
+		case store.EventCredentialFlowFailed:
+			terminals++
+		}
+	}
+	if committed != 1 || terminals != 1 {
+		t.Fatalf("committed=%d terminal=%d rows, want exactly one of each", committed, terminals)
 	}
 	cred, _, err := h.credential("google")
 	if err != nil || cred.Access == "" {

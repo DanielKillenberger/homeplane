@@ -157,7 +157,7 @@ stored: a declined, expired, or failed flow leaves it exactly as it was.
 		fmt.Fprintf(stdout, "stored a %s credential on %s; every enrolled machine's grants can use it now.\n",
 			result.Provider, client.BaseURL())
 		fmt.Fprintln(stdout, "no provider token was written to this machine.")
-	} else if result.Succeeded() {
+	} else if result.Stored() {
 		// Stored, and not usable. Saying "success" here would send the operator
 		// looking for an authorization problem that does not exist; saying
 		// "failed" would send them back through a consent screen for a
@@ -173,9 +173,8 @@ stored: a declined, expired, or failed flow leaves it exactly as it was.
 			fmt.Fprintln(stderr, "nothing was changed on the server; re-run this command to try again.")
 		}
 	}
-	// Stored-but-undeliverable exits non-zero too: a caller that polls its way
-	// to `completed` is entitled to assume the next connector call will work,
-	// and this is exactly the case where it will not.
+	// `undelivered` exits non-zero too: the credential is stored, and the thing
+	// the operator asked for — a connector they can use — did not happen.
 	if !result.Ready() {
 		return 1
 	}

@@ -1,7 +1,7 @@
 {
   "branch_name": "fn-1-homeplane-walking-skeleton-install",
-  "completion_review_status": "unknown",
-  "completion_reviewed_at": null,
+  "completion_review_status": "needs_work",
+  "completion_reviewed_at": "2026-08-14T17:47:03.982504Z",
   "created_at": "2026-08-13T13:14:26.640058Z",
   "default_impl": null,
   "default_review": null,
@@ -22,7 +22,7 @@
     "fn-1-homeplane-walking-skeleton-install.9": 0
   },
   "next_task": 1,
-  "plan_review_rounds": 0,
+  "plan_review_rounds": 1,
   "plan_review_status": "ship",
   "plan_reviewed_at": "2026-08-13T15:55:53.104081Z",
   "review_attempts": [
@@ -4566,6 +4566,109 @@
       "task": "fn-1-homeplane-walking-skeleton-install.14",
       "timestamp": "2026-08-14T17:12:39.137422Z",
       "verdict": "SHIP"
+    },
+    {
+      "artifact_sha256": "40953926a8d4df622e66fe81cd3533488e004c156087dd0254eb7226ff28855d",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": "timeout",
+      "finalized": {
+        "digest": "complete",
+        "receipt": "not_applicable",
+        "status": "not_applicable"
+      },
+      "forced": false,
+      "hash_epoch": 7,
+      "head_sha": "f38c57b2eca8e08e3622ac53d03d061c430b21e8",
+      "kind": "completion",
+      "outcome": "transport_failure",
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reservation_id": "54675dfe7a874657b241a1856fe4ee75",
+      "round_consumed": false,
+      "scope": "completion",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-14T17:25:09.976852Z",
+      "verdict": null
+    },
+    {
+      "artifact_sha256": "40953926a8d4df622e66fe81cd3533488e004c156087dd0254eb7226ff28855d",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": "timeout",
+      "finalized": {
+        "digest": "complete",
+        "receipt": "not_applicable",
+        "status": "not_applicable"
+      },
+      "forced": false,
+      "hash_epoch": 7,
+      "head_sha": "f38c57b2eca8e08e3622ac53d03d061c430b21e8",
+      "kind": "completion",
+      "outcome": "transport_failure",
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reservation_id": "e493d67adc7c4700a8541358792dc8d0",
+      "round_consumed": false,
+      "scope": "completion",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-14T17:35:18.955065Z",
+      "verdict": null
+    },
+    {
+      "artifact_sha256": "40953926a8d4df622e66fe81cd3533488e004c156087dd0254eb7226ff28855d",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-79ca46c7d8e6d05183ecf4c72b5fb63b",
+            "classification": "introduced",
+            "findingId": "finding-79ca46c7d8e6d05183ecf4c72b5fb63b",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-57874ec0d5492c3e38651ecbd1292f0a",
+            "classification": "introduced",
+            "findingId": "finding-57874ec0d5492c3e38651ecbd1292f0a",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-94a1f057b8aa1c3b2b3cce6b7768ec27",
+            "classification": "introduced",
+            "findingId": "finding-94a1f057b8aa1c3b2b3cce6b7768ec27",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "completion"
+      },
+      "forced": false,
+      "hash_epoch": 7,
+      "head_sha": "f38c57b2eca8e08e3622ac53d03d061c430b21e8",
+      "kind": "completion",
+      "outcome": "verdict",
+      "output_sha256": "530c92a931842da9e8986ca96c2c5b62a118710bc8fa8feb687ed32ea696d01a",
+      "reservation_id": "d6128ebd57114092b1d5c4dca3368231",
+      "round_consumed": true,
+      "scope": "completion",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-14T17:47:03.967381Z",
+      "verdict": "NEEDS_WORK"
     }
   ],
   "review_hash_epoch": {
@@ -4593,6 +4696,7 @@
     }
   },
   "review_transport_failures": {
+    "completion": 0,
     "impl:fn-1-homeplane-walking-skeleton-install.1": 0,
     "impl:fn-1-homeplane-walking-skeleton-install.14": 0,
     "impl:fn-1-homeplane-walking-skeleton-install.15": 0,
@@ -4619,5 +4723,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-08-14T17:12:39.143443Z"
+  "updated_at": "2026-08-14T17:47:03.986948Z"
 }

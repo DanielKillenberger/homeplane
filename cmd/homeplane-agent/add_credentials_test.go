@@ -71,23 +71,26 @@ func TestAddCredentialsAgainstAServerWithoutTheBrokerFailsClearly(t *testing.T) 
 func TestAddCredentialsReportsStoredButUndeliverable(t *testing.T) {
 	res := credflow.Result{
 		Provider:  "google",
-		State:     "completed",
+		State:     "undelivered",
 		ErrorCode: "delivery_failed",
 		Message:   "the credential is stored on the server, but the connector could not be given it",
 	}
-	if res.Succeeded() != true {
-		t.Fatal("a stored credential must still count as stored")
+	if !res.Stored() {
+		t.Fatal("a stored-but-undelivered credential must still count as stored")
+	}
+	if res.Succeeded() {
+		t.Fatal("a flow that never delivered the credential was reported as succeeded")
 	}
 	if res.Ready() {
 		t.Fatal("a credential the connector cannot read was reported as ready")
 	}
 
 	clean := credflow.Result{Provider: "google", State: "completed"}
-	if !clean.Ready() {
-		t.Fatal("an ordinary success was not reported as ready")
+	if !clean.Ready() || !clean.Stored() || !clean.Succeeded() {
+		t.Fatal("an ordinary success was not reported as stored, succeeded and ready")
 	}
 	denied := credflow.Result{Provider: "google", State: "denied", ErrorCode: "provider_denied"}
-	if denied.Succeeded() || denied.Ready() {
+	if denied.Stored() || denied.Succeeded() || denied.Ready() {
 		t.Fatal("a denied flow was reported as stored or ready")
 	}
 }

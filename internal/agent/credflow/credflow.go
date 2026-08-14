@@ -72,17 +72,34 @@ type Result struct {
 	Retryable bool   `json:"retryable,omitempty"`
 }
 
-// Succeeded reports whether the credential was stored server-side.
-func (r Result) Succeeded() bool { return r.State == "completed" }
+// Terminal states, as the server's state machine names them.
+const (
+	stateCompleted = "completed"
+	// stateUndelivered — the credential was stored and could not be handed to
+	// the connector. Stored, and not usable.
+	stateUndelivered = "undelivered"
+)
+
+// Succeeded reports whether the flow succeeded: the credential is stored AND
+// the connector was given it.
+func (r Result) Succeeded() bool { return r.State == stateCompleted }
+
+// Stored reports whether the server now holds this credential — true for a
+// clean success and for a flow that stored one it could not deliver.
+//
+// It is what separates "authorize again" from "do not authorize again": a
+// stored credential is not fixed by another consent screen, whatever else went
+// wrong afterwards.
+func (r Result) Stored() bool { return r.Succeeded() || r.State == stateUndelivered }
 
 // Ready reports whether the credential is stored AND usable.
 //
-// The two are not the same, and conflating them is what makes a client report a
-// clean success on a deployment that cannot make a single call: a completed flow
-// carrying a diagnostic means the credential was stored and the connector could
-// not be given it. Re-authorizing would change nothing, so this is a distinct
-// answer from both success and failure, and the caller has to be able to tell
-// them apart.
+// Storage and readiness are not the same, and conflating them is what makes a
+// client report a clean success on a deployment that cannot make a single call.
+// The server keeps them apart by state — `completed` is the ready state and
+// carries no diagnostic, `undelivered` is stored-and-not-ready — and the
+// diagnostic check stays as a belt-and-braces guard so a future server that
+// attached one to a success could never read as ready here.
 func (r Result) Ready() bool { return r.Succeeded() && r.ErrorCode == "" }
 
 // AddCredentials runs the flow to a terminal state.

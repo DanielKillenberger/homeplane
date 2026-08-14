@@ -67,14 +67,31 @@ const (
 	// StatePending means the flow is waiting on the human, or on the server's
 	// exchange job.
 	StatePending State = "pending"
-	// StateCompleted means the provider credential is durably stored.
+	// StateCompleted means the provider credential is durably stored AND usable:
+	// a client that polls its way here may make a connector call next. It is the
+	// only successful terminal state, and it never carries a diagnostic.
 	StateCompleted State = "completed"
+	// StateUndelivered means the credential was durably stored and could NOT be
+	// handed to the connector workload that has to use it.
+	//
+	// It exists because neither of the other two answers is true. `completed`
+	// would promise a usable connector that is not usable, and a client
+	// implementing this state machine stops polling on it. `failed` would
+	// promise that nothing was changed — but the new credential IS committed
+	// here, so the replacement DID happen and re-running consent would only
+	// re-do work the server already holds. So this is its own terminal failure:
+	// stored, not ready, and fixed by the operator rather than by the human who
+	// authorized (see the delivery_failed diagnostic and /healthz's
+	// workload_credential component).
+	StateUndelivered State = "undelivered"
 	// StateDenied means the provider (or the human) refused consent.
 	StateDenied State = "denied"
 	// StateExpired means the flow's window elapsed before a code arrived.
 	StateExpired State = "expired"
 	// StateFailed means a valid code was relayed but the credential could not be
-	// obtained or stored. Nothing partial is stored; a new flow retries cleanly.
+	// obtained or stored. Nothing was stored and no existing credential was
+	// touched; a new flow retries cleanly. (A credential that was stored and
+	// could not be delivered is StateUndelivered, not this.)
 	StateFailed State = "failed"
 )
 
@@ -95,10 +112,10 @@ const (
 	// CodeStoreFailed — tokens were obtained but could not be stored.
 	CodeStoreFailed = "store_failed"
 	// CodeDeliveryFailed — the credential IS stored, and the deployment could
-	// not hand it to the connector that has to use it. It is deliberately not a
-	// failure of the FLOW: re-running consent would change nothing, and telling
-	// a human to authorize again for a credential the server already holds is
-	// the one answer that is both wrong and expensive.
+	// not hand it to the connector that has to use it. It carries StateUndelivered
+	// and is deliberately NOT retryable: re-running consent would change nothing,
+	// and telling a human to authorize again for a credential the server already
+	// holds is the one answer that is both wrong and expensive.
 	CodeDeliveryFailed = "delivery_failed"
 	// CodeConcurrentReplacement — another flow committed this provider's
 	// credential first; this one wrote nothing.
@@ -773,30 +790,42 @@ func (s *Service) exchangeAndStore(ctx context.Context, f *flow, code string) {
 		return
 	}
 
-	// Delivery happens before the flow is reported completed: the agent polls
+	// Delivery happens before the flow reports a terminal state: the agent polls
 	// until terminal and a caller that sees `completed` may make a connector
-	// call in the next second.
-	var deliveryFault *Diagnostic
+	// call in the next second. That promise is the reason a failed delivery must
+	// NOT end as `completed` — it ends as `undelivered` instead, which says
+	// stored-and-not-ready without inviting another consent screen.
 	if s.cfg.OnCommitted != nil {
 		if err := s.cfg.OnCommitted(ctx, provider, generation); err != nil {
-			// The credential IS stored, so the flow completes: re-running consent
-			// would change nothing. But it is NOT ready, and this flow's whole
-			// contract is that a client which polls its way to `completed` can
-			// use the credential next — so the outcome carries the fault, and
-			// the client reports it instead of a clean success.
 			s.log.Error("the credential was stored but could not be delivered to the connector workload",
 				"provider", provider, "generation", generation, "error", err)
-			deliveryFault = &Diagnostic{
-				ErrorCode: CodeDeliveryFailed,
-				Message: "the credential is stored on the server, but the connector could not be given it — " +
-					"do NOT authorize again; the server's operator must fix the delivery " +
-					"(the workload_credential component on /healthz names the fault)",
-				Retryable: false,
-			}
+			s.undelivered(ctx, f, generation)
+			return
 		}
 	}
 
-	s.complete(f, generation, deliveryFault)
+	s.complete(f, generation)
+}
+
+// undelivered ends a flow whose credential was committed and could not be
+// handed to the connector workload.
+//
+// It goes through terminate like every other terminal FAILURE — the outcome is
+// held until its audit row is written — so the trail carries both facts: the
+// commit event written inside the store transaction, and a flow that did not
+// end usable.
+func (s *Service) undelivered(ctx context.Context, f *flow, generation int64) {
+	diag := &Diagnostic{
+		ErrorCode: CodeDeliveryFailed,
+		Message: "the credential is stored on the server, but the connector could not be given it — " +
+			"do NOT authorize again; the server's operator must fix the delivery " +
+			"(the workload_credential component on /healthz names the fault)",
+		Retryable: false,
+	}
+	if err := s.terminate(ctx, f, StateUndelivered, store.ActorSystem, diag); err != nil {
+		s.log.Error("record an undelivered credential flow", "flow_id", f.id,
+			"provider", f.provider, "generation", generation, "error", err)
+	}
 }
 
 // complete records the flow's one success transition.
@@ -811,7 +840,7 @@ func (s *Service) exchangeAndStore(ctx context.Context, f *flow, code string) {
 // wrong. Since a relayed flow is excluded from consent-window expiry, nothing
 // else can end it; if that ever changes, this logs loudly rather than papering
 // over a credential whose recorded outcome disagrees with the store.
-func (s *Service) complete(f *flow, generation int64, fault *Diagnostic) {
+func (s *Service) complete(f *flow, generation int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if f.state.Terminal() {
@@ -820,17 +849,11 @@ func (s *Service) complete(f *flow, generation int64, fault *Diagnostic) {
 		return
 	}
 	f.state = StateCompleted
-	// A completed flow normally carries no diagnostic. It carries one when the
-	// credential is stored and NOT usable yet, which is a different thing from
-	// both success and failure and has to be sayable.
-	f.diag = fault
+	// `completed` is the ready state, and it carries no diagnostic: a stored
+	// credential that is not usable ends as StateUndelivered instead.
+	f.diag = nil
 	f.decided = nil
 	f.terminalAt = s.cfg.Now().UTC()
-	if fault != nil {
-		s.log.Warn("credential stored but not delivered", "provider", f.provider, "flow_id", f.id,
-			"generation", generation, "error_code", fault.ErrorCode)
-		return
-	}
 	s.log.Info("credential stored", "provider", f.provider, "flow_id", f.id, "generation", generation)
 }
 

@@ -210,11 +210,16 @@ search of the agent state and both harness configs found zero provider tokens on
 the machine; the commit was audited by ref and generation, never by value.
 
 **Storage and readiness are separate claims.** The connector reads its
-credential from a directory, so the server materializes it there. If delivery
-fails the credential is still stored, the flow completes carrying a
-`delivery_failed` diagnostic, `add-credentials` exits non-zero saying the
-credential is not usable yet, and `/healthz` reports `workload_credential`
-degraded until a later delivery succeeds.
+credential from a directory, so the server materializes it there. `completed`
+is the READY state: a client that polls its way there may make a connector call
+next, and it never carries a diagnostic. If delivery fails the credential is
+still stored — re-authorizing would change nothing — and the flow ends in its
+own terminal state, **`undelivered`**, carrying the non-retryable
+`delivery_failed` diagnostic. `add-credentials` then says the credential is
+stored and NOT usable yet and exits non-zero, and `/healthz` reports
+`workload_credential` degraded until a later delivery succeeds. The state exists
+because neither neighbour is true: `completed` would promise a usable connector,
+and `failed` would promise that nothing was stored.
 
 ## The retrieval engine, and the D16 seam
 
