@@ -462,8 +462,9 @@ func TestApplyRecordsTheLiveSessionChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("activate: %v", err)
 	}
-	if len(ran) != 3 {
-		t.Fatalf("ran %v, want the three launchd steps", ran)
+	// bootout (optional, clears a previous load), bootstrap, enable, kickstart.
+	if len(ran) != 4 {
+		t.Fatalf("ran %v, want the four launchd steps", ran)
 	}
 	if !cfg.Applied {
 		t.Fatal("Applied was not recorded after a successful load")

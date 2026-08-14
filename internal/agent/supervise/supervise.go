@@ -321,6 +321,11 @@ func (i Installer) Uninstall(u Unit) error {
 type Command struct {
 	Name string   `json:"name"`
 	Args []string `json:"args"`
+	// Optional marks a step whose failure is not the sequence's failure —
+	// clearing a state that may or may not be there. It is deliberately narrow:
+	// only a step that is a no-op when it fails may carry it, because a run that
+	// ignores a real error is worse than one that stops.
+	Optional bool `json:"optional,omitempty"`
 }
 
 // String renders the command the way an operator would type it.
@@ -342,6 +347,13 @@ func (i Installer) ActivationCommands(u Unit, uid string) ([]Command, error) {
 	case Launchd:
 		target := "gui/" + uid
 		return []Command{
+			// launchd refuses to bootstrap a label it already has ("Bootstrap
+			// failed: 5: Input/output error"), so re-activating a machine —
+			// after an upgrade, or simply running activation twice — would fail
+			// on the ONE case that must always work. Booting the old job out
+			// first makes activation idempotent; it is optional because on a
+			// machine that has never been activated there is nothing to boot out.
+			{Name: "launchctl", Args: []string{"bootout", target + "/" + u.Label}, Optional: true},
 			{Name: "launchctl", Args: []string{"bootstrap", target, path}},
 			{Name: "launchctl", Args: []string{"enable", target + "/" + u.Label}},
 			{Name: "launchctl", Args: []string{"kickstart", "-k", target + "/" + u.Label}},
@@ -356,6 +368,37 @@ func (i Installer) ActivationCommands(u Unit, uid string) ([]Command, error) {
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedPlatform, i.Platform)
 	}
+}
+
+// LoadedCommand asks the supervisor whether it currently has this unit.
+//
+// It exists because the agent's own config file is not evidence: a run that
+// crashed between installing a unit and recording it, or one that rewrote the
+// config while the job was still loaded, leaves the file saying "not applied"
+// while launchd happily keeps the process — and the index it holds open. The
+// supervisor is the only authority for what is loaded right now.
+func (i Installer) LoadedCommand(u Unit, uid string) (Command, error) {
+	switch i.Platform {
+	case Launchd:
+		return Command{Name: "launchctl", Args: []string{"print", "gui/" + uid + "/" + u.Label}}, nil
+	case Systemd:
+		return Command{Name: "systemctl", Args: []string{"--user", "is-active", serviceName(u.Label)}}, nil
+	default:
+		return Command{}, fmt.Errorf("%w: %s", ErrUnsupportedPlatform, i.Platform)
+	}
+}
+
+// IsLoaded reports whether the supervisor currently holds the unit. Without a
+// runner it reports false: a caller that cannot ask has not been told yes.
+func (i Installer) IsLoaded(u Unit, uid string) bool {
+	if i.Runner == nil {
+		return false
+	}
+	c, err := i.LoadedCommand(u, uid)
+	if err != nil {
+		return false
+	}
+	return i.Runner(c.Name, c.Args...) == nil
 }
 
 // StopCommands halt a running unit WITHOUT forgetting it.
@@ -391,6 +434,13 @@ func (i Installer) StartCommands(u Unit, uid string) ([]Command, error) {
 	case Launchd:
 		target := "gui/" + uid
 		return []Command{
+			// launchd refuses to bootstrap a label it already has ("Bootstrap
+			// failed: 5: Input/output error"), so re-activating a machine —
+			// after an upgrade, or simply running activation twice — would fail
+			// on the ONE case that must always work. Booting the old job out
+			// first makes activation idempotent; it is optional because on a
+			// machine that has never been activated there is nothing to boot out.
+			{Name: "launchctl", Args: []string{"bootout", target + "/" + u.Label}, Optional: true},
 			{Name: "launchctl", Args: []string{"bootstrap", target, path}},
 			{Name: "launchctl", Args: []string{"kickstart", "-k", target + "/" + u.Label}},
 		}, nil
@@ -430,6 +480,9 @@ func (i Installer) Activate(u Unit, uid string) ([]Command, error) {
 	}
 	for _, c := range cmds {
 		if err := i.Runner(c.Name, c.Args...); err != nil {
+			if c.Optional {
+				continue
+			}
 			return cmds, fmt.Errorf("supervise: %s: %w", c, err)
 		}
 	}

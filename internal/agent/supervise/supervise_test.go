@@ -319,3 +319,60 @@ func verifySystemdUnit(t *testing.T, contents string) {
 		t.Fatalf("systemd-analyze rejected the unit: %v\n%s\n%s", err, out, contents)
 	}
 }
+
+// TestLaunchdActivationIsIdempotent. launchd refuses to bootstrap a label it
+// already has ("Bootstrap failed: 5: Input/output error"), so activating a
+// machine twice — an upgrade, a repeated `gno activate`, a re-run of the whole
+// install — used to fail on the one path that must always work. The old job is
+// booted out first, and that step is optional because a machine being activated
+// for the first time has nothing to boot out.
+func TestLaunchdActivationIsIdempotent(t *testing.T) {
+	u := Unit{Label: "com.homeplane.test", Program: "/usr/local/bin/homeplane-agent", Args: []string{"gno", "run"}}
+	i := Installer{Platform: Launchd, Dir: t.TempDir()}
+	cmds, err := i.ActivationCommands(u, "501")
+	if err != nil {
+		t.Fatalf("ActivationCommands: %v", err)
+	}
+	if len(cmds) == 0 || cmds[0].Name != "launchctl" || cmds[0].Args[0] != "bootout" {
+		t.Fatalf("first activation step is %v, want a bootout that clears a previous load", cmds[0])
+	}
+	if !cmds[0].Optional {
+		t.Error("the bootout is not optional; a first activation would fail on a job that was never loaded")
+	}
+	for _, c := range cmds[1:] {
+		if c.Optional {
+			t.Errorf("step %v is optional; only the clearing step may ignore its own failure", c)
+		}
+	}
+
+	// A runner that fails the bootout (nothing loaded) and succeeds after must
+	// still activate.
+	if _, err := i.Install(u); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	var ran []string
+	i.Runner = func(name string, args ...string) error {
+		ran = append(ran, name+" "+args[0])
+		if args[0] == "bootout" {
+			return errors.New("Boot-out failed: 3: No such process")
+		}
+		return nil
+	}
+	if _, err := i.Activate(u, "501"); err != nil {
+		t.Fatalf("Activate with a failing bootout: %v", err)
+	}
+	if len(ran) != len(cmds) {
+		t.Errorf("ran %v; the sequence stopped early", ran)
+	}
+
+	// A failure in a step that is NOT optional still fails activation.
+	i.Runner = func(name string, args ...string) error {
+		if args[0] == "bootstrap" {
+			return errors.New("Bootstrap failed: 5: Input/output error")
+		}
+		return nil
+	}
+	if _, err := i.Activate(u, "501"); err == nil {
+		t.Error("a failed bootstrap was reported as a successful activation")
+	}
+}

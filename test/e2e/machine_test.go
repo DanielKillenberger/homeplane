@@ -155,6 +155,15 @@ func stageGNO(s *stage) {
 		"exit %d%s", res.ExitCode, tail(res.Stderr)) {
 		return
 	}
+	// Activation INSTALLS the supervision unit; loading it into launchd/systemd
+	// is a second, deliberate step (it needs a user session, which an installer
+	// running under one process manager cannot assume it has). A machine whose
+	// unit is installed but not loaded has an engine that answers stdio launches
+	// and an index nobody keeps current — which is exactly what `status` says.
+	apply := s.agent("homeplane-agent gno apply (load the supervision unit)", 3*time.Minute, "gno", "apply")
+	s.assert("the supervision unit is loaded into the platform's process manager", apply.ExitCode == 0,
+		"exit %d%s", apply.ExitCode, tail(apply.Stderr))
+
 	ep := s.agent("homeplane-agent gno endpoint -json", 60*time.Second, "gno", "endpoint", "-json")
 	var desc struct {
 		Component  string `json:"component"`

@@ -274,20 +274,6 @@ degraded, because an index nobody is updating is not a current index.
 	}
 	cli.Dirs = gno.DefaultPaths(dir)
 
-	// STAGE 1 — prepare: every refusal that must precede supervision.
-	prepared, err := gno.Prepare(ctx, gno.PrepareOptions{
-		StateDir:   dir,
-		VaultPath:  vault,
-		Collection: *collection,
-		CLI:        cli,
-		ProbeQuery: *query,
-	})
-	if err != nil {
-		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
-		recordGNO(dir, gnoComponentFor(err))
-		return 1
-	}
-
 	platform, err := supervise.DetectPlatform("")
 	if err != nil {
 		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
@@ -311,6 +297,45 @@ degraded, because an index nobody is updating is not a current index.
 		return 1
 	}
 
+	// STAGE 0 — quiesce. Re-activating a machine that is ALREADY supervised has
+	// to stop the running engine first: it holds the index open, and `gno setup`
+	// against a locked database fails with a message about permissions that has
+	// nothing to do with the actual cause. The unit is started again by stage 3,
+	// and on any failure in between by the resume below — a failed activation
+	// must not leave a machine with its engine stopped.
+	resume := func() {}
+	if prev, loadErr := gno.LoadConfig(dir); loadErr == nil && prev.UnitLabel != "" {
+		quiesce := supervise.Installer{Platform: platform, Dir: units, Runner: supervisorRunner(stdout, stderr)}
+		start, quiesceErr := gno.SupervisorQuiesce(dir, prev, quiesce, strconv.Itoa(os.Getuid()))(ctx)
+		if quiesceErr != nil {
+			fmt.Fprintln(stderr, "homeplane-agent: stop the supervised engine before re-binding: "+quiesceErr.Error())
+			recordGNO(dir, gnoComponentFor(quiesceErr))
+			return 1
+		}
+		if start != nil {
+			resume = func() {
+				if err := start(); err != nil {
+					fmt.Fprintln(stderr, "homeplane-agent: WARNING: the supervised engine did not restart: "+err.Error())
+				}
+			}
+		}
+	}
+
+	// STAGE 1 — prepare: every refusal that must precede supervision.
+	prepared, err := gno.Prepare(ctx, gno.PrepareOptions{
+		StateDir:   dir,
+		VaultPath:  vault,
+		Collection: *collection,
+		CLI:        cli,
+		ProbeQuery: *query,
+	})
+	if err != nil {
+		resume()
+		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
+		recordGNO(dir, gnoComponentFor(err))
+		return 1
+	}
+
 	// STAGE 2 — install: unit, endpoint descriptor, removal plan.
 	cfg, descriptor, err := gno.Install(gno.InstallOptions{
 		StateDir:    dir,
@@ -322,6 +347,7 @@ degraded, because an index nobody is updating is not a current index.
 		Index:       cli.Index,
 	})
 	if err != nil {
+		resume()
 		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
 		recordGNO(dir, gnoComponentFor(err))
 		return 1
@@ -330,6 +356,7 @@ degraded, because an index nobody is updating is not a current index.
 	// STAGE 3 — apply: load it into the supervisor, only when asked.
 	cfg, cmds, err := gno.Apply(dir, installer, strconv.Itoa(os.Getuid()), nil)
 	if err != nil {
+		resume()
 		fmt.Fprintln(stderr, "homeplane-agent: "+err.Error())
 		recordGNO(dir, gnoComponentFor(err))
 		return 1

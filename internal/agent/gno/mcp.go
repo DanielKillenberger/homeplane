@@ -92,7 +92,7 @@ func ProbeMCP(ctx context.Context, opts MCPProbeOptions) MCPProbe {
 	}
 
 	cmd := exec.CommandContext(ctx, opts.Command, opts.Args...)
-	cmd.Env = mergeEnv(opts.Env)
+	cmd.Env = mergeEnv(opts.Command, opts.Env)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		probe.Detail = "stdin pipe: " + err.Error()
@@ -346,7 +346,11 @@ func (c *stdioClient) write(v any) error {
 // mergeEnv overlays the descriptor's environment onto the process environment,
 // dropping any inherited GNO_* first so an ambient value cannot redirect the
 // probe away from the machine's own index.
-func mergeEnv(overlay map[string]string) []string {
+// mergeEnv builds a launch environment for a command, with the same PATH
+// discipline the CLI uses: the launcher's PATH is not something a supervised or
+// harness-spawned process can rely on, and the engine's interpreter is resolved
+// through it.
+func mergeEnv(command string, overlay map[string]string) []string {
 	var env []string
 	for _, kv := range osEnviron() {
 		key, _, _ := strings.Cut(kv, "=")
@@ -361,6 +365,9 @@ func mergeEnv(overlay map[string]string) []string {
 	}
 	for k, v := range overlay {
 		env = append(env, k+"="+v)
+	}
+	if _, pinned := overlay["PATH"]; !pinned {
+		env = append(env, "PATH="+childPath(command))
 	}
 	return env
 }

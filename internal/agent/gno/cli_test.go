@@ -199,3 +199,58 @@ func TestExtractJSONObjectSurvivesProgressChatter(t *testing.T) {
 		t.Fatalf("wrong object extracted: %s", raw)
 	}
 }
+
+// TestChildPathPutsTheEngineRuntimeAheadOfTheInheritedOne is the "works in the
+// terminal, not under the supervisor" bug in test form. The engine is invoked by
+// absolute path but is a script whose interpreter is resolved through PATH, and
+// launchd hands a job almost none — so a daemon that inherits the launcher's
+// PATH dies with `env: bun: No such file or directory` while the same command
+// works by hand.
+func TestChildPathPutsTheEngineRuntimeAheadOfTheInheritedOne(t *testing.T) {
+	t.Setenv("PATH", "/opt/somewhere")
+	got := childPath("/Users/someone/.bun/bin/gno")
+	dirs := filepath.SplitList(got)
+	if len(dirs) == 0 || dirs[0] != "/Users/someone/.bun/bin" {
+		t.Fatalf("childPath = %q; the engine's own directory must come first", got)
+	}
+	var sawInherited bool
+	for _, d := range dirs {
+		if d == "/opt/somewhere" {
+			sawInherited = true
+		}
+	}
+	if !sawInherited {
+		t.Errorf("childPath = %q dropped the inherited PATH; an interactive run must keep behaving the same", got)
+	}
+	// A supervised process may inherit nothing at all.
+	t.Setenv("PATH", "")
+	got = childPath("/Users/someone/.bun/bin/gno")
+	for _, want := range []string{"/usr/bin", "/bin"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("childPath with no inherited PATH = %q, missing %s", got, want)
+		}
+	}
+}
+
+// TestMergeEnvPinsThePathForHarnessLaunches: the stdio endpoint a harness spawns
+// has the same problem from the other side — a harness started from a GUI has
+// its own minimal PATH.
+func TestMergeEnvPinsThePathForHarnessLaunches(t *testing.T) {
+	env := mergeEnv("/Users/someone/.bun/bin/gno", map[string]string{"GNO_X": "1"})
+	var path string
+	for _, kv := range env {
+		if k, v, _ := strings.Cut(kv, "="); k == "PATH" {
+			path = v
+		}
+	}
+	if !strings.HasPrefix(path, "/Users/someone/.bun/bin") {
+		t.Fatalf("launch PATH = %q; the engine's own directory must come first", path)
+	}
+	// An explicit PATH in the launch template still wins: it is the operator's.
+	env = mergeEnv("/Users/someone/.bun/bin/gno", map[string]string{"PATH": "/only/this"})
+	for _, kv := range env {
+		if k, v, _ := strings.Cut(kv, "="); k == "PATH" && v != "/only/this" {
+			t.Errorf("an explicit launch PATH was overridden: %q", v)
+		}
+	}
+}

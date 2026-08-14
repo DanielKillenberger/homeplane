@@ -429,7 +429,49 @@ func (c CLI) environ() []string {
 	if c.Dirs.Cache != "" {
 		env = append(env, EnvCacheDir+"="+c.Dirs.Cache)
 	}
-	return env
+	return append(env, "PATH="+childPath(c.Bin))
+}
+
+// childPath is the PATH the engine runs with.
+//
+// The engine binary is invoked by absolute path, which is not enough: it is a
+// script whose interpreter (`bun`) is resolved through PATH, and a SUPERVISED
+// process has almost none — launchd hands a job `/usr/bin:/bin:/usr/sbin:/sbin`
+// and systemd little more. The failure that produced this is exactly the
+// "works in the terminal, not under the supervisor" shape the descriptor
+// validation warns about, arriving from the other side: `gno` starts fine by
+// hand and the daemon dies with `env: bun: No such file or directory`.
+//
+// So the runtime directories this machine actually provisioned are put in
+// front: the engine's own directory (where a package manager puts the
+// interpreter beside the script) and the agent's own bin directory (where the
+// installer puts Node and Bun). The inherited PATH follows, so an interactive
+// run keeps behaving the way it did.
+func childPath(engineBin string) string {
+	var dirs []string
+	seen := map[string]bool{}
+	add := func(dir string) {
+		if dir == "" || dir == "." || seen[dir] {
+			return
+		}
+		seen[dir] = true
+		dirs = append(dirs, dir)
+	}
+	if filepath.IsAbs(engineBin) {
+		add(filepath.Dir(engineBin))
+	}
+	if exe, err := os.Executable(); err == nil {
+		add(filepath.Dir(exe))
+	}
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		add(dir)
+	}
+	// A supervised process may inherit no PATH at all; these are the paths a
+	// POSIX system guarantees, and without them the engine could not run `env`.
+	for _, dir := range []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin"} {
+		add(dir)
+	}
+	return strings.Join(dirs, string(filepath.ListSeparator))
 }
 
 // tailBuffer keeps at most limit bytes, discarding from the front, so a daemon

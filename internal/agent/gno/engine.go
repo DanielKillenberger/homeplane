@@ -912,11 +912,18 @@ func acquireRebuildLock(stateDir string) (func(), error) {
 // SupervisorQuiesce stops the supervised unit through the platform supervisor
 // and returns a resume that starts it again.
 //
-// It is a no-op when the unit was never applied: there is nothing holding the
-// index open, so stopping and starting would only add failure modes.
+// It is a no-op when the supervisor does not currently hold the unit: there is
+// nothing holding the index open, so stopping and starting would only add
+// failure modes.
+//
+// Whether it is held is asked of the SUPERVISOR, not of our own config. A run
+// that rewrote the config while the job was still loaded — which is exactly what
+// a re-activation does — would otherwise skip the stop and then fail against an
+// index the running engine still has open, reporting a locked database as a
+// permissions problem.
 func SupervisorQuiesce(stateDir string, cfg Config, installer supervise.Installer, uid string) func(context.Context) (func() error, error) {
 	return func(ctx context.Context) (func() error, error) {
-		if !cfg.Applied || installer.Runner == nil {
+		if installer.Runner == nil {
 			return nil, nil
 		}
 		agentBin := cfg.UnitPath
@@ -926,6 +933,9 @@ func SupervisorQuiesce(stateDir string, cfg Config, installer supervise.Installe
 		unit, err := DaemonUnit(agentBin, stateDir, cfg.DaemonHost, cfg.DaemonPort, cfg.GatewayToken)
 		if err != nil {
 			return nil, err
+		}
+		if !installer.IsLoaded(unit, uid) {
+			return nil, nil
 		}
 		stop, err := installer.StopCommands(unit, uid)
 		if err != nil {

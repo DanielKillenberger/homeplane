@@ -204,7 +204,7 @@ func RunStdioEndpoint(ctx context.Context, opts StdioOptions) error {
 	}
 
 	cmd := exec.CommandContext(ctx, opts.Command, opts.Args...)
-	cmd.Env = mergeEnv(opts.Env)
+	cmd.Env = mergeEnv(opts.Command, opts.Env)
 	cmd.Stdin = opts.Stdin
 	cmd.Stdout = opts.Stdout
 	cmd.Stderr = opts.Stderr

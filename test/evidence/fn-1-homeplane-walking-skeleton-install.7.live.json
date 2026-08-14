@@ -1,0 +1,357 @@
+{
+  "commit": "f1989bb1e765e934e4badeff6db8215ea635a2f0",
+  "deployment": {
+    "account": "daniel.killenberger@gmail.com",
+    "agent": "/Users/daniel/.homeplane/bin/homeplane-agent",
+    "calendar_id": "primary",
+    "server_host": "clawniel",
+    "server_url": "http://homeplane.tailab4e9b.ts.net",
+    "vault": "/Users/daniel/Documents/daniel-os"
+  },
+  "kind": "live_e2e_proof",
+  "schema_version": 1,
+  "stages": [
+    {
+      "stage": "install",
+      "status": "pass",
+      "started_at": "2026-08-14T12:58:25Z",
+      "finished_at": "2026-08-14T12:58:31Z",
+      "steps": [
+        {
+          "what": "scripts/stage-release.sh (checksummed release-form artifacts)",
+          "command": [
+            "/Users/daniel/Projects/homeplane/scripts/stage-release.sh",
+            "/Users/daniel/Projects/homeplane/dist"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "stage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-darwin-arm64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-darwin-amd64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-linux-amd64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-server-linux-amd64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-linux-arm64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-server-linux-arm64\nstage-release.sh: staging node v22.11.0 (pinned in /Users/daniel/Projects/homeplane/scripts/node-pinned.sha256)\nstage-release.sh: staged node-v22.11.0-darwin-arm64.tar.gz\nstage-release.sh: staged node-v22.11.0-darwin-x64.tar.gz\nstage-release.sh: staged node-v22.11.0-linux-x64.tar.gz\nstage-release.sh: staged node-v22.11.0-linux-arm64.tar.gz\nstage-release.sh: staging bun v1.3.11 (pinned in /Users/daniel/Projects/homeplane/scripts/bun-pinned.sha256)\nstage-release.sh: staged bun-v1.3.11-darwin-aarch64.zip\nstage-release.sh: staged bun-v1.3.11-darwin-x64.zip\nstage-release.sh: staged bun-v1.3.11-linux-x64.zip\nstage-release.sh: staged bun-v1.3.11-linux-aarch64.zip\n\nstage-release.sh: staged /Users/daniel/Projects/homeplane/dist (agent version f1989bb):\n03f6161af9d25dce063620c5886323ef99e6ca2e58472ade41c710aac636b2c7  homeplane-agent-darwin-amd64\n079f4badb01ade5a98fc940eade56281da14f547e728fc64bd86673a102934a0  homeplane-agent-darwin-arm64\ne5ccbd86265ab7a35fced035f9e9c940c9231ec665973b45a873fefba98d37c2  homeplane-agent-linux-amd64\ne9012cbb1b0c71df82f46b1d033e519c79c010a8d83d11f1e76d0d01f3dc93bd  homeplane-agent-linux-arm64\na16a394cf4457f1adef9c1649173ee77130c0be385968fa5695d5eb8cae785ba  homeplane-server-linux-amd64\n659a9bcf7d9953b8e89ac2853dc6efee7cf1e94da8b8de7f6730d35eb245dbb3  homeplane-server-linux-arm64\n2e89afe6f4e3aa6c7e21c560d8a0453d84807e97850bbb819b998531a22bdfde  node-v22.11.0-darwin-arm64.tar.gz\n668d30b9512137b5f5baeef6c1bb4c46efff9a761ba990a034fb6b28b9da2465  node-v22.11.0-darwin-x64.tar.gz\n27453f7a0dd6b9e6738f1f6ea6a09b102ec7aa484de1e39d6a1c3608ad47aa6a  node-v22.11.0-linux-arm64.tar.gz\n4f862bab52039835efbe613b532238b6e4dde98d139a34e6923193e073438b13  node-v22.11.0-linux-x64.tar.gz\n6f5a3467ed9caec4795bf78cd476507d9f870c7d57b86c945fcb338126772ffc  bun-v1.3.11-darwin-aarch64.zip\nc4fe2b9247218b0295f24e895aaec8fee62e74452679a9026b67eacbd611a286  bun-v1.3.11-darwin-x64.zip\nd13944da12a53ecc74bf6a720bd1d04c4555c038dfe422365356a7be47691fdf  bun-v1.3.11-linux-aarch64.zip\n8611ba935af886f05a6f38740a15160326c15e5d5d07adef966130b4493607ed  bun-v1.3.11-linux-x64.zip\n\ninstall with: ./install.sh --stage-dir /Users/daniel/Projects/homeplane/dist",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:58:25Z",
+          "duration": "5.056s"
+        },
+        {
+          "what": "./install.sh (one command, from the staged artifacts)",
+          "command": [
+            "/Users/daniel/Projects/homeplane/install.sh",
+            "--stage-dir",
+            "/Users/daniel/Projects/homeplane/dist"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "install.sh: platform darwin/arm64 supervised by launchd\ninstall.sh: verified homeplane-agent-darwin-arm64 (079f4badb01ade5a98fc940eade56281da14f547e728fc64bd86673a102934a0)\ninstall.sh: node 22+ already present\ninstall.sh: bun 1.3+ already present\ninstall.sh: installed /Users/daniel/.homeplane/bin/homeplane-agent\n\nHomeplane agent installed.\n\n  /Users/daniel/.homeplane/bin/homeplane-agent\n\nNext:\n  1. add /Users/daniel/.homeplane/bin to your PATH\n  2. enrol this machine:  homeplane-agent enrol -server https://\u003cserver\u003e.ts.net\n  3. check it:            homeplane-agent status\n\nEnrolment state lives in ~/.homeplane and is untouched by re-running this\ninstaller.",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:58:30Z",
+          "duration": "454ms"
+        },
+        {
+          "what": "the INSTALLED agent runs",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "version"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "homeplane-agent f1989bb",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:58:31Z",
+          "duration": "264ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "the staged release carries a checksum manifest",
+          "ok": true,
+          "detail": "dist/SHA256SUMS: 1340 bytes"
+        },
+        {
+          "claim": "the installer completes on this machine",
+          "ok": true,
+          "detail": "exit 0"
+        },
+        {
+          "claim": "the installed agent reports its version",
+          "ok": true,
+          "detail": "homeplane-agent f1989bb"
+        }
+      ]
+    },
+    {
+      "stage": "enrol",
+      "status": "pass",
+      "started_at": "2026-08-14T12:44:54Z",
+      "finished_at": "2026-08-14T12:44:57Z",
+      "steps": [
+        {
+          "what": "homeplane-agent enrol (against the live control plane)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "enrol",
+            "-server",
+            "http://homeplane.tailab4e9b.ts.net",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"credential_version\": 1,\n  \"enroled_at\": \"2026-08-14T12:44:55.458818Z\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"rotated\": false,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"state_dir\": \"/Users/daniel/.homeplane\"\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:44:54Z",
+          "duration": "574ms"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-14T12:44:55.466361Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 1\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no vault path recorded yet\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"not started: no vault on this machine — run `homeplane-agent vault detect -record` or `vault retrieve` first (retryable)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no harness is configured yet\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no grants issued to this machine\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"grants\": [],\n  \"server\": {\n    \"status\": \"ok\",\n    \"components\": [\n      {\n        \"name\": \"credential_store\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"gateway_runtime\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"store\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"tsnet\",\n        \"status\": \"ok\"\n      }\n    ]\n  }\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:44:55Z",
+          "duration": "332ms"
+        },
+        {
+          "what": "homeplane-agent enrol again (rotation, not a duplicate)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "enrol",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"credential_version\": 2,\n  \"enroled_at\": \"2026-08-14T12:44:56.030333Z\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"rotated\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"state_dir\": \"/Users/daniel/.homeplane\"\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:44:55Z",
+          "duration": "239ms"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-14T12:44:56.037174Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 2\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no vault path recorded yet\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"not started: no vault on this machine — run `homeplane-agent vault detect -record` or `vault retrieve` first (retryable)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no harness is configured yet\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no grants issued to this machine\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"grants\": [],\n  \"server\": {\n    \"status\": \"ok\",\n    \"components\": [\n      {\n        \"name\": \"credential_store\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"gateway_runtime\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"store\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"tsnet\",\n        \"status\": \"ok\"\n      }\n    ]\n  }\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:44:56Z",
+          "duration": "330ms"
+        },
+        {
+          "what": "server audit: enrolment rows",
+          "command": [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "clawniel",
+            "/home/claw/homeplane/bin/homeplane-server admin audit -state-dir /home/claw/homeplane/var -json -since 2026-08-14T12:43:54Z -limit 2000"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\"ID\":41,\"TS\":\"2026-08-14T12:44:55.383754502Z\",\"Event\":\"enrolment\",\"ActorKind\":\"machine\",\"ObservedNodeID\":\"noo31buBSC11CNTRL\",\"ObservedNodeName\":\"daniels-macbook-pro\",\"AuthMachineID\":\"m-1bc11c520f7c59e2\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"credential_version\":\"1\",\"machine_name\":\"Daniels-MacBook-Pro.local\",\"os\":\"darwin\"}}\n{\"ID\":42,\"TS\":\"2026-08-14T12:44:55.960714117Z\",\"Event\":\"credential_rotation\",\"ActorKind\":\"machine\",\"ObservedNodeID\":\"noo31buBSC11CNTRL\",\"ObservedNodeName\":\"daniels-macbook-pro\",\"AuthMachineID\":\"m-1bc11c520f7c59e2\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"credential_version\":\"2\",\"machine_name\":\"Daniels-MacBook-Pro.local\",\"os\":\"darwin\"}}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:44:56Z",
+          "duration": "1.017s"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "enrolment succeeds over the tailnet",
+          "ok": true,
+          "detail": "exit 0"
+        },
+        {
+          "claim": "the machine holds a server-issued identity",
+          "ok": true,
+          "detail": "machine_id m-1bc11c520f7c59e2, server http://homeplane.tailab4e9b.ts.net"
+        },
+        {
+          "claim": "re-enrolment succeeds",
+          "ok": true,
+          "detail": "exit 0"
+        },
+        {
+          "claim": "re-enrolment preserves the machine identity",
+          "ok": true,
+          "detail": "machine_id before m-1bc11c520f7c59e2, after m-1bc11c520f7c59e2"
+        },
+        {
+          "claim": "the enrolment is attributed to the observed tailnet node",
+          "ok": true,
+          "detail": "observed daniels-macbook-pro (noo31buBSC11CNTRL), actor machine"
+        },
+        {
+          "claim": "the server recorded the enrolment",
+          "ok": true,
+          "detail": "1 enrolment row(s) for m-1bc11c520f7c59e2"
+        }
+      ]
+    },
+    {
+      "stage": "vault",
+      "status": "pass",
+      "started_at": "2026-08-14T12:44:57Z",
+      "finished_at": "2026-08-14T12:44:57Z",
+      "steps": [
+        {
+          "what": "homeplane-agent vault detect -record",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "vault",
+            "detect",
+            "-record",
+            "-vault-path",
+            "/Users/daniel/Documents/daniel-os"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "vault: /Users/daniel/Documents/daniel-os (explicit)",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:44:57Z",
+          "duration": "21ms"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-14T12:44:57.406514Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 2\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"not_configured\",\n      \"detail\": \"the retrieval engine is not configured yet\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no harness is configured yet\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no grants issued to this machine\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"grants\": [],\n  \"server\": {\n    \"status\": \"ok\",\n    \"components\": [\n      {\n        \"name\": \"credential_store\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"gateway_runtime\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"store\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"tsnet\",\n        \"status\": \"ok\"\n      }\n    ]\n  }\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:44:57Z",
+          "duration": "336ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "the agent finds the vault",
+          "ok": true,
+          "detail": "exit 0"
+        },
+        {
+          "claim": "status reports the vault",
+          "ok": true,
+          "detail": "vault: ok (/Users/daniel/Documents/daniel-os)"
+        },
+        {
+          "claim": "the recorded vault is the real one",
+          "ok": true,
+          "detail": "detail \"/Users/daniel/Documents/daniel-os\" names /Users/daniel/Documents/daniel-os"
+        }
+      ]
+    },
+    {
+      "stage": "gno",
+      "status": "pass",
+      "started_at": "2026-08-14T12:58:31Z",
+      "finished_at": "2026-08-14T13:00:00Z",
+      "steps": [
+        {
+          "what": "homeplane-agent gno activate",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "gno",
+            "activate"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "gui/501/com.homeplane.gno = {\n\tactive count = 1\n\tpath = /Users/daniel/Library/LaunchAgents/com.homeplane.gno.plist\n\ttype = LaunchAgent\n\tstate = running\n\n\tprogram = /Users/daniel/.homeplane/bin/homeplane-agent\n\targuments = {\n\t\t/Users/daniel/.homeplane/bin/homeplane-agent\n\t\tgno\n\t\trun\n\t\t-state-dir\n\t\t/Users/daniel/.homeplane\n\t\t-host\n\t\t127.0.0.1\n\t\t-port\n\t\t3077\n\t\t-gateway-token-file\n\t\t/Users/daniel/.homeplane/gno/config/gateway-token\n\t}\n\n\tworking directory = /Users/daniel/.homeplane\n\n\tstdout path = /Users/daniel/.homeplane/logs/gno.log\n\tstderr path = /Users/daniel/.homeplane/logs/gno.err.log\n\tinherited environment = {\n\t\tSSH_AUTH_SOCK =\u003e /var/run/com.apple.launchd.m6TpQdHqMD/Listeners\n\t}\n\n\tdefault environment = {\n\t\tPATH =\u003e /usr/bin:/bin:/usr/sbin:/sbin\n\t}\n\n\tenvironment = {\n\t\tOSLogRateLimit =\u003e 64\n\t\tXPC_SERVICE_NAME =\u003e com.homeplane.gno\n\t}\n\n\tdomain = gui/501 [100015]\n\tasid = 100015\n\tminimum runtime = 10\n\texit timeout = 5\n\truns = 29\n\tpid = 27037\n\timmediate reason = inefficient\n\tforks = 2\n\texecs = 1\n\tinitialized = 1\n\ttrampolined = 1\n\tstarted suspended = 0\n\tproxy started suspended = 0\n\tchecked allocations = 0 (queried = 1)\n\tchecked allocations reason = no host\n\tchecked allocations flags = 0x0\n\tlast exit code = 1\n\n\tresource coalition = {\n\t\tID = 136935\n\t\ttype = resource\n\t\tstate = active\n\t\tactive count = 1\n\t\tname = com.homeplane.gno\n\t}\n\n\tjetsam coalition = {\n\t\tID = 136936\n\t\ttype = jetsam\n\t\tstate = active\n\t\tactive count = 1\n\t\tname = com.homeplane.gno\n\t}\n\n\tspawn type = background (5)\n\tjetsam priority = 40\n\tjetsam memory limit (active) = (unlimited)\n\tjetsam memory limit (inactive) = (unlimited)\n\tjetsamproperties category = daemon\n\tjetsam thread limit = 32\n\tcpumon = default\n\n\tproperties = keepalive | runatload | inferred program\n}\nretrieval engine installed (not loaded) for /Users/daniel/Documents/daniel-os\n  engine:     gno 1.29.6 (/Users/daniel/.bun/bin/gno)\n  collection: daniel-os\n  index:      /Users/daniel/.homeplane/gno/data/index-default.sqlite (54386688 bytes, machine-local and disposable)\n  health:     9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn)\n  endpoint:   stdio via /Users/daniel/.homeplane/endpoints/retrieval-engine.json (30 tools)\n  probe:      last stdio launch ok at 2026-08-14T12:59:49Z (gno 1.29.6, 30 tools)\n  daemon:     127.0.0.1:3077, unit /Users/daniel/Library/LaunchAgents/com.homeplane.gno.plist\n  NOT LOADED — the index is not being kept current. Run `gno apply`, or:\n    launchctl bootout gui/501/com.homeplane.gno\n    launchctl bootstrap gui/501 /Users/daniel/Library/LaunchAgents/com.homeplane.gno.plist\n    launchctl enable gui/501/com.homeplane.gno\n    launchctl kickstart -k gui/501/com.homeplane.gno",
+          "stderr_excerpt": "1.29.6\n{\n  \"schemaVersion\": \"1.0\",\n  \"status\": \"completed\",\n  \"lexical\": {\n    \"receipt\": {\n      \"schemaVersion\": \"1.0\",\n      \"status\": \"completed\",\n      \"generatedAt\": \"2026-08-14T12:59:48.851Z\",\n      \"input\": {\n        \"folder\": \"/Users/daniel/Documents/daniel-os\",\n        \"folderFingerprint\": \"e250147b057a1710f6e7308dccb0207ff93353bebb2692399ced83033e368736\",\n        \"indexName\": \"default\",\n        \"requestedName\": \"daniel-os\",\n        \"excludes\": [\n          \".DS_Store\",\n          \".git\",\n          \".idea\",\n          \".venv\",\n          \"Thumbs.db\",\n          \"__pycache__\",\n          \"build\",\n          \"dist\",\n          \"node_modules\"\n        ],\n        \"secretRiskAuthorized\": false\n      },\n      \"fingerprints\": {\n        \"input\": \"cb624edce6974e899be8433d1eea8437bb6abee98c6c417cfd4e7f5d4c419bee\",\n        \"config\": \"3d959ce39bab9bcaffea3197a5beee014bbb877562bf35702ca0b0b1bb50fd23\",\n        \"index\": \"d86b38fa912f6124a7957aa288717105d7171a2eced572b39d9b3b9386d8af72\"\n      },\n      \"collection\": {\n        \"name\": \"daniel-os\",\n        \"path\": \"/Users/daniel/Documents/daniel-os\",\n        \"disposition\": \"reused\"\n      },\n      \"paths\": {\n        \"config\": \"/Users/daniel/.homeplane/gno/config/index.yml\",\n        \"receipt\": \"/Users/daniel/.homeplane/gno/data/setup-receipts/default/e250147b057a1710f6e7308dccb0207ff93353bebb2692399ced83033e368736.json\"\n      },\n      \"stages\": {\n        \"preflight\": {\n          \"status\": \"passed\",\n          \"token\": \"da8ce70ab8a9a9c549bf9cdd2eb6aaa375cafbbfa1aa9f72a4c56a02b91d3cb0\",\n          \"startedAt\": \"2026-08-14T12:58:31.892Z\",\n          \"completedAt\": \"2026-08-14T12:58:32.016Z\",\n          \"code\": null,\n          \"remediation\": null\n        },\n        \"config_saved\": {\n          \"status\": \"passed\",\n          \"token\": \"f46aeb22168fb4a2986139ee3381b566a08c4a38d6582079b7c7676b10d294b5\",\n          \"startedAt\": \"2026-08-14T12:58:32.016Z\",\n          \"completedAt\": \"2026-08-14T12:58:32.024Z\",\n          \"code\": null,\n          \"remediation\": null\n        },\n        \"store_synced\": {\n          \"status\": \"passed\",\n          \"token\": \"19c4de5a0e034f3ebfc16c383a3abf58b1962aea15e461350b8bdff90ea11c15\",\n          \"startedAt\": \"2026-08-14T12:58:32.025Z\",\n          \"completedAt\": \"2026-08-14T12:58:32.026Z\",\n          \"code\": null,\n          \"remediation\": null\n        },\n        \"lexical_indexed\": {\n          \"status\": \"passed\",\n          \"token\": \"6e144b15e32a3942212c76763e9336f4eb792f18e424cf759dad9c68eaad87ad\",\n          \"startedAt\": \"2026-08-14T12:58:32.027Z\",\n          \"completedAt\": \"2026-08-14T12:59:48.728Z\",\n          \"code\": null,\n          \"remediation\": null\n        },\n        \"lexical_proved\": {\n          \"status\": \"passed\",\n          \"token\": \"1e0c8875154751e46bd4270f7d4094b485cb775610d276aa43248561ca791db7\",\n          \"startedAt\": \"2026-08-14T12:59:48.729Z\",\n          \"completedAt\": \"2026-08-14T12:59:48.847Z\",\n          \"code\": null,\n          \"remediation\": null\n        },\n        \"completed\": {\n          \"status\": \"passed\",\n          \"token\": \"d95c275f03b122a721cadcf8509a9f64c373e1dcdc841f30655069ccdfa2f5a7\",\n          \"startedAt\": \"2026-08-14T12:59:48.851Z\",\n          \"completedAt\": \"2026-08-14T12:59:48.851Z\",\n          \"code\": null,\n          \"remediation\": null\n        }\n      },\n      \"pending\": [],\n      \"failure\": null,\n      \"activation\": {\n        \"schemaVersion\": \"1.0\",\n        \"collection\": \"daniel-os\",\n        \"fingerprint\": \"d86b38fa912f6124a7957aa288717105d7171a2eced572b39d9b3b9386d8af72\",\n        \"ready\": true,\n        \"generatedAt\": \"2026-08-14T12:59:48.833Z\",\n        \"stages\": {\n          \"index\": {\n            \"status\": \"passed\",\n            \"startedAt\": \"2026-08-14T12:59:48.741Z\",\n            \"completedAt\": \"2026-08-14T12:59:48.741Z\",\n            \"latencyMs\": 0\n          },\n          \"lexical\": {\n            \"status\": \"passed\",\n            \"startedAt\": \"2026-08-14T12:59:48.741Z\",\n            \"completedAt\": \"2026-08-14T12:59:48.833Z\",\n            \"latencyMs\": 92\n          }\n…[40367 bytes truncated]",
+          "at": "2026-08-14T12:58:31Z",
+          "duration": "1m17.99s"
+        },
+        {
+          "what": "homeplane-agent gno apply (load the supervision unit)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "gno",
+            "apply"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "launchctl bootout gui/501/com.homeplane.gno\n  launchctl bootstrap gui/501 /Users/daniel/Library/LaunchAgents/com.homeplane.gno.plist\n  launchctl enable gui/501/com.homeplane.gno\n  launchctl kickstart -k gui/501/com.homeplane.gno\nretrieval engine loaded into launchd",
+          "stderr_excerpt": "Boot-out failed: 3: No such process",
+          "at": "2026-08-14T12:59:49Z",
+          "duration": "10.047s"
+        },
+        {
+          "what": "homeplane-agent gno endpoint -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "gno",
+            "endpoint",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"schema_version\": 1,\n  \"component\": \"retrieval-engine\",\n  \"engine\": \"gno\",\n  \"engine_version\": \"1.29.6\",\n  \"transport\": \"stdio\",\n  \"command\": \"/Users/daniel/.homeplane/bin/homeplane-agent\",\n  \"args\": [\n    \"gno\",\n    \"mcp\",\n    \"-state-dir\",\n    \"/Users/daniel/.homeplane\"\n  ],\n  \"env\": {\n    \"GNO_CACHE_DIR\": \"/Users/daniel/.homeplane/gno/cache\",\n    \"GNO_DATA_DIR\": \"/Users/daniel/.homeplane/gno/data\"\n  },\n  \"server_name\": \"gno\",\n  \"underlying\": {\n    \"command\": \"/Users/daniel/.bun/bin/bun\",\n    \"args\": [\n      \"run\",\n      \"/Users/daniel/.bun/install/global/node_modules/@gmickel/gno/src/index.ts\",\n      \"--index\",\n      \"default\",\n      \"--config\",\n      \"/Users/daniel/.homeplane/gno/config/index.yml\",\n      \"mcp\"\n    ],\n    \"env\": {\n      \"GNO_CACHE_DIR\": \"/Users/daniel/.homeplane/gno/cache\",\n      \"GNO_DATA_DIR\": \"/Users/daniel/.homeplane/gno/data\"\n    },\n    \"derived_from\": \"gno mcp install --target claude-code --scope user --dry-run --json\"\n  },\n  \"collection\": \"daniel-os\",\n  \"vault_path\": \"/Users/daniel/Documents/daniel-os\",\n  \"derived_from\": \"gno mcp install --target claude-code --scope user --dry-run --json\",\n  \"supervision\": {\n    \"mode\": \"daemon\",\n    \"unit_label\": \"com.homeplane.gno\",\n    \"host\": \"127.0.0.1\",\n    \"port\": 3077,\n    \"health_command\": \"/Users/daniel/.bun/bin/gno\",\n    \"health_args\": [\n      \"doctor\",\n      \"--json\"\n    ]\n  },\n  \"written_at\": \"2026-08-14T12:59:49.580489Z\"\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:59:59Z",
+          "duration": "16ms"
+        },
+        {
+          "what": "homeplane-agent gno doctor -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "gno",
+            "doctor",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"healthy\": true,\n  \"checks\": [\n    {\n      \"name\": \"config\",\n      \"status\": \"ok\",\n      \"message\": \"Config loaded: /Users/daniel/.homeplane/gno/config/index.yml\"\n    },\n    {\n      \"name\": \"database\",\n      \"status\": \"ok\",\n      \"message\": \"Database found: /Users/daniel/.homeplane/gno/data/index-default.sqlite\"\n    },\n    {\n      \"name\": \"embed-model\",\n      \"status\": \"warn\",\n      \"message\": \"embed model not cached. Run: gno models pull --embed\"\n    },\n    {\n      \"name\": \"rerank-model\",\n      \"status\": \"warn\",\n      \"message\": \"rerank model not cached. Run: gno models pull --rerank\"\n    },\n    {\n      \"name\": \"gen-model\",\n      \"status\": \"warn\",\n      \"message\": \"gen model not cached. Run: gno models pull --gen\"\n    },\n    {\n      \"name\": \"node-llama-cpp\",\n      \"status\": \"ok\",\n      \"message\": \"node-llama-cpp package available (runtime not initialized)\"\n    },\n    {\n      \"name\": \"sqlite-fts5\",\n      \"status\": \"ok\",\n      \"message\": \"FTS5 available\"\n    },\n    {\n      \"name\": \"sqlite-json\",\n      \"status\": \"ok\",\n      \"message\": \"JSON1 available\"\n    },\n    {\n      \"name\": \"fts5-snowball\",\n      \"status\": \"ok\",\n      \"message\": \"fts5-snowball loaded\"\n    },\n    {\n      \"name\": \"sqlite-vec\",\n      \"status\": \"ok\",\n      \"message\": \"sqlite-vec loaded (v0.1.9)\"\n    },\n    {\n      \"name\": \"code-chunking\",\n      \"status\": \"ok\",\n      \"message\": \"automatic structural chunking for .ts, .tsx, .js, .jsx, .py, .go, .rs\"\n    },\n    {\n      \"name\": \"embedding-fingerprint\",\n      \"status\": \"warn\",\n      \"message\": \"current 5eebc531c4d5, 4563 pending/stale, 0 legacy, 0 groups\"\n    },\n    {\n      \"name\": \"retrieval-activation\",\n      \"status\": \"ok\",\n      \"message\": \"1 collection passed lexical retrieval proof\"\n    }\n  ]\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:59:59Z",
+          "duration": "168ms"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-14T12:59:59.836067Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 2\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"ok\",\n      \"detail\": \"pid 34764 is alive; 1 starts (last 2026-08-14T12:59:59Z, pid 34764); /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T12:59:49Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no harness is configured yet\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no grants issued to this machine\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"grants\": [],\n  \"server\": {\n    \"status\": \"ok\",\n    \"components\": [\n      {\n        \"name\": \"credential_store\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"gateway_runtime\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"store\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"tsnet\",\n        \"status\": \"ok\"\n      }\n    ]\n  }\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T12:59:59Z",
+          "duration": "673ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "the retrieval engine activates against the vault",
+          "ok": true,
+          "detail": "exit 0: …print\": \"d86b38fa912f6124a7957aa288717105d7171a2eced572b39d9b3b9386d8af72\",\n        \"ready\": true,\n        \"generatedAt\": \"2026-08-14T12:59:48.833Z\",\n        \"stages\": {\n          \"index\": {\n            \"status\": \"passed\",\n            \"startedAt\": \"2026-08-14T12:59:48.741Z\",\n            \"completedAt\": \"2026-08-14T12:59:48.741Z\",\n            \"latencyMs\": 0\n          },\n          \"lexical\": {\n            \"status\": \"passed\",\n            \"startedAt\": \"2026-08-14T12:59:48.741Z\",\n            \"completedAt\": \"2026-08-14T12:59:48.833Z\",\n            \"latencyMs\": 92\n          }\n…[40367 bytes truncated]"
+        },
+        {
+          "claim": "the supervision unit is loaded into the platform's process manager",
+          "ok": true,
+          "detail": "exit 0: Boot-out failed: 3: No such process"
+        },
+        {
+          "claim": "the endpoint descriptor is published",
+          "ok": true,
+          "detail": "server_name \"gno\" transport \"stdio\" engine \"gno\""
+        },
+        {
+          "claim": "the engine's own health report is green",
+          "ok": true,
+          "detail": "exit 0: {"
+        },
+        {
+          "claim": "status reports the supervised engine",
+          "ok": true,
+          "detail": "gno: ok (pid 34764 is alive; 1 starts (last 2026-08-14T12:59:59Z, pid 34764); /Users/daniel/Documents/daniel-os → collection \"daniel-os\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T12:59:49Z (gno 1.29.6, 30 tools))"
+        },
+        {
+          "claim": "the index lives under the agent state dir, not in the vault",
+          "ok": true,
+          "detail": "state dir /Users/daniel/.homeplane; vault /Users/daniel/Documents/daniel-os"
+        }
+      ]
+    }
+  ],
+  "started_at": "2026-08-14T12:58:25Z",
+  "summary": {
+    "stages_failed": 0,
+    "stages_partial": 0,
+    "stages_passed": 4,
+    "stages_skipped": 0
+  },
+  "task": "fn-1-homeplane-walking-skeleton-install.7",
+  "updated_at": "2026-08-14T13:00:00Z",
+  "what_this_is": "The record of the end-to-end walking-skeleton proof: a real machine installed, enrolled and configured against the live server, and every capability exercised from the harnesses themselves. Nothing here can be produced by `go test ./...` — it needs a deployment and, once, a human at a consent screen. Each stage carries the commands it ran with their exit codes, and each assertion carries the observation that settles it. Connector claims are settled by the server's own audit log, never by what a harness said it did."
+}
