@@ -477,6 +477,9 @@ enabled = true
   preexisting-thing: /usr/bin/true --keep-me
   homeplane-edge: https://edge.example.invalid/mcp
 
+=== asserted: a newly added entry is ENABLED (no enable step needed) ===
+homeplane-edge: enabled = true, straight from mcp add
+
 === ${VAR} in a url: stored verbatim ===
 [mcp_servers.expand-probe]
 url = "https://${HP_PROBE_HOST}/mcp"
@@ -625,7 +628,9 @@ exit: 1
   └ gamma-dir-name         user
   └ hp-probe-alpha         user
 
-=== grok leader list (sealed home, DEFAULT socket) ===
+=== grok leader list (DISPOSABLE home, DEFAULT socket) ===
+(the operator's REAL context was checked separately as a precondition;
+ this observation covers the disposable home only)
 No leader candidates found.
 
 === a config change is visible to the very NEXT invocation ===

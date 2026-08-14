@@ -81,6 +81,7 @@ func TestTheCaptureFailsWhenAProbeFails(t *testing.T) {
 	stub := `
 case "$1" in
   --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  leader)    echo "No leader candidates found."; exit 0 ;;
   inspect)   echo "boom" >&2; exit 1 ;;
 esac
 exit 0
@@ -102,6 +103,7 @@ func TestTheCaptureFailsWhenProbesSucceedButReportNothing(t *testing.T) {
 	stub := `
 case "$1" in
   --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  leader)    echo "No leader candidates found."; exit 0 ;;
 esac
 exit 0
 `
@@ -124,6 +126,7 @@ func TestTheCaptureFailsWhenAnEarlyHelpProbeFails(t *testing.T) {
 	stub := `
 case "$1" in
   --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  leader)    echo "No leader candidates found."; exit 0 ;;
   --help)    echo "help is broken" >&2; exit 1 ;;
 esac
 exit 0
@@ -151,6 +154,7 @@ func TestTheCaptureRejectsATimedOutProbeRatherThanCallingItAFastFailure(t *testi
 	stub := `
 case "$1" in
   --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  leader)    echo "No leader candidates found."; exit 0 ;;
   --help)    exit 142 ;;
 esac
 exit 0
@@ -237,6 +241,7 @@ emit_config() {
 
 case "$1" in
   --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  leader)    echo "No leader candidates found."; exit 0 ;;
   --help|help) echo "stub help"; exit 0 ;;
   inspect)
     echo "  Skills (3)"
@@ -296,6 +301,19 @@ if [ "$1" = mcp ]; then
       echo "Added"
       exit 0 ;;
     list)
+      case " $* " in
+        *" --json "*)
+          # One object per entry, all enabled — the observed default.
+          printf '['
+          sep=""
+          while read -r _ n; do
+            [ -n "$n" ] || continue
+            printf '%s{"name":"%s","url":"https://x.invalid/mcp","enabled":true,"scope":"user"}' "$sep" "$n"
+            sep=","
+          done < <(grep '^#ENTRY ' "$GROK_HOME/.entries" 2>/dev/null)
+          printf ']\n'
+          exit 0 ;;
+      esac
       # Names only; enough for the relocation gate's positive sentinels.
       grep '^#ENTRY ' "$GROK_HOME/.entries" 2>/dev/null | sed 's/^#ENTRY /  /'
       exit 0 ;;
@@ -336,6 +354,29 @@ func TestTheCaptureSucceedsAgainstAGrokThatBehavesAsRecorded(t *testing.T) {
 	}
 }
 
+// "Entries land enabled, so no `grok mcp enable` step is needed" is a
+// conclusion task .2's writer depends on. A release that started writing
+// enabled=false must break this capture, not slip past it.
+func TestTheCaptureFailsWhenAnAddedEntryIsNotEnabled(t *testing.T) {
+	stub := wellBehavedStub(`
+if [ "$1" = mcp ] && [ "$2" = list ]; then
+  case " $* " in
+    *" --json "*)
+      echo '[{"name":"homeplane-edge","url":"https://edge.example.invalid/mcp","enabled":false},{"name":"staleness-probe","enabled":true},{"name":"expand-probe","enabled":true}]'
+      exit 0 ;;
+  esac
+fi
+`)
+	out, err := runCapture(t, stubGrok(t, stub))
+	if err == nil {
+		t.Fatalf("the capture SUCCEEDED with an entry that landed DISABLED;\n"+
+			"the 'no enable step needed' conclusion would have been recorded as proven.\noutput:\n%s", out)
+	}
+	if !strings.Contains(out, "did not land enabled") {
+		t.Errorf("the capture failed but not with an enabled diagnosis; output:\n%s", out)
+	}
+}
+
 // The fresh-process contract rests on there being no resident leader. A
 // capture taken on a machine that DOES run one must fail loudly rather than
 // record a guarantee that machine cannot honour — and it very nearly could
@@ -354,7 +395,7 @@ fi
 		t.Fatalf("the capture SUCCEEDED on a machine with a resident leader;\n"+
 			"the fresh-process contract would have been recorded as observed.\noutput:\n%s", out)
 	}
-	if !strings.Contains(out, "leader IS running") {
+	if !strings.Contains(out, "leader appears to be running") {
 		t.Errorf("the capture failed but not with a leader diagnosis; output:\n%s", out)
 	}
 }
@@ -447,6 +488,7 @@ func TestAFailedRecaptureLeavesAnExistingContractByteIdentical(t *testing.T) {
 	stub := `
 case "$1" in
   --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  leader)    echo "No leader candidates found."; exit 0 ;;
   inspect)   exit 1 ;;
 esac
 exit 0
@@ -472,6 +514,7 @@ func TestAFailedCaptureLeavesNoContractFile(t *testing.T) {
 	stub := `
 case "$1" in
   --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  leader)    echo "No leader candidates found."; exit 0 ;;
   inspect)   exit 1 ;;
 esac
 exit 0
@@ -525,9 +568,23 @@ func TestTheCommittedGrokContractIsComplete(t *testing.T) {
 		if !strings.Contains(body, "0 decoy references") {
 			t.Errorf("%s does not record decoy absence", path)
 		}
-		if strings.Contains(body, "decoy-must-never-appear") &&
-			!strings.Contains(body, "must NEVER appear") {
-			t.Errorf("%s contains a decoy reference outside its declaration", path)
+		// The decoy names appear EXACTLY twice in a valid contract: once each
+		// in the block that declares them. Any further occurrence means a
+		// decoy leaked into real grok output — i.e. GROK_HOME did not relocate
+		// — which is the whole point of seeding them.
+		//
+		// An earlier version of this check asked whether the contract
+		// contained a decoy name AND lacked the declaration text. Both are
+		// always true of a valid contract, so the condition could never fire:
+		// it would have passed a contract riddled with leaked decoys.
+		const wantDecoyMentions = 2
+		got := strings.Count(body, "decoy-must-never-appear") +
+			strings.Count(body, "decoy-skill-must-never-appear")
+		if got != wantDecoyMentions {
+			t.Errorf("%s mentions the decoys %d times, want exactly %d "+
+				"(one declaration line each); any extra occurrence means a decoy "+
+				"leaked into captured grok output and GROK_HOME did not relocate",
+				path, got, wantDecoyMentions)
 		}
 	}
 }

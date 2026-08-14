@@ -116,6 +116,31 @@ NO_LEADER="$WORK/definitely-absent.sock"
 PROBE_CWD="$WORK/cwd"
 mkdir -p "$PROBE_CWD"
 
+# Resident-leader PRECONDITION, checked in the operator's REAL grok context
+# before anything is sealed.
+#
+# The sealed check further down can only ever see leaders belonging to the
+# disposable home, because sealing replaces HOME and GROK_HOME — so on its own
+# it cannot support the claim that a capture taken on a machine with a resident
+# leader fails loudly. This does: it asks the real context, read-only, and
+# refuses to produce a contract at all if a leader is running, because the
+# fresh-process contract in docs/decisions/fn3-grok-surfaces.md section 4 is a
+# statement about THIS machine.
+#
+# Its output is deliberately NOT committed — it is machine-specific, and the
+# contract has to stay machine-independent. Only its verdict matters.
+real_leader_out="$(perl -e 'alarm shift; exec @ARGV' 30 "$GROK_BIN" leader list 2>&1)" || true
+case "$real_leader_out" in
+  *"No leader candidates found"*) ;;
+  *)
+    echo "capture-grok-contract.sh: a grok leader appears to be running on this machine:" >&2
+    printf '%s\n' "$real_leader_out" >&2
+    echo "Refusing to capture: the fresh-process contract cannot be recorded as observed here." >&2
+    echo "(This check is read-only. Never run 'grok leader kill' to satisfy it — that would" >&2
+    echo " stop real sessions. Capture from a machine with no resident leader instead.)" >&2
+    exit 1 ;;
+esac
+
 # The decoy: a config and a skill that must NEVER appear in the capture.
 cat > "$OS_HOME/.grok/config.toml" <<'DECOY'
 [mcp_servers.decoy-must-never-appear]
@@ -414,6 +439,23 @@ SEED
   grok_probe 30 mcp list; expect_ok "mcp list"
   echo
 
+  # "Entries land ENABLED, so no `grok mcp enable` step is needed" is a
+  # PRIORITY conclusion the writer in task .2 depends on — a release that
+  # started writing `enabled = false` would otherwise sail through this capture
+  # while the decision record went on saying no enable step is required.
+  echo "=== asserted: a newly added entry is ENABLED (no enable step needed) ==="
+  enabled_json="$(grok_probe 30 mcp list --json)"; expect_ok "mcp list --json (enabled check)"
+  printf '%s' "$enabled_json" | python3 -c '
+import json, sys
+entries = [e for e in json.load(sys.stdin) if e.get("name") == "homeplane-edge"]
+if len(entries) != 1:
+    sys.exit("expected exactly one homeplane-edge entry, got %d" % len(entries))
+if entries[0].get("enabled") is not True:
+    sys.exit("the entry is enabled=%r: it did NOT land enabled" % entries[0].get("enabled"))
+' || fail "a newly added entry did not land enabled: the 'no enable step needed' conclusion is FALSIFIED"
+  echo "homeplane-edge: enabled = true, straight from mcp add"
+  echo
+
   # ---- Behaviour 4: ${VAR} is verbatim on disk, expanded at load. ---------
   echo "=== \${VAR} in a url: stored verbatim ==="
   # shellcheck disable=SC2016
@@ -610,7 +652,9 @@ SK
   echo
 
   # ---- Leader semantics. --------------------------------------------------
-  echo "=== grok leader list (sealed home, DEFAULT socket) ==="
+  echo "=== grok leader list (DISPOSABLE home, DEFAULT socket) ==="
+  echo "(the operator's REAL context was checked separately as a precondition;"
+  echo " this observation covers the disposable home only)"
   # Deliberately grok_probe_bare, NOT grok_probe: see that wrapper above for
   # why the leader detector must not be handed an absent socket.
   leader_out="$(grok_probe_bare 30 leader list)"
@@ -620,7 +664,7 @@ SK
   # On a machine that does run a leader this must fail loudly rather than
   # record a fresh-process guarantee the machine cannot honour.
   printf '%s\n' "$leader_out" | grep -q 'No leader candidates found' \
-    || fail "a leader IS running for this home: the fresh-process contract cannot be recorded as observed here"
+    || fail "a leader IS running for the disposable home: the fresh-process contract cannot be recorded as observed here"
   echo
   echo "=== a config change is visible to the very NEXT invocation ==="
   grok_probe 30 mcp add --transport http staleness-probe 'https://stale.example.invalid/mcp' >/dev/null
