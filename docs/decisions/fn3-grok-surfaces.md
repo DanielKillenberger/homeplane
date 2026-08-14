@@ -128,10 +128,21 @@ Observed facts the writer must honor:
   **enabled**; `grok mcp enable` is **not** needed after a write. (`enable` /
   `disable` persist personal on/off state into the same user config via
   `disabled_mcp_servers` and `[mcp_servers.<name>].enabled`.)
-- **Backup/restore is sufficient at the byte level.** The CLI verbs touch no
-  state outside the file, and our writer touches only the file, so fn-1's
-  format-agnostic backup/restore composes unchanged. "Restorable" keeps its
+- **Backup/restore is sufficient at the byte level — for the writer we chose.**
+  Homeplane's writer touches exactly one file, `~/.grok/config.toml`, so fn-1's
+  format-agnostic backup/restore composes unchanged and "restorable" keeps its
   fn-1 meaning: the file's exact prior bytes.
+
+  Stated precisely, because the earlier phrasing ("the CLI verbs touch no state
+  outside the file") contradicted §6 of this same document: **grok itself does
+  touch other paths.** A first invocation in a fresh home creates `docs/`,
+  `logs/` and `active_sessions.json`, and ordinary use writes `sessions/`,
+  `memtrace/` and `models_cache.json`. None of that is Homeplane-managed state,
+  none of it is affected by our write, and none of it needs restoring — but the
+  guarantee is "everything Homeplane changed is restorable", not "grok's home
+  is immutable". The distinction is the same one §0's ratified limitation
+  draws, and it is why the byte-identity invariant there is scoped to the
+  config-bearing surfaces rather than the whole directory.
 
 ### Read and diagnose surfaces (used, but never as the writer)
 

@@ -63,8 +63,17 @@ own grant.
 - A policy refusal (`excluded_tool`, `capability_missing`) is the system
   working. Report it plainly; never work around it or retry variants.
 - Never ask Daniel for Google credentials or tokens — the server holds them.
-  If a connector fails with an auth error, tell him to run
-  `homeplane-agent add-credentials google` and stop.
+  An auth error has **two different causes with two different fixes**, so
+  report which one it is rather than guessing:
+  - **This harness's grant is invalid or revoked** — the failure is at the
+    Homeplane edge, before any provider call. Tell him to check
+    `homeplane-agent status` and re-run `homeplane-agent configure-harnesses`.
+  - **The Google credential itself needs re-authorising** — the connector says
+    so explicitly. Tell him to run `homeplane-agent add-credentials google
+    -replace`; without `-replace` an existing credential returns 409 and
+    nothing changes.
+
+  Then stop — do not retry the call either way.
 - Homeplane distributes access and instructions, not initiative: do not set up
   recurring jobs, watches, or scheduled actions through these connectors
   unless Daniel explicitly asks.

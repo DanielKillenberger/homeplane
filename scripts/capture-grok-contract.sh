@@ -140,60 +140,59 @@ DECOY
 # later check would silently read a PREVIOUS probe's status — which is exactly
 # how a failing probe can be written up as a passing observation. RC_FILE
 # survives the subshell; expect_ok reads it, never the variable.
+# sealed_exec is the ONE place that builds a grok invocation. Everything else
+# goes through it, because the previous arrangement copied the environment
+# prefix per wrapper and one copy silently drifted: version detection ran
+# without the sealed cwd, without the probe variables unset and without the
+# compat imports disabled, while the script and its evidence both claimed
+# every invocation was sealed. One definition cannot drift from itself.
+#
+# SEALED_SET lets the single probe whose purpose is to observe expansion put a
+# variable BACK after `env -u` has removed it.
+SEALED_SET=()
+sealed_exec() {
+  local secs="$1"; shift
+  ( cd "$PROBE_CWD" && env -u HP_PROBE_HOST -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
+      ${SEALED_SET[@]+"${SEALED_SET[@]}"} \
+      HOME="$OS_HOME" \
+      GROK_HOME="$GROK_DIR" \
+      GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
+      GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
+        perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" )
+}
+
+# The exit status is preserved in GROK_RC rather than propagated, because
+# several probes below are captured precisely FOR their non-zero exit and
+# `set -e` would abort on them. It is ALSO written to a file: a probe captured
+# with `$(...)` runs in a subshell, so a plain variable assignment there is
+# lost to the caller and a later check would silently read a PREVIOUS probe's
+# status — which is exactly how a failing probe becomes a passing observation.
 GROK_RC=0
 RC_FILE="$WORK/last_rc"
 echo 0 > "$RC_FILE"
+
+# grok_probe forces a --leader-socket that does not exist, so the invocation is
+# a fresh process BY CONSTRUCTION rather than by luck — including for
+# `inspect`, which is the skills-discovery oracle.
 grok_probe() {
   local secs="$1"; shift
   GROK_RC=0
-  # --leader-socket is appended to EVERY probe, not just the ones that read MCP
-  # state: a resident leader must be impossible by construction, including for
-  # `inspect`, which is the skills-discovery oracle. Subcommands that do not
-  # accept the flag are invoked through grok_probe_bare instead.
-  ( cd "$PROBE_CWD" && env -u HP_PROBE_HOST -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
-    HOME="$OS_HOME" \
-    GROK_HOME="$GROK_DIR" \
-    GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
-    GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
-      perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" \
-        --leader-socket "$NO_LEADER" ) 2>&1 || GROK_RC=$?
+  sealed_exec "$secs" "$@" --leader-socket "$NO_LEADER" 2>&1 || GROK_RC=$?
   echo "$GROK_RC" > "$RC_FILE"
   return 0
 }
 
-# grok_probe_default_socket is for the ONE probe that must observe the leader
-# state as it really is: `leader list`. Every other probe forces a nonexistent
-# --leader-socket so it cannot attach to a resident leader — but pointing the
-# DETECTOR at a socket guaranteed to be absent would make it answer "no leader"
-# by construction, which is exactly the false negative the fresh-process
-# contract in docs/decisions/fn3-grok-surfaces.md section 4 depends on NOT
-# happening. This one looks at the default socket for the home under test.
-grok_probe_default_socket() {
-  local secs="$1"; shift
-  GROK_RC=0
-  ( cd "$PROBE_CWD" && env -u HP_PROBE_HOST -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
-    HOME="$OS_HOME" \
-    GROK_HOME="$GROK_DIR" \
-    GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
-    GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
-      perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" ) 2>&1 || GROK_RC=$?
-  echo "$GROK_RC" > "$RC_FILE"
-  return 0
-}
-
-# grok_probe_bare is for the few invocations whose subcommand does not accept
-# --leader-socket (`--version`, `--help`, `help <...>`). They still get the
-# sealed environment and the timeout - no grok invocation anywhere in this
-# script runs unwrapped.
+# grok_probe_bare omits that flag. Two kinds of invocation need it:
+#
+#   - subcommands that do not accept it (`--version`, `--help`, `help <...>`);
+#   - `leader list`, which must observe the leader state AS IT IS. Pointing the
+#     detector at a socket guaranteed to be absent would make it answer "no
+#     leader" by construction — the false negative the fresh-process contract
+#     in docs/decisions/fn3-grok-surfaces.md section 4 depends on NOT happening.
 grok_probe_bare() {
   local secs="$1"; shift
   GROK_RC=0
-  ( cd "$PROBE_CWD" && env -u HP_PROBE_HOST -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
-    HOME="$OS_HOME" \
-    GROK_HOME="$GROK_DIR" \
-    GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
-    GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
-      perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" ) 2>&1 || GROK_RC=$?
+  sealed_exec "$secs" "$@" 2>&1 || GROK_RC=$?
   echo "$GROK_RC" > "$RC_FILE"
   return 0
 }
@@ -205,8 +204,7 @@ CONFIG="$GROK_DIR/config.toml"
 # sealed, timed environment as every other probe — an earlier revision ran it
 # before the sealed roots existed, which handed the real grok home to the
 # executable and contradicted this script's own sealing claim.
-VERSION="$(HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
-  perl -e 'alarm shift; exec @ARGV' 30 "$GROK_BIN" --version | awk '{print $2}')"
+VERSION="$(sealed_exec 30 --version | awk '{print $2}')"
 [ -n "$VERSION" ] || { echo "capture-grok-contract.sh: could not parse a version" >&2; exit 1; }
 OUT="$OUT_DIR/grok-$VERSION-contract.txt"
 # Same directory as $OUT so the final rename is atomic (same filesystem).
@@ -444,11 +442,8 @@ SEED
     local rc=0 doctor_stdout=""
     # stdout is captured rather than streamed so it can be VALIDATED before it
     # is reported, and so stderr stays genuinely separate.
-    doctor_stdout="$(cd "$PROBE_CWD" && env -u HP_PROBE_HOST -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
-      HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
-      GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
-        perl -e 'alarm shift; exec @ARGV' 90 "$GROK_BIN" mcp doctor "$@" --json \
-          --leader-socket "$NO_LEADER" 2>"$WORK/doctor.err")" || rc=$?
+    doctor_stdout="$(sealed_exec 90 mcp doctor "$@" --json \
+      --leader-socket "$NO_LEADER" 2>"$WORK/doctor.err")" || rc=$?
     echo "=== grok mcp doctor $label | STDOUT ==="
     printf '%s\n' "$doctor_stdout"
     echo "exit: $rc"
@@ -524,11 +519,10 @@ if d.get("failing_count") != 1:
   # stdout (2>&1) so its output can be captured verbatim into the contract, and
   # doctor's unstructured tracing line would make the JSON unparseable here.
   expand_rc=0
-  expand_out="$(cd "$PROBE_CWD" && env -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
-    HP_PROBE_HOST=expanded.example.invalid HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
-    GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
-      perl -e 'alarm shift; exec @ARGV' 90 "$GROK_BIN" mcp doctor expand-probe --json \
-        --leader-socket "$NO_LEADER" 2>/dev/null)" || expand_rc=$?
+  SEALED_SET=(HP_PROBE_HOST=expanded.example.invalid)
+  expand_out="$(sealed_exec 90 mcp doctor expand-probe --json \
+    --leader-socket "$NO_LEADER" 2>/dev/null)" || expand_rc=$?
+  SEALED_SET=()
   # doctor exits 1 for an unhealthy server, which this deliberately is (the
   # host does not resolve), so 1 is the expected status here — but a timeout is
   # still refused, and the JSON must still parse.
@@ -617,8 +611,9 @@ SK
 
   # ---- Leader semantics. --------------------------------------------------
   echo "=== grok leader list (sealed home, DEFAULT socket) ==="
-  # Deliberately NOT through grok_probe: see grok_probe_default_socket above.
-  leader_out="$(grok_probe_default_socket 30 leader list)"
+  # Deliberately grok_probe_bare, NOT grok_probe: see that wrapper above for
+  # why the leader detector must not be handed an absent socket.
+  leader_out="$(grok_probe_bare 30 leader list)"
   expect_ok "grok leader list"
   printf '%s\n' "$leader_out"
   # The exit code alone says nothing here — the whole claim is the CONTENT.
