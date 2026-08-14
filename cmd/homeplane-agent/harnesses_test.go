@@ -84,6 +84,9 @@ func newFakeMachine(t *testing.T) fakeMachine {
 
 	t.Setenv("HOME", m.home)
 	t.Setenv("CODEX_HOME", filepath.Dir(m.codexPath))
+	// Pinned rather than inherited: an ambient CLAUDE_CONFIG_DIR would
+	// otherwise aim these tests at the developer's own configuration.
+	t.Setenv("CLAUDE_CONFIG_DIR", m.home)
 	return m
 }
 
@@ -310,4 +313,81 @@ func mustReadFile(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return raw
+}
+
+// A targeted run must not erase what the machine knows about the harnesses it
+// did not touch, and a harness that FAILED must drop out of the list rather
+// than keep the machine looking healthy.
+func TestHarnessStateMergesRatherThanReplaces(t *testing.T) {
+	cases := []struct {
+		name     string
+		previous []string
+		report   harness.Report
+		want     []string
+	}{
+		{
+			name:     "a targeted run leaves the untouched harness alone",
+			previous: []string{harness.ClaudeCode, harness.Codex},
+			report:   harness.Report{Outcomes: []harness.Outcome{{Harness: harness.Codex, Status: harness.StatusConfigured}}},
+			want:     []string{harness.ClaudeCode, harness.Codex},
+		},
+		{
+			name:     "a harness that failed drops out",
+			previous: []string{harness.ClaudeCode, harness.Codex},
+			report:   harness.Report{Outcomes: []harness.Outcome{{Harness: harness.Codex, Status: harness.StatusFailed}}},
+			want:     []string{harness.ClaudeCode},
+		},
+		{
+			name:     "a harness that was skipped drops out too",
+			previous: []string{harness.Codex},
+			report:   harness.Report{Outcomes: []harness.Outcome{{Harness: harness.Codex, Status: harness.StatusSkipped}}},
+			want:     []string{},
+		},
+		{
+			name:     "a partial run records only what actually worked",
+			previous: nil,
+			report: harness.Report{Outcomes: []harness.Outcome{
+				{Harness: harness.ClaudeCode, Status: harness.StatusConfigured},
+				{Harness: harness.Codex, Status: harness.StatusFailed},
+			}},
+			want: []string{harness.ClaudeCode},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := mergeHarnessState(c.previous, c.report)
+			if strings.Join(got, ",") != strings.Join(c.want, ",") {
+				t.Errorf("merged = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// The same thing through the command, against the real control plane: a
+// `-harness codex` run must not make `status` forget Claude Code.
+func TestATargetedRunDoesNotEraseTheOtherHarnessFromStatus(t *testing.T) {
+	cp := newControlPlaneWithEdge(t)
+	m := newFakeMachine(t)
+	if res := invoke(t, "enrol", "-server", cp.URL, "-name", "harness-machine", "-state-dir", m.stateDir); res.code != 0 {
+		t.Fatalf("enrol: %s", res.stderr)
+	}
+	publishStubDescriptor(t, m.stateDir)
+
+	if res := invoke(t, "configure-harnesses", "-state-dir", m.stateDir); res.code != 0 {
+		t.Fatalf("full run: %s", res.stderr)
+	}
+	if res := invoke(t, "configure-harnesses", "-state-dir", m.stateDir, "-harness", "codex"); res.code != 0 {
+		t.Fatalf("targeted run: %s", res.stderr)
+	}
+
+	raw := mustReadFile(t, filepath.Join(m.stateDir, "state.json"))
+	var state struct {
+		Harnesses []string `json:"harnesses"`
+	}
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Harnesses) != 2 {
+		t.Fatalf("harnesses = %v after a targeted run; the untouched harness was erased", state.Harnesses)
+	}
 }

@@ -133,12 +133,12 @@ func newFixtures(t *testing.T) []fixture {
 
 	return []fixture{
 		{
-			name: ClaudeCode, path: claudePath, writer: NewClaudeWriter(claudePath),
+			name: ClaudeCode, path: claudePath, writer: NewClaudeWriter(claudePath, dir),
 			parse: parseJSONTree, container: claudeContainer,
 			entryOf: nested(claudeContainer), authOf: authIn("headers"),
 		},
 		{
-			name: Codex, path: codexPath, writer: NewCodexWriter(codexPath),
+			name: Codex, path: codexPath, writer: NewCodexWriter(codexPath, dir),
 			parse: parseTOMLTree, container: codexContainer,
 			entryOf: nested(codexContainer), authOf: authIn("http_headers"),
 		},
@@ -330,7 +330,7 @@ func TestAMalformedConfigIsSkippedWithItsOriginalIntact(t *testing.T) {
 		name   string
 		file   string
 		body   string
-		writer func(string) Writer
+		writer func(string, string) Writer
 	}{
 		{"claude", ".claude.json", `{"mcpServers": {"rize": {`, NewClaudeWriter},
 		{"codex", "config.toml", "model = \"x\"\n[mcp_servers.broken\ncommand = 1\n", NewCodexWriter},
@@ -342,7 +342,7 @@ func TestAMalformedConfigIsSkippedWithItsOriginalIntact(t *testing.T) {
 			if err := os.WriteFile(path, []byte(c.body), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			applied, err := c.writer(path).Apply(managedEntries("tok"), nil)
+			applied, err := c.writer(path, "").Apply(managedEntries("tok"), nil)
 			if !errors.Is(err, ErrMalformedConfig) {
 				t.Fatalf("err = %v, want ErrMalformedConfig", err)
 			}
@@ -396,14 +396,14 @@ func TestCreatingAConfigFromNothingProducesOnlyManagedEntries(t *testing.T) {
 	dir := t.TempDir()
 	for name, tc := range map[string]struct {
 		path   string
-		writer func(string) Writer
+		writer func(string, string) Writer
 		parse  parseFn
 	}{
 		"claude": {filepath.Join(dir, "fresh", ".claude.json"), NewClaudeWriter, parseJSONTree},
 		"codex":  {filepath.Join(dir, "fresh-codex", "config.toml"), NewCodexWriter, parseTOMLTree},
 	} {
 		t.Run(name, func(t *testing.T) {
-			applied, err := tc.writer(tc.path).Apply(managedEntries("tok"), nil)
+			applied, err := tc.writer(tc.path, "").Apply(managedEntries("tok"), nil)
 			if err != nil {
 				t.Fatalf("Apply: %v", err)
 			}
@@ -434,7 +434,7 @@ func TestCreatingAConfigFromNothingProducesOnlyManagedEntries(t *testing.T) {
 
 func TestTheWriterRefusesAProjectScopedPath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".mcp.json")
-	if _, err := NewClaudeWriter(path).Apply(managedEntries("tok"), nil); !errors.Is(err, ErrProjectScope) {
+	if _, err := NewClaudeWriter(path, "").Apply(managedEntries("tok"), nil); !errors.Is(err, ErrProjectScope) {
 		t.Fatalf("err = %v, want ErrProjectScope — a grant token must never reach a git-shared file", err)
 	}
 	if _, err := os.Stat(path); err == nil {
@@ -446,7 +446,7 @@ func TestTheWriterRefusesAnUnsafeServerName(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	bad := managedEntries("tok")
 	bad[1].Name = "a.name.with dots"
-	if _, err := NewCodexWriter(path).Apply(bad, nil); !errors.Is(err, ErrUnsafeServerName) {
+	if _, err := NewCodexWriter(path, "").Apply(bad, nil); !errors.Is(err, ErrUnsafeServerName) {
 		t.Fatalf("err = %v, want ErrUnsafeServerName", err)
 	}
 }
@@ -495,7 +495,7 @@ func TestJSONLayoutIsPreserved(t *testing.T) {
 	if err := os.WriteFile(compact, []byte(`{"numStartups":1,"mcpServers":{"rize":{"type":"http","url":"u"}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewClaudeWriter(compact).Apply(managedEntries("tok"), nil); err != nil {
+	if _, err := NewClaudeWriter(compact, "").Apply(managedEntries("tok"), nil); err != nil {
 		t.Fatal(err)
 	}
 	raw := string(mustRead(t, compact))

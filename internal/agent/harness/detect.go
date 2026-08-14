@@ -16,6 +16,16 @@ import (
 // writing to the wrong one would configure a harness nobody runs.
 const EnvCodexHome = "CODEX_HOME"
 
+// EnvClaudeConfigDir mirrors Claude Code's own override for the directory
+// holding its user-scope `.claude.json`.
+//
+// Ignoring it is not a cosmetic omission: Claude Code READS the relocated file,
+// so an agent that wrote `~/.claude.json` anyway would report a configured
+// harness while the harness itself saw nothing. Verified against the installed
+// CLI, which lists servers from `$CLAUDE_CONFIG_DIR/.claude.json` and not from
+// `$HOME/.claude.json` when the two differ.
+const EnvClaudeConfigDir = "CLAUDE_CONFIG_DIR"
+
 // Locator resolves harness configuration paths and decides what is installed.
 //
 // Both fields are seams. Tests point Home at a temporary directory and stub
@@ -27,6 +37,10 @@ type Locator struct {
 	// CodexHome overrides the Codex configuration directory. Empty means read
 	// EnvCodexHome, then fall back to <Home>/.codex.
 	CodexHome string
+	// ClaudeConfigDir overrides the directory holding Claude Code's user-scope
+	// `.claude.json`. Empty means read EnvClaudeConfigDir, then fall back to
+	// Home.
+	ClaudeConfigDir string
 	// LookPath finds an executable. Empty means exec.LookPath.
 	LookPath func(string) (string, error)
 }
@@ -71,11 +85,18 @@ func (l Locator) lookPath(name string) (string, error) {
 // token must never go (R5/R17), so this package has no code path that can
 // produce one.
 func (l Locator) ClaudeConfigPath() (string, error) {
-	home, err := l.home()
-	if err != nil {
-		return "", err
+	dir := strings.TrimSpace(l.ClaudeConfigDir)
+	if dir == "" {
+		dir = strings.TrimSpace(os.Getenv(EnvClaudeConfigDir))
 	}
-	return filepath.Join(home, ".claude.json"), nil
+	if dir == "" {
+		home, err := l.home()
+		if err != nil {
+			return "", err
+		}
+		dir = home
+	}
+	return filepath.Join(dir, ".claude.json"), nil
 }
 
 // CodexConfigPath is the Codex configuration file, honouring CODEX_HOME.
@@ -113,7 +134,11 @@ func (l Locator) Detect(harness string) (Detection, error) {
 	if err != nil {
 		return Detection{}, err
 	}
-	if err := assertUserScope(d.ConfigPath); err != nil {
+	home, homeErr := l.home()
+	if homeErr != nil {
+		home = ""
+	}
+	if err := assertUserScope(d.ConfigPath, home); err != nil {
 		return Detection{}, err
 	}
 
@@ -159,14 +184,71 @@ var projectScopedNames = map[string]bool{
 
 // assertUserScope refuses a path a grant token must not reach.
 //
-// The primary guarantee is structural — the only paths this package writes are
-// the ones Locator derives, and Locator has no project-scope branch. This check
-// is the second lock: it makes "someone passed a project config path" a
-// refusal rather than a leak, including when that someone is a future caller of
-// this package.
-func assertUserScope(path string) error {
+// The name check alone is not enough, because the DIRECTORY is attacker- or
+// accident-controlled: `CODEX_HOME` is an environment variable, and `~/.codex`
+// can be a symlink. Either can land `config.toml` — with its inline bearer
+// token — and its timestamped backups inside a git working tree, where 0600 does
+// nothing to stop `git add`. So the destination is resolved through symlinks
+// and then checked for a repository above it.
+//
+// The walk stops AT the home directory rather than at the filesystem root. A
+// home directory that is itself a dotfiles repository is a deliberate choice by
+// its owner about their own home, and refusing to configure any harness on such
+// a machine would be a false positive that breaks the normal case; a config
+// path nested inside a PROJECT checkout is the actual hazard, and it is always
+// found strictly below home.
+func assertUserScope(path, home string) error {
 	if projectScopedNames[filepath.Base(path)] {
 		return fmt.Errorf("%w: %s", ErrProjectScope, path)
 	}
-	return nil
+
+	dir := resolveExisting(filepath.Dir(path))
+	stop := ""
+	if home != "" {
+		stop = resolveExisting(home)
+	}
+
+	for cur := dir; ; {
+		if cur == stop {
+			return nil
+		}
+		if isRepositoryRoot(cur) {
+			return fmt.Errorf("%w: %s is inside the repository at %s", ErrProjectScope, path, cur)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur { // filesystem root
+			return nil
+		}
+		cur = parent
+	}
+}
+
+// isRepositoryRoot reports whether dir holds a `.git` entry. Both shapes count:
+// a directory for an ordinary clone, and a file for a worktree or submodule —
+// a linked worktree is every bit as committable as a normal one.
+func isRepositoryRoot(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
+}
+
+// resolveExisting resolves symlinks as far up the path as actually exists, so a
+// destination that does not exist YET is still judged by where it would land.
+// An unresolvable path is returned cleaned rather than rejected: failing to
+// resolve is not evidence of a repository, and the caller's other checks stand.
+func resolveExisting(path string) string {
+	cleaned := filepath.Clean(path)
+	for cur := cleaned; ; {
+		if resolved, err := filepath.EvalSymlinks(cur); err == nil {
+			rest, relErr := filepath.Rel(cur, cleaned)
+			if relErr != nil {
+				return resolved
+			}
+			return filepath.Clean(filepath.Join(resolved, rest))
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return cleaned
+		}
+		cur = parent
+	}
 }

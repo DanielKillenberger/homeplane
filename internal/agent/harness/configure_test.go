@@ -24,6 +24,9 @@ type fakeIssuer struct {
 	previous map[string]string
 	issued   []string
 	fail     error
+	// observe runs inside IssueGrant, so a test can check what is true at the
+	// exact moment authority moves.
+	observe func()
 }
 
 func newFakeIssuer(endpoint string) *fakeIssuer {
@@ -31,6 +34,9 @@ func newFakeIssuer(endpoint string) *fakeIssuer {
 }
 
 func (f *fakeIssuer) IssueGrant(_ context.Context, harnessName string) (Grant, error) {
+	if f.observe != nil {
+		f.observe()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.fail != nil {
@@ -110,10 +116,14 @@ func newMachine(t *testing.T, withDescriptor bool) *machine {
 
 	// Both harnesses are "installed" because their config files exist; the
 	// stub keeps the test off the real PATH either way.
+	// Every path source is pinned explicitly, including the env-var overrides:
+	// an ambient CODEX_HOME or CLAUDE_CONFIG_DIR on the developer's machine
+	// must not be able to point a test at a real config.
 	m.locator = Locator{
-		Home:      m.home,
-		CodexHome: m.codexHome,
-		LookPath:  func(string) (string, error) { return "", errors.New("not on PATH") },
+		Home:            m.home,
+		CodexHome:       m.codexHome,
+		ClaudeConfigDir: m.home,
+		LookPath:        func(string) (string, error) { return "", errors.New("not on PATH") },
 	}
 	return m
 }

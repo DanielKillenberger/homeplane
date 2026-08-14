@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/DanielKillenberger/homeplane/internal/agent"
@@ -93,6 +94,10 @@ func runConfigureHarnesses(ctx context.Context, args []string, stdout, stderr io
 		StateDir: dir,
 		Locator:  locator,
 		Issuer:   grantIssuer{client: client.WithCredential(credential)},
+		// The whole run — issuance, write, record, state — is one critical
+		// section, so a second `configure-harnesses` cannot interleave its
+		// issuance between this one's issuance and its write.
+		Lock: store.Lock,
 	}
 	if trimmed := strings.TrimSpace(*only); trimmed != "" {
 		cfg.Only = strings.Split(trimmed, ",")
@@ -104,9 +109,12 @@ func runConfigureHarnesses(ctx context.Context, args []string, stdout, stderr io
 		return 1
 	}
 
-	// The state's harness list is what `status` reports, so it is recorded even
-	// when some harness failed: a partially configured machine must say so.
-	state.Harnesses = report.Configured()
+	// `status` reports this list, so it must describe the WHOLE machine, not
+	// just this run. A `-harness codex` run says nothing about Claude Code, and
+	// replacing the list wholesale would erase it; a harness this run attempted
+	// and did not configure must drop OUT of it, or a half-failed run would keep
+	// reporting a healthy machine.
+	state.Harnesses = mergeHarnessState(state.Harnesses, report)
 	if err := store.Save(state); err != nil {
 		fmt.Fprintln(stderr, "homeplane-agent configure-harnesses: "+err.Error())
 		return 1
@@ -211,4 +219,29 @@ func printHarnessReport(report harness.Report, stdout io.Writer) {
 			fmt.Fprintf(stdout, "  note       %s\n", o.Message)
 		}
 	}
+}
+
+// mergeHarnessState folds one run's outcomes into the machine's harness list.
+//
+// Only the harnesses this run ATTEMPTED are affected: each one is added when it
+// ended configured and removed otherwise, and every harness the run did not
+// touch keeps whatever the machine already believed about it. That is what
+// makes `-harness codex` a statement about Codex rather than a claim that
+// Claude Code is now unconfigured.
+func mergeHarnessState(previous []string, report harness.Report) []string {
+	keep := map[string]bool{}
+	for _, h := range previous {
+		keep[h] = true
+	}
+	for _, o := range report.Outcomes {
+		keep[o.Harness] = o.Status == harness.StatusConfigured
+	}
+	out := make([]string, 0, len(keep))
+	for h, ok := range keep {
+		if ok {
+			out = append(out, h)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

@@ -55,7 +55,11 @@ type format struct {
 type fileWriter struct {
 	harness string
 	path    string
-	format  format
+	// home bounds the project-scope walk in assertUserScope. Empty means walk
+	// to the filesystem root, which is the strict reading and the right default
+	// for a caller that did not say where home is.
+	home   string
+	format format
 }
 
 func (w fileWriter) Harness() string    { return w.harness }
@@ -79,7 +83,7 @@ func (w fileWriter) Preflight() error {
 }
 
 func (w fileWriter) Apply(entries []Entry, retire []string) (ApplyResult, error) {
-	if err := assertUserScope(w.path); err != nil {
+	if err := assertUserScope(w.path, w.home); err != nil {
 		return ApplyResult{}, err
 	}
 	managed := managedNames(entries, retire)
@@ -94,70 +98,129 @@ func (w fileWriter) Apply(entries []Entry, retire []string) (ApplyResult, error)
 		}
 	}
 
-	before, err := os.ReadFile(w.path)
+	if err := os.MkdirAll(filepath.Dir(w.path), dirPerm); err != nil {
+		return ApplyResult{}, fmt.Errorf("create %s: %w", filepath.Dir(w.path), err)
+	}
+
+	// The merge is optimistic, and re-tried against fresh bytes when it loses.
+	//
+	// The file is not ours. Claude Code rewrites ~/.claude.json on its own
+	// schedule (startup counters, project state), Codex rewrites config.toml,
+	// and the user may be editing either. A plain read-modify-write would take
+	// a snapshot, spend milliseconds merging, and then replace the file —
+	// silently discarding anything written in between, with a preservation
+	// check that compares against the STALE snapshot and therefore reports
+	// success. Re-reading immediately before the rename closes that window down
+	// to the rename itself; losing the race is a retry, not a lost edit.
+	var result ApplyResult
+	for attempt := 0; ; attempt++ {
+		res, retry, err := w.applyOnce(entries, retire, managed)
+		if res.BackupPath != "" {
+			result.BackupPath = res.BackupPath
+		}
+		if err != nil {
+			return result, err
+		}
+		if !retry {
+			result.Changed = res.Changed
+			return result, nil
+		}
+		if attempt >= maxMergeAttempts {
+			return result, fmt.Errorf("%s kept changing underneath this merge (%d attempts); "+
+				"close the harness and re-run", w.path, maxMergeAttempts)
+		}
+	}
+}
+
+// maxMergeAttempts bounds the optimistic retry. A config that loses the race
+// this many times is not racing — something is rewriting it in a loop, and
+// saying so beats spinning.
+const maxMergeAttempts = 5
+
+// applyOnce performs one optimistic merge. retry is true when the file changed
+// between the read and the write and the caller should start over.
+func (w fileWriter) applyOnce(entries []Entry, retire, managed []string) (res ApplyResult, retry bool, err error) {
+	before, err := readFileAllowingMissing(w.path)
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return ApplyResult{}, fmt.Errorf("read %s: %w", w.path, err)
-		}
-		before = nil
-		if err := os.MkdirAll(filepath.Dir(w.path), dirPerm); err != nil {
-			return ApplyResult{}, fmt.Errorf("create %s: %w", filepath.Dir(w.path), err)
-		}
+		return res, false, err
 	}
 
 	// The backup precedes the parse, so a config too malformed to read still
 	// leaves the operator a copy of exactly what was there (R5).
 	backup, err := backupFile(w.path)
 	if err != nil {
-		return ApplyResult{}, err
+		return res, false, err
 	}
-	result := ApplyResult{BackupPath: backup}
+	res.BackupPath = backup
 
 	if len(bytes.TrimSpace(before)) > 0 {
 		if _, err := w.format.parse(before); err != nil {
-			return result, fmt.Errorf("%w: %s: %v", ErrMalformedConfig, w.path, err)
+			return res, false, fmt.Errorf("%w: %s: %v", ErrMalformedConfig, w.path, err)
 		}
 	}
 
 	after, err := w.format.rewrite(before, entries, managed)
 	if err != nil {
-		return result, err
+		return res, false, err
 	}
 
 	check := preservationCheck{parse: w.format.parse, container: w.format.container, managed: managed}
 	// Verified BEFORE the write. A failure here has touched nothing at all,
 	// which is a strictly better outcome than a correct rollback.
 	if err := check.verify(before, after); err != nil {
-		return result, err
+		return res, false, err
 	}
 
 	if bytes.Equal(before, after) {
 		// Still tighten the mode: an already-correct config that is
 		// world-readable is not an already-correct config (R5 token hygiene).
 		if err := os.Chmod(w.path, filePerm); err != nil {
-			return result, fmt.Errorf("tighten permissions on %s: %w", w.path, err)
+			return res, false, fmt.Errorf("tighten permissions on %s: %w", w.path, err)
 		}
-		return result, nil
+		return res, false, nil
+	}
+
+	// Last look before the rename. Anything that changed since `before` was
+	// read belongs to someone else and must not be overwritten.
+	current, err := readFileAllowingMissing(w.path)
+	if err != nil {
+		return res, false, err
+	}
+	if !bytes.Equal(current, before) {
+		return res, true, nil
 	}
 
 	if err := writeFileAtomic(w.path, after, filePerm); err != nil {
-		return result, fmt.Errorf("write %s: %w", w.path, err)
+		return res, false, fmt.Errorf("write %s: %w", w.path, err)
 	}
-	result.Changed = true
+	res.Changed = true
 
 	// Read back what actually landed. The check above proved the bytes we
 	// intended were sound; this one proves the bytes on disk are.
 	landed, err := os.ReadFile(w.path)
 	if err != nil {
-		return result, fmt.Errorf("re-read %s: %w", w.path, err)
+		return res, false, fmt.Errorf("re-read %s: %w", w.path, err)
 	}
 	if err := check.verify(before, landed); err != nil {
 		if restoreErr := restoreFromBackup(w.path, backup); restoreErr != nil {
-			return result, fmt.Errorf("%w (and the rollback failed: %v)", err, restoreErr)
+			return res, false, fmt.Errorf("%w (and the rollback failed: %v)", err, restoreErr)
 		}
-		return result, fmt.Errorf("%w (the original was restored from %s)", err, backup)
+		return res, false, fmt.Errorf("%w (the original was restored from %s)", err, backup)
 	}
-	return result, nil
+	return res, false, nil
+}
+
+// readFileAllowingMissing treats an absent file as empty, which is what a
+// harness that has never been configured actually looks like.
+func readFileAllowingMissing(path string) ([]byte, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return raw, nil
 }
 
 // managedNames is the set of entry names this run owns: the ones being written
@@ -192,8 +255,8 @@ const claudeContainer = "mcpServers"
 // NewClaudeWriter builds the Claude Code writer for an explicit config path.
 // Callers normally reach it through Locator, which only ever produces the
 // user-scope path.
-func NewClaudeWriter(configPath string) Writer {
-	return fileWriter{harness: ClaudeCode, path: configPath, format: format{
+func NewClaudeWriter(configPath, home string) Writer {
+	return fileWriter{harness: ClaudeCode, path: configPath, home: home, format: format{
 		container: claudeContainer,
 		parse:     parseJSONTree,
 		rewrite:   rewriteClaude,
@@ -294,8 +357,8 @@ func errs(list ...error) error {
 const codexContainer = "mcp_servers"
 
 // NewCodexWriter builds the Codex writer for an explicit config path.
-func NewCodexWriter(configPath string) Writer {
-	return fileWriter{harness: Codex, path: configPath, format: format{
+func NewCodexWriter(configPath, home string) Writer {
+	return fileWriter{harness: Codex, path: configPath, home: home, format: format{
 		container: codexContainer,
 		parse:     parseTOMLTree,
 		rewrite:   rewriteCodex,

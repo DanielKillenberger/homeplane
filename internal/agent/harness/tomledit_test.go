@@ -246,3 +246,82 @@ func TestRemovingAdjacentManagedTablesStrandsNoSeparators(t *testing.T) {
 		t.Fatalf("removal did not reduce to the original document:\n%q\nwant %q", string(out), before)
 	}
 }
+
+// A '[' opening a line is only a table header at the top level. This is the
+// review finding that mattered most: refusing a valid config would have
+// happened AFTER the grant was superseded, leaving the harness with a dead
+// token and a message claiming its own file was malformed.
+func TestNestedArraysAndInlineTablesAreNotMistakenForTableHeaders(t *testing.T) {
+	src := `matrix = [
+  [1, 2],
+  [3, 4],
+]
+profiles = [
+  { name = "a", tools = ["x"] },
+  { name = "b" },
+]
+spread = { key = "value" }
+
+[mcp_servers.managed]
+url = "http://old"
+
+[tui]
+theme = "dark"
+`
+	// The fixture must be valid TOML, or the test proves nothing.
+	var parsed map[string]any
+	if err := toml.Unmarshal([]byte(src), &parsed); err != nil {
+		t.Fatalf("the fixture is not valid TOML: %v", err)
+	}
+
+	spans, err := scanTOMLTables([]byte(src))
+	if err != nil {
+		t.Fatalf("scanTOMLTables refused a valid config: %v", err)
+	}
+	if want := []string{"mcp_servers.managed", "tui"}; !reflect.DeepEqual(headers(spans), want) {
+		t.Fatalf("headers = %v, want %v", headers(spans), want)
+	}
+
+	out, _ := removeTOMLTables([]byte(src), spans, func(key []string) bool {
+		return len(key) >= 2 && key[0] == "mcp_servers" && key[1] == "managed"
+	})
+	var after map[string]any
+	if err := toml.Unmarshal(out, &after); err != nil {
+		t.Fatalf("removal produced invalid TOML: %v\n%s", err, out)
+	}
+	delete(parsed, "mcp_servers")
+	if !reflect.DeepEqual(parsed, after) {
+		t.Errorf("removal changed unrelated values:\n before %#v\n after  %#v", parsed, after)
+	}
+}
+
+func TestScanAgreesWithTheRealParserOnWhatIsATable(t *testing.T) {
+	// Every fixture in this package must be a config the scanner and a real
+	// TOML parser describe identically — that agreement is what makes the
+	// span-scoped write safe.
+	for name, src := range map[string]string{
+		"codex fixture":    codexFixture,
+		"nested arrays":    "a = [\n [1],\n]\n[t]\nx = 1\n",
+		"inline table":     "a = { b = 1 }\n[t]\nx = 1\n",
+		"comment brackets": "# [not.a.table]\nx = 1 # [nor.this]\n[t]\ny = 2\n",
+		"dotted keys":      "a.b = 1\n[t]\nc = 2\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			var parsed map[string]any
+			if err := toml.Unmarshal([]byte(src), &parsed); err != nil {
+				t.Fatalf("fixture is not valid TOML: %v", err)
+			}
+			spans, err := scanTOMLTables([]byte(src))
+			if err != nil {
+				t.Fatalf("the scanner refused what the parser accepted: %v", err)
+			}
+			// Every top-level table the parser found must have a span whose key
+			// starts with it, and no span may name something the parser did not.
+			for _, s := range spans {
+				if _, ok := parsed[s.key[0]]; !ok {
+					t.Errorf("the scanner invented table %q", s.header())
+				}
+			}
+		})
+	}
+}

@@ -44,8 +44,7 @@ func (s tomlSpan) header() string { return strings.Join(s.key, ".") }
 // table is structurally untouchable.
 func scanTOMLTables(src []byte) ([]tomlSpan, error) {
 	var spans []tomlSpan
-	var inMulti bool
-	var multiDelim string
+	state := lineState{}
 
 	line := 0
 	for pos := 0; pos < len(src); {
@@ -59,7 +58,19 @@ func scanTOMLTables(src []byte) ([]tomlSpan, error) {
 		}
 		text := src[pos:lineEnd]
 
-		if !inMulti {
+		// A '[' at the start of a line is a table header only at the TOP level.
+		// Inside a multi-line string it is text, and inside an unclosed array or
+		// inline table it is a nested value:
+		//
+		//	matrix = [
+		//	  [1, 2],
+		//	  [3, 4],
+		//	]
+		//
+		// Reading `[1, 2],` as a header would refuse a perfectly valid config —
+		// and refuse it AFTER the grant had been superseded, leaving the harness
+		// holding a dead token. Depth is what tells the two apart.
+		if !state.inMulti && state.depth == 0 {
 			trimmed := bytes.TrimLeft(text, " \t")
 			if len(trimmed) > 0 && trimmed[0] == '[' {
 				key, aot, err := parseTableHeader(trimmed)
@@ -73,11 +84,17 @@ func scanTOMLTables(src []byte) ([]tomlSpan, error) {
 			}
 		}
 
-		inMulti, multiDelim = scanLineStrings(text, inMulti, multiDelim)
+		state = scanLine(text, state)
+		if state.depth < 0 {
+			return nil, fmt.Errorf("line %d: unbalanced ']' or '}'", line)
+		}
 		pos = next
 	}
-	if inMulti {
-		return nil, fmt.Errorf("unterminated multi-line string (%s)", multiDelim)
+	if state.inMulti {
+		return nil, fmt.Errorf("unterminated multi-line string (%s)", state.multiDelim)
+	}
+	if state.depth != 0 {
+		return nil, fmt.Errorf("unterminated array or inline table (depth %d at end of file)", state.depth)
 	}
 	if n := len(spans); n > 0 {
 		spans[n-1].end = trimAttached(src, spans[n-1].start, len(src))
@@ -118,20 +135,29 @@ func trimAttached(src []byte, start, end int) int {
 	return end
 }
 
-// scanLineStrings advances the string state across one line and reports the
-// state at its end. A comment ends the line's significance; a multi-line string
-// carries state into the next line.
-func scanLineStrings(line []byte, inMulti bool, delim string) (bool, string) {
+// lineState is the lexical state carried from one line to the next: whether a
+// multi-line string is open, and how deep the open arrays and inline tables are
+// nested. Nothing else about TOML has to be understood to locate a table header.
+type lineState struct {
+	inMulti    bool
+	multiDelim string
+	depth      int
+}
+
+// scanLine advances the state across one line and reports the state at its end.
+// A comment ends the line's significance; a multi-line string and an unclosed
+// bracket both carry state into the next line.
+func scanLine(line []byte, s lineState) lineState {
 	for j := 0; j < len(line); {
-		if inMulti {
-			if bytes.HasPrefix(line[j:], []byte(delim)) {
-				inMulti, delim = false, ""
+		if s.inMulti {
+			if bytes.HasPrefix(line[j:], []byte(s.multiDelim)) {
+				s.inMulti, s.multiDelim = false, ""
 				j += 3
 				continue
 			}
 			// Only a BASIC multi-line string honours backslash escapes; in a
 			// literal ''' string a backslash is just a backslash.
-			if delim == `"""` && line[j] == '\\' {
+			if s.multiDelim == `"""` && line[j] == '\\' {
 				j += 2
 				continue
 			}
@@ -140,12 +166,12 @@ func scanLineStrings(line []byte, inMulti bool, delim string) (bool, string) {
 		}
 		switch {
 		case line[j] == '#':
-			return false, ""
+			return s // a comment runs to end of line; brackets in it are text
 		case bytes.HasPrefix(line[j:], []byte(`"""`)):
-			inMulti, delim = true, `"""`
+			s.inMulti, s.multiDelim = true, `"""`
 			j += 3
 		case bytes.HasPrefix(line[j:], []byte(`'''`)):
-			inMulti, delim = true, `'''`
+			s.inMulti, s.multiDelim = true, `'''`
 			j += 3
 		case line[j] == '"':
 			j++
@@ -166,11 +192,17 @@ func scanLineStrings(line []byte, inMulti bool, delim string) (bool, string) {
 				j++
 			}
 			j++
+		case line[j] == '[' || line[j] == '{':
+			s.depth++
+			j++
+		case line[j] == ']' || line[j] == '}':
+			s.depth--
+			j++
 		default:
 			j++
 		}
 	}
-	return inMulti, delim
+	return s
 }
 
 // parseTableHeader reads `[a.b.c]` or `[[a.b]]`, with quoted segments, and

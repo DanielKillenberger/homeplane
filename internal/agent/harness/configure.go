@@ -50,6 +50,17 @@ type Configurator struct {
 	// Only, when non-empty, restricts the run to these harnesses.
 	Only []string
 
+	// Lock serialises the whole run — grant issuance, config write, record and
+	// state persistence — against another `configure-harnesses` process.
+	//
+	// Without it, two runs can interleave as "A issues, B issues, B writes, A
+	// writes", which leaves the config holding A's token AFTER the server has
+	// superseded it: both commands report success and the harness is dead. That
+	// window is invisible to every check in this package, because each run's
+	// own view is perfectly consistent. Nil means unserialised, which is only
+	// correct for a caller that has its own mutual exclusion.
+	Lock func() (func(), error)
+
 	// now is a clock seam.
 	now func() time.Time
 }
@@ -83,16 +94,47 @@ func (c Configurator) Configure(ctx context.Context) (Report, error) {
 		return Report{}, err
 	}
 
-	// The engine endpoint is read ONCE, before any harness is touched: every
-	// harness must be wired to the same endpoint, and re-reading per harness
-	// would let a concurrent re-activation split them.
-	endpoint, endpointErr := gno.LoadDescriptor(c.StateDir)
+	if c.Lock != nil {
+		release, err := c.Lock()
+		if err != nil {
+			return Report{}, err
+		}
+		defer release()
+	}
+
+	// The engine endpoint is read, validated AND converted ONCE, before any
+	// harness is touched and before any grant is requested.
+	//
+	// Both halves of that matter. Reading once means every harness is wired to
+	// the same endpoint, which a per-harness read would let a concurrent
+	// re-activation split. CONVERTING once means a descriptor this writer
+	// cannot express — a corrupt file, an unsupported transport, an unusable
+	// server name — fails the run before any authority moves. Converting inside
+	// the loop would supersede each harness's working grant and only then
+	// discover it had nothing to write: a purely local problem would revoke
+	// every harness's connector access.
+	engine, engineErr := loadEngineEntry(c.StateDir)
+	if engineErr != nil && !errors.Is(engineErr, gno.ErrNoDescriptor) {
+		return Report{}, fmt.Errorf("harness: the retrieval engine endpoint is unusable, so no grant was requested: %w", engineErr)
+	}
 
 	report := Report{}
 	for _, h := range wanted {
-		report.Outcomes = append(report.Outcomes, c.configureOne(ctx, h, endpoint, endpointErr, now()))
+		report.Outcomes = append(report.Outcomes, c.configureOne(ctx, h, engine, engineErr, now()))
 	}
 	return report, nil
+}
+
+// loadEngineEntry reads the published endpoint descriptor and converts it into
+// the entry harnesses will carry. gno.ErrNoDescriptor passes through unwrapped:
+// "the engine is not activated on this machine" is a state the run continues
+// from, unlike a descriptor that exists and cannot be used.
+func loadEngineEntry(stateDir string) (Entry, error) {
+	d, err := gno.LoadDescriptor(stateDir)
+	if err != nil {
+		return Entry{}, err
+	}
+	return EntryFromDescriptor(d)
 }
 
 func (c Configurator) selected() ([]string, error) {
@@ -114,7 +156,7 @@ func (c Configurator) selected() ([]string, error) {
 	return out, nil
 }
 
-func (c Configurator) configureOne(ctx context.Context, h string, endpoint gno.Descriptor, endpointErr error, at time.Time) Outcome {
+func (c Configurator) configureOne(ctx context.Context, h string, engine Entry, engineErr error, at time.Time) Outcome {
 	out := Outcome{Harness: h, ConfiguredAt: at}
 
 	detection, err := c.Locator.Detect(h)
@@ -143,12 +185,18 @@ func (c Configurator) configureOne(ctx context.Context, h string, endpoint gno.D
 	// authority at all.
 	if err := writer.Preflight(); err != nil {
 		if errors.Is(err, ErrMalformedConfig) {
-			out.Status = StatusSkipped
-			out.Message = fmt.Sprintf("%s was left untouched: %v", detection.ConfigPath, err)
-			if backup, backupErr := backupFile(detection.ConfigPath); backupErr == nil {
-				out.BackupPath = backup
-				out.Message += fmt.Sprintf(" (a copy of it is at %s)", backup)
+			// The skip contract is "message + backup intact", so a backup we
+			// could not take is a FAILURE, not a quiet skip. Swallowing the
+			// error here would report a clean skip on a full disk while the
+			// promised copy of the operator's config did not exist.
+			backup, backupErr := backupFile(detection.ConfigPath)
+			if backupErr != nil {
+				return failed(out, fmt.Sprintf("%s is malformed AND could not be backed up, so it was left strictly untouched: %v",
+					detection.ConfigPath, backupErr))
 			}
+			out.BackupPath = backup
+			out.Status = StatusSkipped
+			out.Message = fmt.Sprintf("%s was left untouched: %v (a copy of it is at %s)", detection.ConfigPath, err, backup)
 			return out
 		}
 		return failed(out, err.Error())
@@ -167,17 +215,13 @@ func (c Configurator) configureOne(ctx context.Context, h string, endpoint gno.D
 	out.Capabilities = grant.Capabilities
 
 	entries := []Entry{connectorEntry(grant)}
-	if endpointErr == nil {
-		engine, err := EntryFromDescriptor(endpoint)
-		if err != nil {
-			return failed(out, err.Error())
-		}
+	if engineErr == nil {
 		entries = append(entries, engine)
-	} else if errors.Is(endpointErr, gno.ErrNoDescriptor) {
+	} else {
+		// The only error that reaches here is ErrNoDescriptor; Configure
+		// refused the run before any issuance for every other kind.
 		out.Message = "the local retrieval engine is not activated on this machine, so only the connector endpoint was written " +
 			"(run `homeplane-agent gno activate`, then re-run this command)"
-	} else {
-		return failed(out, "reading the retrieval engine endpoint failed: "+endpointErr.Error())
 	}
 
 	desired := map[string]bool{}
@@ -229,11 +273,15 @@ func failed(out Outcome, message string) Outcome {
 }
 
 func (c Configurator) writerFor(harness, configPath string) (Writer, error) {
+	home, err := c.Locator.home()
+	if err != nil {
+		home = ""
+	}
 	switch harness {
 	case ClaudeCode:
-		return NewClaudeWriter(configPath), nil
+		return NewClaudeWriter(configPath, home), nil
 	case Codex:
-		return NewCodexWriter(configPath), nil
+		return NewCodexWriter(configPath, home), nil
 	default:
 		return nil, fmt.Errorf("harness: no writer for %q", harness)
 	}

@@ -86,14 +86,26 @@ type stubConnector struct {
 	expected string
 	accepted int
 	refused  int
+	// wrongToken counts requests that carried an Authorization header that was
+	// not the grant token. It is kept apart from `refused` because an
+	// UNAUTHENTICATED probe and a WRONG-TOKEN call are different facts: the
+	// first is something a client may legitimately do, the second is the bug
+	// this stub exists to catch.
+	wrongToken int
+	reached    int
 }
 
 func (s *stubConnector) authorized(r *http.Request) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if r.Header.Get("Authorization") == "Bearer "+s.expected {
+	s.reached++
+	auth := r.Header.Get("Authorization")
+	if auth == "Bearer "+s.expected {
 		s.accepted++
 		return true
+	}
+	if auth != "" {
+		s.wrongToken++
 	}
 	s.refused++
 	return false
@@ -103,6 +115,13 @@ func (s *stubConnector) counts() (int, int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.accepted, s.refused
+}
+
+// stats returns (reached, accepted, wrongToken).
+func (s *stubConnector) stats() (int, int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reached, s.accepted, s.wrongToken
 }
 
 func (s *stubConnector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -333,5 +352,56 @@ func TestCodexReadsBothConfiguredEndpointsFromWhatWeWrote(t *testing.T) {
 		if !seen[want] {
 			t.Errorf("codex does not see %q — either we did not write it, or we removed it", want)
 		}
+	}
+
+	// `mcp list` only parses. `doctor` performs a real reachability probe from
+	// Codex's own HTTP client against the URL we wrote, so it is what turns
+	// "Codex read our config" into "Codex reached the endpoint our config named".
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel2()
+	doctor := exec.CommandContext(ctx2, binary, "doctor")
+	doctor.Env = []string{"CODEX_HOME=" + m.codexHome, "HOME=" + m.home, "PATH=" + os.Getenv("PATH")}
+	doctorOut, _ := doctor.CombinedOutput() // a missing login makes doctor exit nonzero; the MCP section is still emitted
+
+	reached, _, wrongToken := connector.stats()
+	if reached == 0 {
+		t.Errorf("Codex never contacted the endpoint we wrote:\n%s", doctorOut)
+	}
+	// doctor's reachability probe deliberately carries no Authorization header,
+	// so a refusal here is expected and says nothing. What must never happen is
+	// a request carrying the WRONG token — that would mean we wrote one.
+	if wrongToken != 0 {
+		t.Errorf("%d request(s) from Codex carried a token that is not this harness's grant", wrongToken)
+	}
+	if !strings.Contains(string(doctorOut), server.URL+"/mcp") && !strings.Contains(string(doctorOut), "streamable_http") {
+		t.Errorf("doctor did not report on the configured endpoint:\n%s", doctorOut)
+	}
+}
+
+// What the two Codex tests above do and do NOT prove — stated rather than
+// implied, because the acceptance criterion says "a call succeeds from each
+// harness" and only half of that is reachable here.
+//
+// Proven, against the real CLI: Codex parses the config we wrote, resolves the
+// inline bearer with no environment (`auth_status: bearer_token` under an empty
+// env), keeps every pre-existing server, launches from the descriptor's exact
+// command and argv, and opens a real connection to the endpoint URL we wrote.
+//
+// Not proven here: an AUTHENTICATED MCP tool call from Codex. Codex 0.146
+// exposes no non-model MCP invocation — `mcp` only lists/gets/adds/removes, and
+// `doctor`'s reachability probe deliberately sends no Authorization header
+// (verified: the stub records the probe arriving with none). The only path that
+// makes Codex call a tool is a model turn (`codex exec`), which needs
+// credentials and a live model, so it belongs with task .7's live proof rather
+// than in this package's always-runnable suite. The Claude Code test above does
+// close that loop end-to-end — it authenticates against the stub and fails on a
+// wrong token — so the authenticated-call path IS proven for one real harness,
+// and the residual obligation is Codex-specific.
+const codexProofBoundary = `authenticated Codex tool call: deferred to task .7 (Codex CLI has no ` +
+	`non-model MCP invocation; doctor probes reachability without the auth header)`
+
+func TestTheCodexProofBoundaryIsRecorded(t *testing.T) {
+	if codexProofBoundary == "" {
+		t.Fatal("the boundary must be stated, not silently assumed")
 	}
 }
