@@ -727,6 +727,13 @@ type RunOptions struct {
 	Now      func() time.Time
 	// Run performs the actual continuous indexing and returns when it stops.
 	Run func(context.Context) error
+	// DataDir is the engine's machine-local index directory. When set, a
+	// stranded resident-runtime holder there is reclaimed before the engine
+	// starts — see resident.go for why that is Homeplane's to clear.
+	DataDir string
+	// Log receives one line about a reclaim, so a machine that healed itself
+	// says so rather than healing silently.
+	Log func(string)
 }
 
 // RunDaemon is the body of the supervised process: record the start, index
@@ -740,6 +747,16 @@ func RunDaemon(ctx context.Context, opts RunOptions) error {
 	}
 	if _, err := tracker.RecordStart(now(), os.Getpid(), "supervised start"); err != nil {
 		return err
+	}
+	// A holder stranded by a killed engine blocks every start, so a supervised
+	// restart that did not clear it would be a crash loop with a message about
+	// something else. This is the self-heal path for exactly that.
+	if opts.DataDir != "" {
+		if res, rErr := ReclaimResidentRuntime(ctx, opts.DataDir, 3*time.Second); rErr == nil && opts.Log != nil {
+			if res.Cleared() || res.Detail != "" {
+				opts.Log(res.Summary())
+			}
+		}
 	}
 	err := opts.Run(ctx)
 	code := 0

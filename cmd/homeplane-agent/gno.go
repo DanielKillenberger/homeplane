@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DanielKillenberger/homeplane/internal/agent"
 	"github.com/DanielKillenberger/homeplane/internal/agent/gno"
@@ -303,6 +304,15 @@ degraded, because an index nobody is updating is not a current index.
 	// nothing to do with the actual cause. The unit is started again by stage 3,
 	// and on any failure in between by the resume below — a failed activation
 	// must not leave a machine with its engine stopped.
+	// A holder stranded by a previously killed engine blocks `gno setup` exactly
+	// as it blocks the daemon, and reports it as a permissions problem. Clearing
+	// it here is what makes activation work on a machine whose engine was killed
+	// rather than stopped.
+	if res, rErr := gno.ReclaimResidentRuntime(ctx, cli.Dirs.Data, 3*time.Second); rErr == nil &&
+		(res.Cleared() || res.Detail != "") {
+		fmt.Fprintln(stdout, "homeplane-agent: "+res.Summary())
+	}
+
 	resume := func() {}
 	if prev, loadErr := gno.LoadConfig(dir); loadErr == nil && prev.UnitLabel != "" {
 		quiesce := supervise.Installer{Platform: platform, Dir: units, Runner: supervisorRunner(stdout, stderr)}
@@ -498,6 +508,8 @@ func runGNORun(ctx context.Context, args []string, stdout, stderr io.Writer) int
 
 	err = gno.RunDaemon(ctx, gno.RunOptions{
 		StateDir: dir,
+		DataDir:  cli.Dirs.Data,
+		Log:      func(line string) { fmt.Fprintln(stdout, "homeplane-agent: "+line) },
 		Run: func(ctx context.Context) error {
 			if err := cli.Verify(ctx); err != nil {
 				return err
