@@ -192,15 +192,15 @@ var allowedDetailKeys = map[string]bool{
 	"secret_generation":      true,
 	// Credential-broker metadata. flow_id correlates a flow's start with its
 	// terminal row; note that no key here can carry a provider response.
-	"flow_id": true,
-	"credential_version":     true,
-	"source":                 true,
-	"since":                  true,
-	"limit":                  true,
-	"path":                   true,
-	"method":                 true,
-	"http_status":            true,
-	"observed_addr":          true,
+	"flow_id":            true,
+	"credential_version": true,
+	"source":             true,
+	"since":              true,
+	"limit":              true,
+	"path":               true,
+	"method":             true,
+	"http_status":        true,
+	"observed_addr":      true,
 
 	// Connector-plane metadata. Note what is NOT here and cannot be added by a
 	// connector: any key capable of carrying request or response content.

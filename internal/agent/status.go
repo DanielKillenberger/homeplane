@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DanielKillenberger/homeplane/internal/agent/gno"
 	"github.com/DanielKillenberger/homeplane/internal/agent/supervise"
 )
 
@@ -122,6 +123,9 @@ type StatusOptions struct {
 	// question — and a test must be able to stage "the pid is gone" without
 	// killing a real process.
 	SyncLiveness supervise.Probe
+	// GNOLiveness observes the supervised retrieval engine, for the same reason
+	// and with the same default (supervise.ProcessProbe).
+	GNOLiveness supervise.Probe
 }
 
 // Status inspects the machine and reports what is actually true right now.
@@ -172,7 +176,7 @@ func Status(ctx context.Context, opts StatusOptions) (Report, error) {
 	report.Components = append(report.Components, enrolmentComponent(hasState, state, credential))
 	report.Components = append(report.Components, vaultComponent(state))
 	report.Components = append(report.Components, syncComponent(dir, state, opts.SyncLiveness))
-	report.Components = append(report.Components, localComponent(ComponentGNO, state.GNO, "GNO is not configured yet"))
+	report.Components = append(report.Components, gnoComponent(dir, state, opts.GNOLiveness))
 	report.Components = append(report.Components, listComponent(ComponentHarnesses, state.Harnesses, "no harness is configured yet"))
 	report.Components = append(report.Components, listComponent(ComponentSkills, state.Skills, "no skills are provisioned yet"))
 
@@ -311,6 +315,132 @@ func syncComponent(stateDir string, state State, probe supervise.Probe) Componen
 	default:
 		c.State = StateOK
 		c.Detail = live.Detail + "; " + ledger.Summary(now) + "; " + c.Detail
+	}
+	return c
+}
+
+// gnoComponent reports whether the retrieval engine is ACTUALLY running.
+//
+// R4 names two lifecycles and forbids conflating them, so this reports both and
+// keeps them labelled:
+//
+//	the DAEMON is supervised — pid, restart count, crash-loop, all from the
+//	  shared ledger and an external liveness probe, exactly like vault sync;
+//	the STDIO endpoint is launched per client — it has no pid, so what is
+//	  reported is the LAST PROBE of the launch template, with its timestamp.
+//
+// The engine also has a hard precondition: no vault, no engine. A machine whose
+// vault is missing must report the engine as degraded and SAY why, rather than
+// leaving a not_configured that reads like "nobody got round to it yet".
+func gnoComponent(stateDir string, state State, probe supervise.Probe) ComponentReport {
+	// The vault is checked FIRST, and unconditionally.
+	//
+	// R4 makes the engine's dependency explicit: no vault, no engine, and the
+	// state is named. That has to be evaluated before anything else, because the
+	// dangerous case is not the fresh machine — it is the machine that activated
+	// successfully weeks ago and whose vault directory has since vanished. Its
+	// recorded state still says `ok` and its daemon pid is still alive (GNO keeps
+	// serving a stale index), so consulting the recorded state first would report
+	// a healthy retrieval engine over a vault that is gone.
+	if degraded, ok := vaultBlocker(state); ok {
+		return degraded
+	}
+
+	c := localComponent(ComponentGNO, state.GNO, "the retrieval engine is not configured yet")
+	if state.GNO == nil || strings.TrimSpace(state.GNO.State) == "" {
+		return c
+	}
+	// A recorded failure is the whole story: nothing was supervised, so there is
+	// no ledger to consult.
+	if c.State != StateOK && c.State != StateInstalled {
+		return c
+	}
+	ledger, live, err := (supervise.Tracker{Dir: stateDir, Label: supervise.GNOLabel}).Observe(probe)
+	if err != nil {
+		return ComponentReport{Name: ComponentGNO, State: StateUnknown,
+			Detail: "restart history unreadable: " + err.Error()}
+	}
+	now := time.Now()
+	switch {
+	case c.State == StateInstalled:
+		if ledger.TotalStarts == 0 {
+			c.State = StateDegraded
+			c.Detail = "supervision unit installed but not loaded — the index is NOT being kept current; " + c.Detail
+			return c
+		}
+	case ledger.TotalStarts == 0:
+		c.State = StateDegraded
+		c.Detail = "supervised but never started — the index is NOT being kept current; " + c.Detail
+		return c
+	}
+	switch {
+	case ledger.CrashLooping(now, supervise.DefaultCrashLoopWindow, supervise.DefaultCrashLoopThreshold):
+		c.State = StateDegraded
+		c.Detail = "crash-looping (retryable; the vault remains readable locally) — " + ledger.Summary(now)
+	case !live.Known:
+		c.State = StateUnknown
+		c.Detail = "cannot tell whether the retrieval engine is running (" + live.Detail + ") — " + ledger.Summary(now)
+	case !live.Alive:
+		c.State = StateDegraded
+		c.Detail = "not running: " + live.Detail +
+			" (retryable; the vault remains readable locally) — " + ledger.Summary(now)
+	default:
+		c.State = StateOK
+		c.Detail = live.Detail + "; " + ledger.Summary(now) + "; " + c.Detail
+	}
+	return withStdioLaunches(stateDir, c)
+}
+
+// vaultBlocker reports the engine's state when the vault cannot support it.
+//
+// Every branch names both the blocker and the fix, because "not_configured" on
+// its own is indistinguishable from "nobody has got round to it" — and R4 asks
+// for a named degraded state, not a shrug.
+func vaultBlocker(state State) (ComponentReport, bool) {
+	report := func(s, detail string) (ComponentReport, bool) {
+		return ComponentReport{Name: ComponentGNO, State: s, Detail: detail}, true
+	}
+	path := strings.TrimSpace(state.VaultPath)
+	if path == "" {
+		return report(StateDegraded,
+			"not started: no vault on this machine — run `homeplane-agent vault detect -record` or `vault retrieve` first (retryable)")
+	}
+	info, err := os.Stat(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return report(StateDegraded,
+			"not started: the vault at "+path+" no longer exists — the engine cannot index what is not there (retryable)")
+	case err != nil:
+		return report(StateDegraded,
+			"not started: the vault at "+path+" is unreadable: "+err.Error()+" (retryable)")
+	case !info.IsDir():
+		return report(StateDegraded,
+			"not started: the vault path "+path+" is not a directory (retryable)")
+	}
+	return ComponentReport{}, false
+}
+
+// withStdioLaunches folds the harness-launch history into the engine's report.
+//
+// The daemon and the stdio endpoint fail independently: the indexer can be
+// perfectly healthy while every harness launch dies on a missing runtime. A
+// report that only described the daemon would call that machine `ok`.
+func withStdioLaunches(stateDir string, c ComponentReport) ComponentReport {
+	launches, err := gno.LoadLaunchLedger(stateDir)
+	if err != nil {
+		return c
+	}
+	// Never launched is not a fault: harnesses start the endpoint on demand, and
+	// a machine configured this morning has legitimately never seen one.
+	if launches.TotalLaunches == 0 {
+		return c
+	}
+	c.Detail += "; " + launches.Summary()
+	if launches.ConsecutiveFailures() > 0 && c.State == StateOK {
+		// The daemon is fine, so this is specifically the harness path failing —
+		// say which half is broken rather than degrading the whole thing namelessly.
+		c.State = StateDegraded
+		c.Detail = "the indexing daemon is healthy but harness launches are FAILING — " + c.Detail
 	}
 	return c
 }

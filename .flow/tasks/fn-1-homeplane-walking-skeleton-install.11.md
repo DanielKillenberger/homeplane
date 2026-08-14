@@ -31,9 +31,8 @@ Install/configure/launch/supervise GNO against the synced vault with a disposabl
 
 
 ## Done summary
-TBD
-
+Supervised the GNO retrieval engine with a disposable index and a published endpoint descriptor, then closed the review findings: the descriptor is published last, and installation is now transactional across re-activation — each destination is snapshotted (bytes + permissions) before being overwritten and restored on failure, so a failed upgrade can no longer destroy a working installation. Supervision units are written atomically. Regression test forces a re-activation failure and asserts every original artifact is byte-for-byte intact with the descriptor still valid.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 6abc0868b73237bad3d7aa78ce2f16815464b703, 1822b90fe069cc4a4c1bd9bc5d9b5df0915e1f66, 2a2bcce7a50886ec40dd52eadc3f9a8ee68b4d26, 6c8a103feb5fbe34df40ca5ef6126f04dfedcc93, 2532da10ddcf7925a7863704a0e7e7d7fb3901f2
+- Tests: go build ./..., go vet ./..., go test ./... (all packages ok), go test -race ./internal/agent/gno/ ./internal/agent/supervise/, baseline: red (gofmt -l flags internal/store/model.go, pre-existing from ab21a29, untouched by this task)
 - PRs:

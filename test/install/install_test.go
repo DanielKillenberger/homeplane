@@ -114,6 +114,11 @@ func runInstaller(t *testing.T, opts runOpts) runResult {
 		// installed. Individual tests override these to exercise the gates.
 		"HOMEPLANE_INIT_OVERRIDE="+defaultInit(),
 		"HOMEPLANE_NODE_BIN="+fakeNode(t, 22),
+		// ...and that Bun 1.3 is already installed. Both runtimes are
+		// prerequisites, so a default for one without the other would make
+		// every unrelated test depend on whatever the developer's machine
+		// happens to have.
+		"HOMEPLANE_BUN_BIN="+fakeBun(t, "1.3.11"),
 	)
 	for k, v := range opts.env {
 		cmd.Env = append(cmd.Env, k+"="+v)
@@ -155,6 +160,19 @@ func fakeNode(t *testing.T, major int) string {
 	script := fmt.Sprintf("#!/bin/sh\necho v%d.0.0\n", major)
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake node: %v", err)
+	}
+	return path
+}
+
+// fakeBun writes a stand-in `bun` reporting the given version, so the Bun gate
+// can be tested without a real runtime.
+func fakeBun(t *testing.T, version string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bun")
+	script := fmt.Sprintf("#!/bin/sh\necho %s\n", version)
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake bun: %v", err)
 	}
 	return path
 }
