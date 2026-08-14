@@ -293,11 +293,7 @@ fi
 (
   cd "$OUT_DIR"
   artifacts=()
-<<<<<<< HEAD
-  for f in homeplane-agent-* homeplane-server-* node-v*.tar.gz; do
-=======
-  for f in homeplane-agent-* node-v*.tar.gz bun-v*.zip; do
->>>>>>> fn-1-homeplane-walking-skeleton-install-t11
+  for f in homeplane-agent-* homeplane-server-* node-v*.tar.gz bun-v*.zip; do
     # An unmatched glob comes through as its own literal pattern; skipping
     # non-files is what keeps `--skip-node` from manifesting a phantom archive.
     if [[ -f "$f" ]]; then
