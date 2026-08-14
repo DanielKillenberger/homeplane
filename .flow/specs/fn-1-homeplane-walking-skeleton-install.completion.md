@@ -24,15 +24,33 @@ never by what a harness said it did.
 `scripts/final-gate.py` re-checks every artifact rather than trusting it. An
 artifact closes a requirement only if it **exists**, its recorded commit is an
 **ancestor of the gate head** (an artifact recorded on a commit that never
-reached the shipped history attests to a tree nobody can check out), it was
-recorded on a **clean worktree**, its own result is **passing** with zero failed
-assertions, and — where the table names them — the specific **stages** and
-**test names** are present and passing.
+reached the shipped history attests to a tree nobody can check out), it **says**
+whether its worktree was clean and it was, its own result is **passing** with
+zero failed assertions, and — where the table names them — the specific
+**stages** and **test names** are present and passing.
+
+**A `partial` live stage is not waved through for being partial.** Live proofs
+record limitations as *false assertions* carrying their reason and owner, which
+is what keeps them honest. The gate therefore ignores the stage's own
+`pass`/`partial` label and looks at each false assertion: it must match an entry
+in the script's `RATIFIED_LIMITATIONS` table by artifact, stage and exact claim
+text. Anything else fails the requirement, so re-recording a live artifact with
+a **new** limitation cannot slip through. The four ratified entries are listed
+below and mirrored in the spec's Boundaries.
+
+**The run itself must be complete**, or it is not a gate: all three repository
+gates supplied and green (an empty gate list fails rather than passing
+vacuously), the gate head's own worktree clean, and a deployment verification
+supplied with `result: pass`, `pending_count: 0`, and
+`provider_secret_refs_present` explicitly passing.
 
 That rejection is demonstrated, not assumed. Against the real artifacts the gate
 returns `fail` for: a missing artifact, an artifact whose commit is not an
-ancestor, one recorded on a dirty worktree, one carrying failed assertions, a
-named test that is absent, and a named live stage that is absent.
+ancestor, one recorded on a dirty worktree, one carrying failed assertions, one
+that does not record its cleanliness and is not a declared live proof, a named
+test that is absent, a named live stage that is absent, an unratified false
+assertion, a missing repository gate, a dirty gate head, and a deployment run
+with pending checks.
 
 The gate head is the last commit that changes shipped code or documentation; the
 evidence artifact and this summary's head line are written afterwards and land in
@@ -66,15 +84,31 @@ Artifacts are under `test/evidence/fn-1-homeplane-walking-skeleton-install.*`.
 All fourteen recorded commits are ancestors of the gate head; all were recorded
 on clean worktrees; all report `pass` with zero failed assertions.
 
+### Ratified limitations — the four false assertions in the live proof
+
+Each is a limitation the live artifact records with its reason and owner, and
+each is ratified by a decision that already existed. The gate matches them by
+exact claim text; anything else fails.
+
+| Stage | Claim recorded false | Affects | Ratification |
+|---|---|---|---|
+| `vault-sync` | the headless client was exercised against a disposable vault | R14 | Daniel's detect-only vault decision: Obsidian.app stays the vault's operating sync client, so Homeplane detects and never writes. R14's index-locality half is closed by `.11` and the live `gno` stage. |
+| `gno` | the retrieval engine runs in stdio mode, not as a supervised daemon | R4 | gno 1.29.6 allows one resident runtime per index. R4 requires the lifecycle semantics of the mode actually in use, and the stdio mode's semantics — per-launch history, no pid claim — are exactly what the artifact shows. Open D8 follow-up. |
+| `calendar` | Claude Code step 6a: the direct get cannot express cancellation | R8 | workspace-mcp 1.24.0 renders a cancelled event like a live one. Cleanup is settled by the filtered listing (6b) and by HTTP 410 Gone on a second delete (6c), both passing. R8 asks that cleanup be verified, not that a particular tool express it. |
+| `calendar` | Codex step 6a: the direct get cannot express cancellation | R8 | As above, for the Codex half of the same sequence. |
+
 ### R12's design-review row
 
 R12 is verified in the skeleton **by design review of the manifest/registration
-path** — a second live connector is explicitly out of scope. The row points at
-two things, both recorded:
+path** — a second live connector is explicitly out of scope. The row is
+**resolved, not restated**: the gate requires `docs/decisions/d6-gateway.md` to
+exist and requires the tracker to hold a review attempt with exactly this task,
+kind, verdict, head SHA and artifact hash, on a head that is an ancestor of the
+gate head. Deleting or editing that recorded review fails R12.
 
 - the design record `docs/decisions/d6-gateway.md` (all five D6 gates pass with
   live evidence), whose review is the recorded **SHIP** verdict on task `.1`
-  (codex / gpt-5.6-sol @ xhigh, head `394299f3`, artifact `aeea68c2a4ed`,
+  (codex, head `394299f36c50dfe0…`, artifact `aeea68c2a4ed31eb…`,
   2026-08-13T19:20:06Z);
 - executable proof that the claim is not prose: a second connector and a second
   OAuth provider each register from a manifest entry alone, in the two named

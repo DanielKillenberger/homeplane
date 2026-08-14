@@ -120,6 +120,12 @@ Out of scope for this spec (deliberately deferred, not forgotten):
 - Skills refresh/dangling-link repair machinery beyond the R15 baseline.
 - Audit metadata-only discipline is retained as a schema property of `AuditEvent` (asserted in .2's tests) rather than a standalone criterion.
 
+**Ratified acceptance exceptions (recorded by .14's final gate, 2026-08-14).** The live end-to-end proof records limitations as FALSE assertions carrying their reason and owner — that is how the artifact stays honest instead of dropping what it could not show. Exactly four exist, each ratified by a decision that already existed, and the final gate matches them by exact claim text so that a NEW limitation in a re-recorded artifact fails the gate rather than passing as "partial". The list is `RATIFIED_LIMITATIONS` in `scripts/final-gate.py`:
+
+- **`vault-sync` / "the headless client was exercised against a disposable vault" (R14)** — Daniel's detect-only vault decision: Obsidian.app remains the vault's operating sync client, so Homeplane detects the vault and never writes to it. The supervised-sync half of R14 is not exercised on this machine by choice; R14's index-locality half is closed by .11 and the live `gno` stage.
+- **`gno` / "the retrieval engine runs in stdio mode, not as a supervised daemon" (R4)** — gno 1.29.6 allows one resident runtime per index, so the daemon and a harness stdio launch cannot coexist. R4 requires the lifecycle semantics of the mode actually in use, and the stdio mode's semantics (per-launch history, no pid claim) are what the artifact shows. The choice between the two candidate resolutions is an open D8 follow-up for Daniel (`docs/decisions/d8-gno.md` §8) and does not block the skeleton.
+- **`calendar` / "step 6a: the direct get cannot express cancellation", Claude Code and Codex (R8)** — workspace-mcp 1.24.0 renders a cancelled event exactly like a live one. Cleanup is verified instead by the filtered listing (6b: no non-cancelled match) and by the provider answering HTTP 410 Gone to a second delete (6c), both recorded passing. R8 requires cleanup to be verified, not that a particular tool express it.
+
 ## Decision Context
 <!-- scope: both — conditionally substructured -->
 

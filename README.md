@@ -56,7 +56,7 @@ install work, since macOS has no package-manager fallback.
 ## Enrol
 
 ```bash
-~/.homeplane/bin/homeplane-agent enrol -server https://homeplane.<tailnet>.ts.net
+~/.homeplane/bin/homeplane-agent enrol -server http://homeplane.<tailnet>.ts.net
 ```
 
 Enrolment is identity-preserving: re-running it rotates this machine's
@@ -69,22 +69,32 @@ discarded rather than written over the live one.
 Then bring up the rest of the machine:
 
 ```bash
-homeplane-agent vault detect -record                 # or: vault retrieve -path DIR
-scripts/fetch-gno.sh --prefix ~/.homeplane/gno-pkg   # checksum-verified install
-homeplane-agent gno activate -apply                  # bind the vault, supervise, publish
-homeplane-agent configure-harnesses                  # Claude Code + Codex, one grant each
-homeplane-agent skills provision -verify             # link vault skills, prove in a fresh process
+homeplane-agent vault detect -record                  # or: vault retrieve -path DIR
+
+# fetch-gno.sh prints the pinned executable's path; activation needs it, because
+# a package installed under --prefix is on no PATH.
+GNO_BIN=$(scripts/fetch-gno.sh --prefix ~/.homeplane/gno-pkg)
+homeplane-agent gno activate -apply -bin "$GNO_BIN"   # bind the vault, supervise, publish
+
+homeplane-agent configure-harnesses                   # Claude Code + Codex, one grant each
+homeplane-agent skills provision -verify              # link vault skills, prove in a fresh process
 homeplane-agent add-credentials google                # consent here, credential stays on the server
 ```
 
 Each step is independent: enrolment succeeding while GNO fails still leaves the
 server connectors usable, and `status` names which stage is where.
 
+**The scheme is `http://`, deliberately.** The server listens on plain HTTP
+inside the tailnet (`HOMEPLANE_ADDR=:80`) — Tailscale is the transport boundary,
+and there is no public listener to protect with TLS. Tailnet reachability is
+never treated as authorization: every capability call still requires a valid
+grant. Pointing an `https://` URL at it fails the TLS handshake.
+
 ## Verify
 
 ```bash
 homeplane-agent status                                        # machine side
-curl -sf https://homeplane.<tailnet>.ts.net/healthz | jq .    # server side
+curl -sf http://homeplane.<tailnet>.ts.net/healthz | jq .     # server side
 ```
 
 `status` exits **0** ok, **1** a named component is degraded, **2** not enrolled;
@@ -160,8 +170,8 @@ homeplane-server admin secret init-key
 
 homeplane-server serve \
   --hostname homeplane \
-  --addr :443 \
-  --connector-endpoint-url https://homeplane.<tailnet>.ts.net/mcp \
+  --addr :80 \
+  --connector-endpoint-url http://homeplane.<tailnet>.ts.net/mcp \
   --gateway-health-url http://127.0.0.1:8080/health \
   --connector-manifest /etc/homeplane/connectors.json \
   --gateway-mcp-url http://127.0.0.1:44022/mcp

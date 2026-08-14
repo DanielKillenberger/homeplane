@@ -422,16 +422,33 @@ Two operational gotchas that cost real time:
 
 `homeplane-agent configure-harnesses` is the supported path — it merges
 semantically, backs up first, and records what it wrote. These recipes are for
-when you want a harness Homeplane does not manage, or you are debugging the
-endpoint itself. **You need a grant token**; take one from an existing 0600
-config, or issue a grant over `POST /grants`.
+**debugging the endpoint itself**, or reconfiguring one of the two supported
+harnesses by hand.
+
+Two constraints, both enforced server-side rather than by convention:
+
+- **Only `claude-code` and `codex` exist.** Server policy names exactly those
+  two harnesses (`internal/policy`), so a grant request for anything else is
+  refused. Wiring an unsupported harness is not a documentation gap you can
+  work around here — it needs the policy to name it first.
+- **Use a freshly issued grant for the harness you are wiring — never another
+  harness's token.** Reusing one makes every call appear under the *original*
+  harness: the audit attributes it there, and revoking the harness you think
+  you configured leaves the calls working. Per-harness attribution and
+  revocation are the two things the grant model actually guarantees, and
+  sharing a token discards both.
+
+Issue one over `POST /grants` (machine-credential auth, `{harness,
+capabilities}`), or simply re-run `configure-harnesses`, which issues a fresh
+grant per harness and supersedes the previous one. The response's
+`endpoint_url` is the URL to use below.
 
 ### Claude Code (2.1.227)
 
 ```bash
 claude mcp add --transport http homeplane \
   http://homeplane.tailab4e9b.ts.net/mcp \
-  --header "Authorization: Bearer <grant token>"
+  --header "Authorization: Bearer <claude-code grant token>"
 ```
 
 Verified against the live edge: the health check reports `✔ Connected` (a real
@@ -449,7 +466,7 @@ type = "http"
 url = "http://homeplane.tailab4e9b.ts.net/mcp"
 
 [mcp_servers.homeplane.http_headers]
-Authorization = "Bearer <grant token>"
+Authorization = "Bearer <codex grant token>"
 ```
 
 `bearer_token_env_var` also works on this version (that is how the D6 spike
