@@ -37,6 +37,23 @@ func decisionRows(rows []auditRow, tool string) []auditRow {
 	return out
 }
 
+// resultRows are the POST-call rows: the ones that can carry an identity only
+// the response revealed (a created event, the file a search returned).
+func resultRows(rows []auditRow, tool string) []auditRow {
+	var out []auditRow
+	for _, r := range rows {
+		if r.Tool == tool && r.Event == "connector_tool_result" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// identified reports whether an audit row names the artifact it acted on.
+// `unknown` is the manifest contract's honest "we could not identify it" — and
+// on the ops the spec names, it is not an acceptable answer.
+func identified(r auditRow) bool { return r.ArtifactID != "" && r.ArtifactID != "unknown" }
+
 func lastRow(rows []auditRow) (auditRow, bool) {
 	if len(rows) == 0 {
 		return auditRow{}, false
@@ -187,6 +204,14 @@ func stageConnector(s *stage) {
 			"audit: outcome=%s class=%s grant=%s | harness said: %s",
 			row.Outcome, row.ActionClass, row.GrantID, firstLine(read.text))
 
+		// R7 asks the Drive proof to name what it READ, not just that a read
+		// happened. The identity arrives with the response, so it is the result
+		// row that has to carry it.
+		result, hasResult := lastRow(resultRows(rowsForHarness(rows, h.grantHarness), "search_drive_files"))
+		s.assert(h.name+": the Drive read is audited against the file it returned",
+			hasResult && identified(result),
+			"audit: artifact=%s | harness said: %s", result.ArtifactID, firstLine(read.text))
+
 		since = time.Now().UTC().Add(-5 * time.Second)
 		write := h.call(s, "Drive write (must be refused) via "+h.name, connectorServer, "create_drive_file", map[string]any{
 			"file_name": "homeplane-e2e-must-not-exist.txt", "content": "this call must never reach Google",
@@ -289,12 +314,21 @@ func runSixOp(s *stage, h harnessUnderProof) {
 // together with the SERVER's decision row for it — which is what every
 // assertion below is settled on.
 func (o *sixOp) call(what, tool string, args map[string]any) (harnessOutput, auditRow) {
+	out, decision, _ := o.callRows(what, tool, args)
+	return out, decision
+}
+
+// callRows is call() plus the RESULT row, for the step whose artifact identity
+// only the response can supply.
+func (o *sixOp) callRows(what, tool string, args map[string]any) (harnessOutput, auditRow, auditRow) {
 	since := time.Now().UTC().Add(-30 * time.Second)
 	args["user_google_email"] = o.s.env.account
 	out := o.h.call(o.s, o.h.name+" "+what, connectorServer, tool, args)
 	rows := o.s.audit("server audit after "+o.h.name+" "+what, since)
-	row, _ := lastRow(decisionRows(rowsForHarness(rows, o.h.grantHarness), tool))
-	return out, row
+	mine := rowsForHarness(rows, o.h.grantHarness)
+	decision, _ := lastRow(decisionRows(mine, tool))
+	result, _ := lastRow(resultRows(mine, tool))
+	return out, decision, result
 }
 
 // isolated is STEP 0: nothing by this name exists, so nothing pre-existing can
@@ -316,7 +350,7 @@ func (o *sixOp) isolated() bool {
 func (o *sixOp) create() bool {
 	start := time.Now().UTC().Add(72 * time.Hour).Truncate(time.Hour)
 	o.armed = true // before the call, not after: the step that can fail while the event exists is the one that parses its id
-	out, row := o.call("step 1: create", "manage_event", map[string]any{
+	out, row, result := o.callRows("step 1: create", "manage_event", map[string]any{
 		"action": "create", "calendar_id": o.cal, "summary": o.summary,
 		"start_time": rfc3339(start), "end_time": rfc3339(start.Add(time.Hour)),
 		"description":  "v1 — Homeplane end-to-end proof (" + o.stamp + ")",
@@ -328,8 +362,17 @@ func (o *sixOp) create() bool {
 		"audit: outcome=%s class=%s | harness said: %s", row.Outcome, row.ActionClass, firstLine(out.text)) {
 		return false
 	}
-	return o.s.assert(o.h.name+" step 1: the created event's id is known",
-		o.eventID != "", "the connector answered without an id: %s", firstLine(out.text))
+	if !o.s.assert(o.h.name+" step 1: the created event's id is known",
+		o.eventID != "", "the connector answered without an id: %s", firstLine(out.text)) {
+		return false
+	}
+	// The create is the one step whose artifact identity exists only in the
+	// RESPONSE — the request had no event yet. Every later step audits this
+	// same id, so a create that audited `unknown` would leave the six-op
+	// sequence uncorrelated in the log.
+	return o.s.assert(o.h.name+" step 1: the create is audited against the event it created",
+		identified(result) && result.ArtifactID == o.eventID,
+		"audit: artifact=%s | the connector said the id is %s", result.ArtifactID, o.eventID)
 }
 
 // readBack is STEP 2.

@@ -103,3 +103,81 @@ func TestArgsDigestIsStableCanonicalAndOneWay(t *testing.T) {
 		t.Fatal("distinct non-JSON arguments collided")
 	}
 }
+
+// --- step pipelines ----------------------------------------------------------
+//
+// Steps exist because real MCP tools answer in prose: the identity is inside a
+// sentence or a link, not in a field. They are the ONLY part of extraction that
+// derives a value rather than reading one, so their tests are mostly about what
+// they refuse.
+
+func TestExtractRunsStepPipelines(t *testing.T) {
+	// The shape of a real MCP result: a text content block.
+	doc := json.RawMessage(`{"content":[{"type":"text",
+		"text":"Successfully created event 'x'. Link: https://www.google.com/calendar/event?eid=dWllZ3FkbGVmbnRzNDZtcHQxcmdpc2k2bmMgZGFuaWVsLmtpbGxlbmJlcmdlckBt"}]}`)
+
+	got, ok := Extract(Extractor{
+		Source:  FromResponse,
+		Pointer: "$.content[0].text",
+		Steps: []ExtractStep{
+			{Match: `[?&]eid=([A-Za-z0-9+/_=-]+)`},
+			{Decode: DecodeBase64},
+			{Match: `^([A-Za-z0-9_-]+)`},
+		},
+	}, doc)
+	if !ok || got != "uiegqdlefnts46mpt1rgisi6nc" {
+		t.Fatalf("Extract = %q, %v; want the decoded event id", got, ok)
+	}
+}
+
+func TestExtractStepPipelinesFailClosed(t *testing.T) {
+	text := func(s string) json.RawMessage {
+		b, err := json.Marshal(map[string]any{"content": []any{map[string]any{"text": s}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	idFromLink := []ExtractStep{
+		{Match: `[?&]eid=([A-Za-z0-9+/_=-]+)`},
+		{Decode: DecodeBase64},
+		{Match: `^([A-Za-z0-9_-]+)`},
+	}
+
+	for _, tc := range []struct {
+		name  string
+		doc   json.RawMessage
+		steps []ExtractStep
+	}{
+		{"nothing matches the first step", text("Successfully created event 'x'."), idFromLink},
+		{"the capture is not base64", text("Link: ?eid=not!valid"), idFromLink},
+		{"decoded bytes are not text", text("Link: ?eid=" + "/////w=="), idFromLink},
+		{"the pointer resolves to a non-string", json.RawMessage(`{"content":[{"text":42}]}`), idFromLink},
+		{"a step matched but produced nothing an id may contain", text("id: <hello world>"),
+			[]ExtractStep{{Match: `id: <(.*)>`}}},
+		{"the derived value is too long", text("id: " + strings.Repeat("a", MaxArtifactIDLen+1)),
+			[]ExtractStep{{Match: `id: (\w+)`}}},
+		{"the input is larger than a pipeline may scan", text(strings.Repeat("x", MaxExtractInputLen+1)),
+			[]ExtractStep{{Match: `(x)`}}},
+		{"an empty step passes nothing through", text("id: abc"), []ExtractStep{{}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, ok := Extract(Extractor{Source: FromResponse, Pointer: "$.content[0].text", Steps: tc.steps}, tc.doc); ok {
+				t.Fatalf("Extract returned %q; a pipeline that cannot identify an artifact must yield nothing", got)
+			}
+		})
+	}
+}
+
+// A pipeline must never be a channel for the text it read. Whatever a pattern
+// captures, only identifier-shaped output reaches the audit row.
+func TestExtractPipelineOutputIsIdentifierShaped(t *testing.T) {
+	doc := json.RawMessage(`{"text":"BEGIN my private note text END"}`)
+	if got, ok := Extract(Extractor{
+		Source:  FromResponse,
+		Pointer: "$.text",
+		Steps:   []ExtractStep{{Match: `BEGIN (.*) END`}},
+	}, doc); ok {
+		t.Fatalf("a prose capture reached the audit row as %q", got)
+	}
+}

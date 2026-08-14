@@ -91,6 +91,65 @@ func TestManifestRejectsMalformedDeclarations(t *testing.T) {
 			wantMsg: "unknown capability",
 		},
 		{
+			// The step vocabulary is closed and each step does exactly one
+			// thing, so an ambiguous pipeline is refused at registration rather
+			// than resolved by evaluation order at call time.
+			name: "an artifact_id step declaring neither match nor decode",
+			mutate: func(s string) string {
+				return strings.Replace(s, `"artifact_id": { "source": "response", "pointer": "$.note.id" }`,
+					`"artifact_id": { "source": "response", "pointer": "$.note.id", "steps": [{}] }`, 1)
+			},
+			wantErr: ErrInvalidManifest,
+			wantMsg: "neither match nor decode",
+		},
+		{
+			name: "an artifact_id step declaring both match and decode",
+			mutate: func(s string) string {
+				return strings.Replace(s, `"artifact_id": { "source": "response", "pointer": "$.note.id" }`,
+					`"artifact_id": { "source": "response", "pointer": "$.note.id", "steps": [{"match": "(a)", "decode": "base64"}] }`, 1)
+			},
+			wantErr: ErrInvalidManifest,
+			wantMsg: "both match and decode",
+		},
+		{
+			name: "an unknown decoding",
+			mutate: func(s string) string {
+				return strings.Replace(s, `"artifact_id": { "source": "response", "pointer": "$.note.id" }`,
+					`"artifact_id": { "source": "response", "pointer": "$.note.id", "steps": [{"decode": "rot13"}] }`, 1)
+			},
+			wantErr: ErrInvalidManifest,
+			wantMsg: "decode",
+		},
+		{
+			name: "a match pattern that does not compile",
+			mutate: func(s string) string {
+				return strings.Replace(s, `"artifact_id": { "source": "response", "pointer": "$.note.id" }`,
+					`"artifact_id": { "source": "response", "pointer": "$.note.id", "steps": [{"match": "([a-z"}] }`, 1)
+			},
+			wantErr: ErrInvalidManifest,
+			wantMsg: "capture group",
+		},
+		{
+			name: "a match pattern that captures nothing, or too much",
+			mutate: func(s string) string {
+				return strings.Replace(s, `"artifact_id": { "source": "response", "pointer": "$.note.id" }`,
+					`"artifact_id": { "source": "response", "pointer": "$.note.id", "steps": [{"match": "(a)(b)"}] }`, 1)
+			},
+			wantErr: ErrInvalidManifest,
+			wantMsg: "want exactly 1",
+		},
+		{
+			// A candidate LIST is validated the same as a single extractor:
+			// one bad candidate refuses the manifest.
+			name: "a bad candidate inside an artifact_id list",
+			mutate: func(s string) string {
+				return strings.Replace(s, `"artifact_id": { "source": "response", "pointer": "$.note.id" }`,
+					`"artifact_id": [{ "source": "request", "pointer": "$.note_id" }, { "source": "sideways", "pointer": "$.note.id" }]`, 1)
+			},
+			wantErr: ErrInvalidManifest,
+			wantMsg: "artifact_id source",
+		},
+		{
 			name:    "unknown credential driver",
 			mutate:  func(s string) string { return strings.Replace(s, `"oauth2-authcode"`, `"magic-links"`, 1) },
 			wantErr: ErrUnknownDriver,

@@ -3,12 +3,16 @@ package connectors
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"unicode/utf8"
 )
 
 // ArtifactUnknown is the artifact id recorded when no extractor is declared, or
@@ -131,10 +135,23 @@ func parsePointer(p string) ([]segment, error) {
 	return segs, nil
 }
 
+// MaxExtractInputLen bounds the text a step pipeline may run over. Tool
+// responses are already bounded at the edge; this bounds them again where a
+// regexp would otherwise scan an arbitrarily large body on every call.
+const MaxExtractInputLen = 256 << 10
+
+// identityRe is the shape a PIPELINE-extracted id may have. A pointer that
+// lands directly on a field is the manifest naming an identity slot; a pipeline
+// derives its value from free text and a base64 blob, where a sloppy pattern
+// could otherwise carry prose — or bytes — into the audit log. So the derived
+// value must look like an identifier or it is discarded.
+var identityRe = regexp.MustCompile(`^[A-Za-z0-9._:@/+=-]+$`)
+
 // Extract resolves an extractor against a JSON document, returning the artifact
 // id and whether it was found. It is deliberately total: any failure (malformed
-// document, missing field, non-scalar or oversized value) returns false and the
-// caller falls back to the args digest. Audit derivation never fails a call.
+// document, missing field, non-scalar or oversized value, a step that matched
+// nothing) returns false and the caller falls back to the args digest. Audit
+// derivation never fails a call.
 func Extract(e Extractor, doc json.RawMessage) (string, bool) {
 	segs, err := parsePointer(e.Pointer)
 	if err != nil || len(doc) == 0 {
@@ -162,8 +179,102 @@ func Extract(e Extractor, doc json.RawMessage) (string, bool) {
 			return "", false
 		}
 	}
-	return scalarString(v)
+	if len(e.Steps) == 0 {
+		return scalarString(v)
+	}
+	return runSteps(e.Steps, v)
 }
+
+// runSteps refines the pointer's value into an id.
+//
+// The pointer's own value is NOT bounded by MaxArtifactIDLen here: a pipeline
+// exists precisely because the identity is embedded in something bigger than
+// itself (a sentence, a link). The bound moves to the pipeline's OUTPUT, which
+// is what actually reaches the audit row.
+func runSteps(steps []ExtractStep, v any) (string, bool) {
+	s, ok := v.(string)
+	if !ok {
+		// A step pipeline reads text. A number or bool is already an identity
+		// and needs no refining, so declaring steps over one is a manifest
+		// mistake rather than something to guess at.
+		return "", false
+	}
+	if len(s) > MaxExtractInputLen {
+		return "", false
+	}
+	for _, step := range steps {
+		if s, ok = step.apply(s); !ok {
+			return "", false
+		}
+	}
+	if s == "" || len(s) > MaxArtifactIDLen || !identityRe.MatchString(s) {
+		return "", false
+	}
+	return s, true
+}
+
+// apply runs one step. Exactly one of Match/Decode is set (the manifest
+// validator enforces it), so the zero step cannot silently pass text through.
+func (st ExtractStep) apply(s string) (string, bool) {
+	switch {
+	case st.Match != "":
+		re, err := compilePattern(st.Match)
+		if err != nil {
+			return "", false
+		}
+		m := re.FindStringSubmatch(s)
+		if len(m) < 2 {
+			return "", false
+		}
+		return m[1], true
+	case st.Decode == DecodeBase64:
+		out, ok := decodeBase64(s)
+		if !ok || !utf8.ValidString(out) {
+			return "", false
+		}
+		return out, true
+	default:
+		return "", false
+	}
+}
+
+// decodeBase64 accepts the standard and URL alphabets, padded or not — a
+// provider that embeds an id in a link chooses one of the four and never says
+// which.
+func decodeBase64(s string) (string, bool) {
+	for _, enc := range []*base64.Encoding{
+		base64.StdEncoding, base64.RawStdEncoding,
+		base64.URLEncoding, base64.RawURLEncoding,
+	} {
+		if out, err := enc.DecodeString(s); err == nil {
+			return string(out), true
+		}
+	}
+	return "", false
+}
+
+// patternCache keeps the manifest's compiled patterns. The key space is the
+// manifest's own literals — a fixed, operator-authored set — so it is bounded
+// by the file rather than by traffic.
+var patternCache sync.Map
+
+func compilePattern(pattern string) (*regexp.Regexp, error) {
+	if v, ok := patternCache.Load(pattern); ok {
+		if re, ok := v.(*regexp.Regexp); ok {
+			return re, nil
+		}
+		return nil, errBadPattern
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		patternCache.Store(pattern, errBadPattern)
+		return nil, errBadPattern
+	}
+	patternCache.Store(pattern, re)
+	return re, nil
+}
+
+var errBadPattern = errors.New("match must be a valid RE2 pattern with exactly one capture group")
 
 func scalarString(v any) (string, bool) {
 	var out string

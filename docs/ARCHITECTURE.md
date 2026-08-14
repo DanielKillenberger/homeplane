@@ -170,10 +170,22 @@ Three properties matter more than the schema:
   `connector.send`, which neither skeleton harness holds. Live: refused
   `capability_missing` from both harnesses.
 - **Audit is metadata, never payload.** A mapping may declare a JSONPath-style
-  artifact-id extractor (event id, file id); without one the row records the tool
-  name plus a digest of the arguments — never the arguments. Enforced by the
-  schema and an allow-listed detail vocabulary, not by convention. Live: 840
-  rows checked, zero carrying the test event's summary, zero oversized values.
+  artifact-id extractor (event id, file id) reading the request or the response;
+  without one the row records the tool name plus a digest of the arguments —
+  never the arguments. Enforced by the schema and an allow-listed detail
+  vocabulary, not by convention. Live: 840 rows checked, zero carrying the test
+  event's summary, zero oversized values.
+- **Identity survives a connector that answers in prose.** The pinned Google
+  connector returns a sentence, not fields (`outputSchema` is a bare string), so
+  a plain pointer reaches no id: a Drive search states each hit as `(ID: …)`,
+  and a created event's id exists only inside the base64 `eid` of the link.
+  Rather than special-case Google in the audit path, an extractor may declare an
+  ordered list of candidates and a **step pipeline** — bounded RE2 `match` and
+  `decode: base64` — so identifying an artifact stays a manifest edit. Steps are
+  fail-closed (no match ⇒ `unknown`, never a guess) and their output must be
+  identifier-shaped, so prose can never ride a capture group into the log. That
+  is what lets `manage_event` audit the SAME event id whether the request named
+  it (update, delete) or only the response did (create).
 
 **Connector-agnosticism is tested, not asserted** (R12):
 `internal/server/connectors/r12_test.go` registers a second connector from a

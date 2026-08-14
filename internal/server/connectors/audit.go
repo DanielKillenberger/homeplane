@@ -105,9 +105,13 @@ func (e *Engine) CallEvent(req Request, d Decision, callID string) store.AuditEv
 	// a digest of the arguments is one more thing about the request in the log
 	// than the record needs.
 	ev.ArtifactID = ArtifactUnknown
-	if ex := d.Mapping.ArtifactID; ex != nil && ex.Source == FromRequest {
-		if id, ok := Extract(*ex, req.Args); ok {
+	for _, ex := range d.Mapping.ArtifactID {
+		if ex.Source != FromRequest {
+			continue
+		}
+		if id, ok := Extract(ex, req.Args); ok {
 			ev.ArtifactID = id
+			break
 		}
 	}
 	if ev.ArtifactID == ArtifactUnknown {
@@ -132,12 +136,21 @@ func (e *Engine) ResultEvent(req Request, d Decision, callID string, resp json.R
 		ev.Reason = "tool_failed"
 		return ev
 	}
-	if ex := d.Mapping.ArtifactID; ex != nil && ex.Source == FromResponse {
-		if id, ok := Extract(*ex, resp); ok {
-			ev.ArtifactID = id
-			// The artifact is now identified, so the digest has nothing left to
-			// stand in for.
-			delete(ev.Detail, "args_digest")
+	// Candidates are tried in the manifest's order, and a request-side one that
+	// already identified the artifact wins: an id the CALLER named is the one an
+	// auditor can correlate the call row with.
+	if ev.ArtifactID == ArtifactUnknown {
+		for _, ex := range d.Mapping.ArtifactID {
+			if ex.Source != FromResponse {
+				continue
+			}
+			if id, ok := Extract(ex, resp); ok {
+				ev.ArtifactID = id
+				// The artifact is now identified, so the digest has nothing
+				// left to stand in for.
+				delete(ev.Detail, "args_digest")
+				break
+			}
 		}
 	}
 	return ev

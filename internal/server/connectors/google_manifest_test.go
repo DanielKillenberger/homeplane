@@ -3,6 +3,7 @@ package connectors
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -511,3 +512,140 @@ func TestArgumentGuardAppliesIsTotal(t *testing.T) {
 		}
 	}
 }
+
+// --- artifact identity, against REAL connector responses ---------------------
+//
+// The three constants below are verbatim `tools/call` results from the pinned
+// connector (workspace-mcp v1.24.0, serverInfo google_workspace 3.4.7),
+// captured on 2026-08-14 against the live deployment's gateway. They are not
+// invented shapes: this connector answers in PROSE — `outputSchema` for both
+// tools is `{"result": {"type": "string"}}` — so the artifact identity is
+// wherever the sentence happens to put it, and the manifest's extractors have
+// to reach it there or the audit row says `unknown`.
+//
+// If a connector upgrade changes the wording, these tests fail HERE, at the
+// manifest, rather than silently degrading a live audit trail into `unknown`.
+
+const (
+	// A Drive search. Each hit carries `(ID: <file id>)`.
+	realDriveSearchResult = `{"content":[{"type":"text","text":"Found 2 files for daniel.killenberger@gmail.com matching 'trashed = false':\n- Name: \"What we need to work on\" (ID: 1hh1Ws0mTNaXKB6-kLLc0PYF9j3-etAk0rDAe7f2dV7A, Type: application/vnd.google-apps.document, Size: 9261) Link: https://docs.google.com/document/d/1hh1Ws0mTNaXKB6-kLLc0PYF9j3-etAk0rDAe7f2dV7A/edit?usp=drivesdk\n- Name: \"Notes\" (ID: 1pSxpOgXFtCpvpzsXo3p-DRZQ1O3HuQaRWwNcKY5Dy7M, Type: application/vnd.google-apps.document, Size: 68221) Link: https://docs.google.com/document/d/1pSxpOgXFtCpvpzsXo3p-DRZQ1O3HuQaRWwNcKY5Dy7M/edit?usp=drivesdk"}],"structuredContent":{"result":"…"},"isError":false}`
+
+	// A Calendar CREATE. This is the case that used to audit as `unknown`: the
+	// request has no event_id yet, and the response states the id only inside
+	// the link's base64 `eid` (base64 of "<event id> <account>").
+	realCalendarCreateResult = `{"_meta":{"fastmcp":{"wrap_result":true}},"content":[{"type":"text","text":"Successfully created event 'homeplane-shape-probe' for daniel.killenberger@gmail.com. Link: https://www.google.com/calendar/event?eid=dWllZ3FkbGVmbnRzNDZtcHQxcmdpc2k2bmMgZGFuaWVsLmtpbGxlbmJlcmdlckBt"}],"structuredContent":{"result":"…"},"isError":false}`
+
+	// The event id the create response encodes, and the one the update and
+	// delete calls then carry in their REQUESTS. Correlating the six-op
+	// sequence in the audit log depends on those being the same string.
+	realCalendarEventID = "uiegqdlefnts46mpt1rgisi6nc"
+)
+
+// TestShippedGoogleIdentifiesTheDriveReadArtifact — R7's Drive proof has to
+// name the file it read, not just the tool it called.
+func TestShippedGoogleIdentifiesTheDriveReadArtifact(t *testing.T) {
+	e := shippedGoogleEngine(t)
+	r := req(googleProvider, "search_drive_files",
+		`{"user_google_email":"u@example.test","query":"trashed = false"}`, readOnlyCaller())
+	d := e.Authorize(r)
+	if !d.Allowed {
+		t.Fatalf("search_drive_files was not allowed: %+v", d)
+	}
+
+	// The pre-call row cannot know it yet — the search has not run — so it
+	// falls back to the args digest, exactly as the manifest contract says.
+	call := e.CallEvent(r, d, "call-1")
+	if call.ArtifactID != ArtifactUnknown {
+		t.Errorf("pre-call artifact id = %q, want %q (the response has not arrived)", call.ArtifactID, ArtifactUnknown)
+	}
+	if call.Detail["args_digest"] == "" {
+		t.Error("an unidentified call recorded no args digest to stand in for it")
+	}
+
+	result := e.ResultEvent(r, d, "call-1", json.RawMessage(realDriveSearchResult), nil)
+	if want := "1hh1Ws0mTNaXKB6-kLLc0PYF9j3-etAk0rDAe7f2dV7A"; result.ArtifactID != want {
+		t.Fatalf("Drive read artifact id = %q, want %q", result.ArtifactID, want)
+	}
+	if _, ok := result.Detail["args_digest"]; ok {
+		t.Error("the identified row still carries an args digest it no longer stands in for")
+	}
+	// Metadata only: the file NAMES in that response must not have travelled.
+	assertNoPayload(t, []store.AuditEvent{call, result}, "What we need to work on", "Notes")
+}
+
+// TestShippedGoogleIdentifiesTheCalendarSixOpSequence — R8 wants every step of
+// the reversible-write proof attributable to ONE event, which means the create
+// must audit the same id the update and delete carry.
+func TestShippedGoogleIdentifiesTheCalendarSixOpSequence(t *testing.T) {
+	e := shippedGoogleEngine(t)
+
+	create := req(googleProvider, "manage_event",
+		`{"user_google_email":"u@example.test","action":"create","summary":"homeplane-shape-probe",`+
+			`"start_time":"2026-09-01T18:00:00+02:00","end_time":"2026-09-01T19:00:00+02:00","send_updates":"none"}`,
+		fullCaller())
+	d := e.Authorize(create)
+	if !d.Allowed || d.ActionClass != ActionWrite {
+		t.Fatalf("manage_event create: %+v, want an allowed write", d)
+	}
+	got := e.ResultEvent(create, d, "call-create", json.RawMessage(realCalendarCreateResult), nil)
+	if got.ArtifactID != realCalendarEventID {
+		t.Fatalf("created event artifact id = %q, want %q", got.ArtifactID, realCalendarEventID)
+	}
+
+	// Update and delete name the event themselves, so the REQUEST-side
+	// candidate answers and the row is identified before the tool even runs.
+	for _, tc := range []struct {
+		action string
+		class  ActionClass
+	}{{"update", ActionWrite}, {"delete", ActionDelete}} {
+		r := req(googleProvider, "manage_event",
+			`{"user_google_email":"u@example.test","action":"`+tc.action+`","event_id":"`+realCalendarEventID+
+				`","send_updates":"none"}`, fullCaller())
+		d := e.Authorize(r)
+		if !d.Allowed || d.ActionClass != tc.class {
+			t.Fatalf("manage_event %s: %+v, want an allowed %s", tc.action, d, tc.class)
+		}
+		if ev := e.CallEvent(r, d, "call-"+tc.action); ev.ArtifactID != realCalendarEventID {
+			t.Errorf("%s artifact id = %q, want %q", tc.action, ev.ArtifactID, realCalendarEventID)
+		}
+	}
+}
+
+// TestShippedGoogleArtifactExtractionFailsClosed — an extractor that cannot
+// find an identity must yield `unknown`, never a fragment of the payload it was
+// reading. This is the property that keeps a prose-parsing extractor safe.
+func TestShippedGoogleArtifactExtractionFailsClosed(t *testing.T) {
+	e := shippedGoogleEngine(t)
+	r := req(googleProvider, "search_drive_files",
+		`{"user_google_email":"u@example.test","query":"trashed = false"}`, readOnlyCaller())
+	d := e.Authorize(r)
+
+	for _, tc := range []struct {
+		name string
+		resp string
+	}{
+		{"no matches", `{"content":[{"type":"text","text":"No files found for u@example.test matching 'trashed = false'."}]}`},
+		{"an error result", `{"content":[{"type":"text","text":"Error calling tool 'search_drive_files': HttpError 400"}],"isError":true}`},
+		{"no content at all", `{"content":[]}`},
+		{"not an object", `"nope"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := e.ResultEvent(r, d, "call-1", json.RawMessage(tc.resp), nil)
+			if ev.ArtifactID != ArtifactUnknown {
+				t.Fatalf("artifact id = %q, want %q", ev.ArtifactID, ArtifactUnknown)
+			}
+			if ev.Detail["args_digest"] == "" {
+				t.Error("an unidentified row recorded no args digest to stand in for it")
+			}
+		})
+	}
+
+	// A tool that FAILED is not read for identities at all: there is no
+	// artifact, and the response is the provider's error text.
+	ev := e.ResultEvent(r, d, "call-1", json.RawMessage(realDriveSearchResult), errTestToolFailed)
+	if ev.ArtifactID != ArtifactUnknown {
+		t.Errorf("a failed call recorded artifact id %q, want %q", ev.ArtifactID, ArtifactUnknown)
+	}
+}
+
+var errTestToolFailed = errors.New("the tool failed")

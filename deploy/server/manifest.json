@@ -57,7 +57,12 @@
       "tools": [
         {
           "tool": "search_drive_files",
-          "action_class": "read"
+          "action_class": "read",
+          "artifact_id": {
+            "source": "response",
+            "pointer": "$.content[0].text",
+            "steps": [{ "match": "\\(ID: ([A-Za-z0-9_-]+)" }]
+          }
         },
         {
           "tool": "get_drive_file_content",
@@ -87,7 +92,18 @@
               "reason": "the connector defaults send_updates to \"all\", which emails every attendee; notifying people is send authority, not write"
             }
           ],
-          "artifact_id": { "source": "request", "pointer": "$.event_id" }
+          "artifact_id": [
+            { "source": "request", "pointer": "$.event_id" },
+            {
+              "source": "response",
+              "pointer": "$.content[0].text",
+              "steps": [
+                { "match": "[?&]eid=([A-Za-z0-9+/_=-]+)" },
+                { "decode": "base64" },
+                { "match": "^([A-Za-z0-9_-]+)" }
+              ]
+            }
+          ]
         }
       ],
       "excluded_tools": [

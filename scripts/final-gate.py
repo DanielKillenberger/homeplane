@@ -135,6 +135,123 @@ RATIFIED_LIMITATIONS = [
 ]
 
 
+# Artifact IDENTITY in the live audit rows.
+#
+# The spec asks the Google proof to name what it touched — the file a Drive read
+# returned, the event the six-op sequence created, updated and deleted — not
+# merely which tool was called. A stage can be `pass` with every action class
+# correct and still record `ArtifactID:"unknown"` on all of it, which is a
+# weaker proof than the spec's, so the gate reads the audit rows the artifact
+# captured and checks the identities itself.
+#
+# `rule` says how strict the check is for that tool's RESULT rows:
+#   "all" — at least one row, and none of them unidentified. Used where every
+#           call in the sequence acts on one named artifact.
+#   "any" — at least one identified row. Used for tools that legitimately run
+#           without naming one (a listing has no single artifact).
+#
+# Rows that were DENIED, or whose tool failed at the provider, are not counted:
+# there is no artifact to name in either case.
+ARTIFACT_IDENTITY = [
+    {
+        "artifact": f"{SPEC}.7.live.json",
+        "stage": "connector",
+        "tool": "search_drive_files",
+        "rule": "all",
+        "why": "R7: the Drive read proof must name the file it read",
+    },
+    {
+        "artifact": f"{SPEC}.7.live.json",
+        "stage": "calendar",
+        "tool": "manage_event",
+        "rule": "all",
+        "why": "R8: create, update and delete must each audit the event they acted on",
+    },
+    {
+        "artifact": f"{SPEC}.7.live.json",
+        "stage": "calendar",
+        "tool": "get_events",
+        "rule": "any",
+        "why": "R8: the read-back must name the event (a summary-filtered listing legitimately does not)",
+    },
+]
+
+# The audit row values that mean "no identity was recorded" and "the call never
+# reached the provider". Both are read from the rows the live stages captured.
+ARTIFACT_UNKNOWN = "unknown"
+RESULT_EVENT = "connector_tool_result"
+TOOL_FAILED = "tool_failed"
+
+
+def audit_rows(stage: dict) -> list[dict]:
+    """Every audit row the stage's steps captured.
+
+    Live stages record `homeplane-server admin audit -json` output verbatim in
+    each step's `stdout_excerpt`, one JSON object per line. A line that does not
+    parse (an excerpt truncated mid-row) is skipped rather than guessed at — the
+    checks below need rows to be PRESENT, so a dropped row can only ever make
+    the gate stricter.
+    """
+    rows = []
+    for step in stage.get("steps", []):
+        for line in (step.get("stdout_excerpt") or "").splitlines():
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict) and "Event" in row:
+                rows.append(row)
+    return rows
+
+
+def check_artifact_identity(artifact: str, stage_name: str, stage: dict) -> tuple[list[str], dict]:
+    """Check the identity rules that apply to one live stage."""
+    rules = [r for r in ARTIFACT_IDENTITY if r["artifact"] == artifact and r["stage"] == stage_name]
+    if not rules:
+        return [], {}
+
+    rows = audit_rows(stage)
+    problems: list[str] = []
+    report: dict = {}
+    for rule in rules:
+        results = [
+            r
+            for r in rows
+            if r.get("Event") == RESULT_EVENT
+            and r.get("Tool") == rule["tool"]
+            and r.get("Reason") != TOOL_FAILED
+        ]
+        identified = [r for r in results if r.get("ArtifactID") not in ("", ARTIFACT_UNKNOWN)]
+        report[rule["tool"]] = {
+            "rule": rule["rule"],
+            "result_rows": len(results),
+            "identified": len(identified),
+            "why": rule["why"],
+        }
+        if not results:
+            problems.append(
+                f"stage {stage_name!r}: no {rule['tool']!r} result rows were captured, "
+                f"so its artifact identities cannot be checked ({rule['why']})"
+            )
+            continue
+        if not identified:
+            problems.append(
+                f"stage {stage_name!r}: no {rule['tool']!r} result row records an artifact id "
+                f"({rule['why']})"
+            )
+            continue
+        if rule["rule"] == "all" and len(identified) != len(results):
+            unknown = len(results) - len(identified)
+            problems.append(
+                f"stage {stage_name!r}: {unknown} of {len(results)} {rule['tool']!r} result rows "
+                f"record artifact id {ARTIFACT_UNKNOWN!r} ({rule['why']})"
+            )
+    return problems, report
+
+
 def ratification_for(artifact: str, stage: str, claim: str) -> dict | None:
     for entry in RATIFIED_LIMITATIONS:
         if (
@@ -404,6 +521,13 @@ def check_source(src: dict, head: str) -> dict:
                 "false_assertions": len(false_claims),
                 "ratified_limitations": ratified,
             }
+
+            # A stage can be `pass` on every action class and still have
+            # recorded nothing about WHAT it touched.
+            id_problems, id_report = check_artifact_identity(name, stage, s)
+            if id_report:
+                settled[stage]["artifact_identity"] = id_report
+            out["problems"].extend(id_problems)
             for claim in unratified:
                 out["problems"].append(
                     f"stage {stage!r}: assertion {claim!r} is FALSE and is not a ratified limitation"

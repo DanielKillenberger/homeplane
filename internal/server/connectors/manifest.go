@@ -24,6 +24,7 @@
 package connectors
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -225,7 +226,13 @@ type ToolMapping struct {
 	// ArtifactID optionally declares where the affected artifact's identity can
 	// be read. Absent means the audit row records a digest of the request
 	// arguments and artifact id `unknown`.
-	ArtifactID *Extractor `json:"artifact_id,omitempty"`
+	//
+	// It accepts one extractor or an ordered list of candidates, first match
+	// wins. A list is what a multi-action tool needs: `manage_event` carries the
+	// event id in its REQUEST when updating or deleting one, and only in its
+	// RESPONSE when it just created one — a single extractor would have to leave
+	// one of those unidentified.
+	ArtifactID ArtifactExtractors `json:"artifact_id,omitempty"`
 	// Guards declare capabilities a call needs IN ADDITION to its action
 	// class's, based on what its arguments ask the tool to do (see
 	// ArgumentGuard).
@@ -350,11 +357,62 @@ const (
 	FromResponse ExtractorSource = "response"
 )
 
-// Extractor is a JSONPath-style pointer at a scalar identity field.
-// Supported syntax: `$.a.b`, `$.a[0].b`, `$.a` — object keys and array indices.
+// Extractor is a JSONPath-style pointer at a scalar identity field, optionally
+// refined by a step pipeline.
+// Supported pointer syntax: `$.a.b`, `$.a[0].b`, `$.a` — object keys and array
+// indices.
 type Extractor struct {
 	Source  ExtractorSource `json:"source"`
 	Pointer string          `json:"pointer"`
+	// Steps refine the text the pointer resolved into the identity inside it.
+	//
+	// They exist because a real MCP tool does not always answer in fields: an
+	// MCP result is `{"content":[{"type":"text","text":"..."}]}`, and a provider
+	// that reports "Successfully created event ... Link: ...?eid=<base64>" has
+	// put the id in prose. Steps stay DECLARATIVE (a pattern and a decoding, in
+	// the manifest) so identifying an artifact never becomes connector-specific
+	// code in the audit path, and stay fail-closed: a step that matches nothing
+	// yields `unknown`, never a guess.
+	Steps []ExtractStep `json:"steps,omitempty"`
+}
+
+// Decodings a step may apply.
+const (
+	// DecodeBase64 decodes the step's input (standard or URL alphabet, padded
+	// or not). It is how an id embedded in a provider's link is reached.
+	DecodeBase64 = "base64"
+)
+
+// ExtractStep is one refinement. Exactly one of Match and Decode is set.
+type ExtractStep struct {
+	// Match is an RE2 pattern with exactly one capture group; the group is the
+	// step's output.
+	Match string `json:"match,omitempty"`
+	// Decode names a decoding applied to the whole input.
+	Decode string `json:"decode,omitempty"`
+}
+
+// ArtifactExtractors is an ordered candidate list. It accepts either a single
+// extractor object or an array of them in the manifest, because a tool with one
+// identity source should not have to be written as a one-element list.
+type ArtifactExtractors []Extractor
+
+func (a *ArtifactExtractors) UnmarshalJSON(b []byte) error {
+	trimmed := bytes.TrimSpace(b)
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var list []Extractor
+		if err := json.Unmarshal(trimmed, &list); err != nil {
+			return err
+		}
+		*a = list
+		return nil
+	}
+	var one Extractor
+	if err := json.Unmarshal(trimmed, &one); err != nil {
+		return err
+	}
+	*a = ArtifactExtractors{one}
+	return nil
 }
 
 // ExcludedTool is a known tool deliberately left unauthorized, with the reason
@@ -611,8 +669,8 @@ func (t ToolMapping) validate(provider string) error {
 		return fmt.Errorf("%w: connector %q: tool %q is %s-class and must require %q, not %q",
 			ErrInvalidManifest, provider, t.Tool, t.ActionClass, want, t.Capability)
 	}
-	if t.ArtifactID != nil {
-		if err := t.ArtifactID.validate(provider, t.Tool); err != nil {
+	for _, ex := range t.ArtifactID {
+		if err := ex.validate(provider, t.Tool); err != nil {
 			return err
 		}
 	}
@@ -697,6 +755,34 @@ func (e Extractor) validate(provider, tool string) error {
 	if _, err := parsePointer(e.Pointer); err != nil {
 		return fmt.Errorf("%w: connector %q: tool %q artifact_id pointer: %v",
 			ErrInvalidManifest, provider, tool, err)
+	}
+	// A step that does nothing, or two steps in one, would make the pipeline's
+	// behaviour depend on evaluation order rather than on what the manifest
+	// says. Registration refuses both rather than resolving them at call time.
+	for i, st := range e.Steps {
+		switch {
+		case st.Match == "" && st.Decode == "":
+			return fmt.Errorf("%w: connector %q: tool %q artifact_id step %d declares neither match nor decode",
+				ErrInvalidManifest, provider, tool, i)
+		case st.Match != "" && st.Decode != "":
+			return fmt.Errorf("%w: connector %q: tool %q artifact_id step %d declares both match and decode",
+				ErrInvalidManifest, provider, tool, i)
+		case st.Decode != "" && st.Decode != DecodeBase64:
+			return fmt.Errorf("%w: connector %q: tool %q artifact_id step %d decode %q (want %q)",
+				ErrInvalidManifest, provider, tool, i, st.Decode, DecodeBase64)
+		case st.Match != "":
+			re, err := compilePattern(st.Match)
+			if err != nil {
+				return fmt.Errorf("%w: connector %q: tool %q artifact_id step %d match: %v",
+					ErrInvalidManifest, provider, tool, i, err)
+			}
+			// Exactly one group: zero has nothing to extract, and more than one
+			// means the manifest is ambiguous about which is the identity.
+			if n := re.NumSubexp(); n != 1 {
+				return fmt.Errorf("%w: connector %q: tool %q artifact_id step %d match has %d capture groups (want exactly 1)",
+					ErrInvalidManifest, provider, tool, i, n)
+			}
+		}
 	}
 	return nil
 }

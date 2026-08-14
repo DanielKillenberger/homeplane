@@ -193,6 +193,16 @@ test fails if they drift): Drive read mapped, every Drive write tool declared
 and *excluded* so the edge fails closed on them, and Calendar read/write mapped
 with a `connector.send` guard on `manage_event`'s `send_updates` (D18).
 
+`search_drive_files` and `manage_event` also declare artifact-id extractors with
+a step pipeline, because this connector answers in prose: the Drive search
+states each hit as `(ID: …)`, and a created event's id appears only inside the
+base64 `eid` of the link it returns. Those steps are what make the audit rows
+name the file that was read and the event the six-op sequence acted on. **They
+are matched against the pinned connector's wording**, so a workload version bump
+is a manifest review: `internal/server/connectors/google_manifest_test.go` holds
+captured real responses and fails there rather than letting a live audit trail
+degrade to `artifact_id: unknown`.
+
 The workload the gateway supervises is `HOMEPLANE_GATEWAY_WORKLOAD`, now the
 pinned `uvx://workspace-mcp@1.24.0`. Two more settings carry the connector's own
 requirements, so that onboarding a different connector is a config change rather
