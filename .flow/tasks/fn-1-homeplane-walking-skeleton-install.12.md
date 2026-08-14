@@ -30,9 +30,18 @@ Make the Google connectors live through the .3 manifest/edge using a credential 
 
 
 ## Done summary
-TBD
+Live Google connector (Drive read-only + Calendar read/write per D18) through the .3 manifest and .16 edge, plus the six review fixes: notifications are now treated as send authority via a declarative manifest capability guard on `manage_event`'s `send_updates`, `rsvp` is unclassified and denied, the live six-op's cleanup stays armed until absence is observed, test-event summaries are collision-proof, the tag-gated live run is recorded as an embedded evidence artifact, and the runbook's client-JSON import no longer globs through `open()`.
 
+Round-2's single finding — the guarded Calendar mutation path lacks a matching live run — is closed by Daniel's explicit deferral of that live leg into task .7 (2026-08-14, same precedent as .15's deferred credential import). The deferral is recorded in `docs/decisions/d18-google-scopes.md`, the runbook's Evidence section, and the live evidence JSON's `deferral` object (`deferred_to`, `authorized_by`, `authorized_on`, `inherited_acceptance_item`). This task does NOT claim the guarded path is live-proven.
+
+### FOR THE CONDUCTOR — acceptance item to append to task .7 in main's `.flow`
+
+```
+- [ ] Inherited from .12 (Daniel-authorized deferral 2026-08-14): the guarded Calendar mutation path (send_updates:"none" + connector.send gating) is proven LIVE against real Google as part of this task's six-op run — including one denied manage_event call WITHOUT send_updates:"none" (or RSVP) audited as capability_missing.
+```
+
+The denial half is load-bearing: a guard only ever observed permitting is not a guard anyone has watched refuse.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 606b5a01557cfad0903165308b2a186a9447eeac, 11360881db6c92282a791940d75bcf548db3d133, c81f4af5ab69a2b2f19743928e86a283a09036be, 69a680fb6d87a9e3d02c577b18b7615a8aeeb1e2, 65343af76e0ca1dea7ac91ca88dc8b1a6e3b3c62, 11d2307d2561ac205dfd35e496b6e022aea8891e, 8e82152d35fe81c6b4bc32d90ce940e54074b826
+- Tests: go build ./... (rc=0), go vet ./... (rc=0), go vet -tags live_google ./cmd/homeplane-agent/ ./internal/server/edge/ (rc=0), gofmt -l . -> internal/store/model.go only (INHERITED, untouched by this task), go test ./... -count=1 -p 2 (18 packages, rc=0), go test ./internal/server/connectors/ ./internal/server/workloadcred/ ./internal/server/edge/ -count=1 -race (rc=0), scripts/emit-evidence.sh fn-1-homeplane-walking-skeleton-install.12 -> pass, 548/548 assertions, 3 gates, 11 embedded live assertions at 11d2307, KNOWN FLAKE (not this task): internal/server/credflow TestARelayedFlowIsNotExpiredByTheConsentWindow failed under emit-evidence total parallelism, passes 8/8 in isolation; it is the exact race fixed by task .15 commit 49f36b9, which is not in this worktrees base (621f1c5), LIVE (real Google, build tag live_google) NOT re-run this session — teardown removed the workload and store, so a re-run needs fresh browser consent. The original runs commands/timestamps/redacted env/commit/per-assertion results are recorded in test/evidence/fn-1-homeplane-walking-skeleton-install.12.live.json and embedded in the artifact., DEFERRED (Daniel-authorized 2026-08-14, same precedent as .15s credential import): the live proof of the GUARDED Calendar mutation path (send_updates:"none" under connector.send gating, plus one denied manage_event call WITHOUT it audited capability_missing) is inherited by fn-1-homeplane-walking-skeleton-install.7. Recorded in docs/decisions/d18-google-scopes.md, docs/runbooks/live-google-proof.md, and the live evidence JSONs deferral object. This task does not claim the guarded path is live-proven.
 - PRs:

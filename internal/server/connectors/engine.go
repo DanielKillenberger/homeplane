@@ -23,6 +23,10 @@ const (
 	// ReasonExcludedTool — the tool is explicitly out of scope (D18 keeps
 	// Drive's write tools here).
 	ReasonExcludedTool = "excluded_tool"
+	// ReasonUnresolvedAction — the tool is mapped by an action selector and the
+	// call's discriminating argument named no declared case. The call cannot be
+	// classified, so it is neither authorized nor forwarded.
+	ReasonUnresolvedAction = "unresolved_action"
 	// ReasonCapabilityMissing — the tool is mapped, but the calling grant does
 	// not carry the capability its action class requires.
 	ReasonCapabilityMissing = "capability_missing"
@@ -100,6 +104,10 @@ type Decision struct {
 	// ExclusionReason is the manifest's recorded reason when Reason is
 	// ReasonExcludedTool.
 	ExclusionReason string
+	// GuardReason is the manifest's recorded reason when the missing capability
+	// was demanded by an ArgumentGuard rather than by the action class. It tells
+	// the caller what the call was asking for, not just what it lacked.
+	GuardReason string
 }
 
 // PolicyViolation reports whether the refusal is a manifest-level violation
@@ -107,7 +115,7 @@ type Decision struct {
 // authorization failure of an otherwise well-formed call.
 func (d Decision) PolicyViolation() bool {
 	switch d.Reason {
-	case ReasonUnknownProvider, ReasonUnmappedTool, ReasonExcludedTool:
+	case ReasonUnknownProvider, ReasonUnmappedTool, ReasonExcludedTool, ReasonUnresolvedAction:
 		return true
 	}
 	return false
@@ -207,19 +215,47 @@ func (e *Engine) Authorize(req Request) Decision {
 		return Decision{Reason: ReasonUnmappedTool, ActionClass: ActionUnknown}
 	}
 
-	need := mapping.RequiredCapability()
+	// The class is resolved per call, because a polymorphic tool's class is a
+	// property of the CALL, not of the tool (see ActionSelector). A call whose
+	// class cannot be established is refused: an unclassifiable call has no
+	// capability to check and nothing truthful to audit.
+	class, resolved := mapping.ResolveActionClass(req.Args)
+	if !resolved {
+		return Decision{Reason: ReasonUnresolvedAction, ActionClass: ActionUnknown, Mapping: mapping}
+	}
+
+	need := classCapability[class]
 	if !req.Caller.hasCapability(need) {
 		return Decision{
 			Reason:             ReasonCapabilityMissing,
-			ActionClass:        mapping.ActionClass,
+			ActionClass:        class,
 			RequiredCapability: need,
 			Mapping:            mapping,
 		}
 	}
 
+	// Guards run AFTER the class check and can only add requirements. An
+	// argument that asks the tool to do something its class does not describe —
+	// notifying every attendee of an event, say — has to be authorized as that
+	// something, or the class becomes a way to launder authority.
+	for _, guard := range mapping.Guards {
+		if !guard.Applies(req.Args) || req.Caller.hasCapability(guard.Capability) {
+			continue
+		}
+		return Decision{
+			Reason:      ReasonCapabilityMissing,
+			ActionClass: class,
+			// The capability reported is the one the call actually lacks, which
+			// is what makes the audit row say why it was refused.
+			RequiredCapability: guard.Capability,
+			Mapping:            mapping,
+			GuardReason:        guard.Reason,
+		}
+	}
+
 	return Decision{
 		Allowed:            true,
-		ActionClass:        mapping.ActionClass,
+		ActionClass:        class,
 		RequiredCapability: need,
 		Mapping:            mapping,
 	}
@@ -236,7 +272,14 @@ func (d Decision) DeniedError(req Request) error {
 		return fmt.Errorf("%w: tool %q is not authorized by the connector manifest", ErrDenied, req.Tool)
 	case ReasonExcludedTool:
 		return fmt.Errorf("%w: tool %q is excluded by connector policy (%s)", ErrDenied, req.Tool, d.ExclusionReason)
+	case ReasonUnresolvedAction:
+		return fmt.Errorf("%w: tool %q does not say which action it performs, so the connector manifest "+
+			"cannot classify the call", ErrDenied, req.Tool)
 	case ReasonCapabilityMissing:
+		if d.GuardReason != "" {
+			return fmt.Errorf("%w: tool %q requires capability %q for this call: %s",
+				ErrDenied, req.Tool, d.RequiredCapability, d.GuardReason)
+		}
 		return fmt.Errorf("%w: tool %q is %s-class and requires capability %q",
 			ErrDenied, req.Tool, d.ActionClass, d.RequiredCapability)
 	case ReasonUnauthenticated:

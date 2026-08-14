@@ -19,6 +19,13 @@
 # The repository gates stay exactly what they were: the extra file is recorded,
 # never interpreted, and never allowed to turn a red gate green.
 #
+# Tag-gated proofs (live provider runs behind a build tag) cannot be re-executed
+# here — they need credentials, consent and a running gateway. A task that has
+# them records its run in test/evidence/<task-id>.live.json, and this script
+# EMBEDS that file under the artifact's "live" key so the acceptance record is
+# one artifact rather than two. The file is written by whoever ran the proof;
+# nothing here can vouch for it, so it carries its own commit and timestamps.
+#
 # Usage: scripts/emit-evidence.sh <task-id> [--extra <file.json>]
 # Requires: go, git, python3.
 set -euo pipefail
@@ -87,6 +94,7 @@ UNAME="$(uname -srm)" \
 WORK="$WORK" \
 FAILED="$FAILED" \
 EXTRA_FILE="$EXTRA_FILE" \
+LIVE_FILE="$OUT_DIR/$TASK_ID.live.json" \
 python3 - "$OUT_FILE" <<'PY'
 import json, os, sys
 
@@ -150,12 +158,28 @@ if extra_file:
     with open(extra_file, encoding="utf-8") as fh:
         artifact["extra"] = json.load(fh)
 
+# Tag-gated live evidence, recorded by whoever ran the proof. It is embedded
+# verbatim: this script did not run it and must not imply that it did. A
+# malformed file is a loud failure rather than a silently missing record.
+live_file = os.environ.get("LIVE_FILE", "")
+if live_file and os.path.exists(live_file):
+    with open(live_file, encoding="utf-8") as fh:
+        try:
+            artifact["live"] = json.load(fh)
+        except json.JSONDecodeError as err:
+            raise SystemExit(f"{live_file} is not valid JSON: {err}")
+
 with open(out_file, "w", encoding="utf-8") as fh:
     json.dump(artifact, fh, indent=2, sort_keys=False)
     fh.write("\n")
 
+live_note = ""
+if "live" in artifact:
+    live_assertions = artifact["live"].get("assertions", [])
+    live_note = f", {len(live_assertions)} embedded live assertions"
+
 print(f"wrote {out_file}: {artifact['result']} "
-      f"({passed}/{len(assertions)} assertions, {len(gates)} gates) "
+      f"({passed}/{len(assertions)} assertions, {len(gates)} gates{live_note}) "
       f"at {artifact['commit'][:8]}"
       f"{' [DIRTY WORKTREE]' if artifact['working_tree_dirty'] else ''}")
 

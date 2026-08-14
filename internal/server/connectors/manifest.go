@@ -115,6 +115,11 @@ type Connector struct {
 	// Credential describes how that credential is acquired (R13's
 	// add-credentials flow) in purely declarative terms.
 	Credential CredentialAcquisition `json:"credential_acquisition"`
+	// Delivery declares the FORMAT the connector's MCP server expects its
+	// credential in, so a stored credential can be handed to a workload without
+	// any provider-specific code on the delivery path. Absent means the
+	// connector is given no credential at all.
+	Delivery *CredentialDelivery `json:"credential_delivery,omitempty"`
 	// Server describes where the connector's MCP tools come from.
 	Server MCPServer `json:"mcp_server"`
 	// ToolInventory is the gateway's known tool list, when known. When
@@ -139,6 +144,54 @@ type CredentialAcquisition struct {
 	Scopes []string          `json:"scopes"`
 }
 
+// CredentialDelivery names the on-disk shape a connector's MCP server reads its
+// provider credential in.
+//
+// It is a NAMED FORMAT, not a template: the manifest says which of the formats
+// this build knows how to write, and nothing about where the credential comes
+// from or what is in it. Two connectors whose servers read the same shape share
+// one format, so the second is a manifest entry (R12); a connector needing a
+// genuinely new shape is the only case that adds code, and it adds it in one
+// place instead of on the credential path.
+//
+// The DESTINATION is deliberately absent: which directory a workload mounts is
+// a deployment fact, supplied by whoever starts the workload, not something a
+// git-tracked manifest should pin.
+type CredentialDelivery struct {
+	Format string `json:"format"`
+}
+
+// FormatGoogleOAuthUserFile is the credential shape the pinned Google connector
+// (workspace-mcp) reads: one JSON file per Google account in its credentials
+// directory, carrying the OAuth tokens plus the client identity needed to
+// refresh them.
+const FormatGoogleOAuthUserFile = "google-oauth-user-file"
+
+// knownDeliveryFormats is the vocabulary a manifest may name. An unknown format
+// is refused at load time rather than discovered when a workload starts with no
+// credential and reports something unrelated.
+var knownDeliveryFormats = map[string]bool{
+	FormatGoogleOAuthUserFile: true,
+}
+
+// KnownDeliveryFormats lists the credential shapes this build can write, sorted.
+func KnownDeliveryFormats() []string {
+	out := make([]string, 0, len(knownDeliveryFormats))
+	for f := range knownDeliveryFormats {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (d CredentialDelivery) validate(provider string) error {
+	if !knownDeliveryFormats[d.Format] {
+		return fmt.Errorf("%w: connector %q: credential_delivery format %q (this build writes: %s)",
+			ErrInvalidManifest, provider, d.Format, strings.Join(KnownDeliveryFormats(), ", "))
+	}
+	return nil
+}
+
 // MCPServer is where a connector's tools come from.
 type MCPServer struct {
 	// Name is the gateway's workload name for this server.
@@ -151,16 +204,140 @@ type MCPServer struct {
 
 // ToolMapping is the per-tool declaration the whole authorization and audit
 // story is derived from.
+//
+// A mapping declares its action class in exactly one of two ways: a fixed
+// `action_class`, or — for a POLYMORPHIC tool, whose effect depends on an
+// argument — an `action_selector` that reads that argument. Exactly one of the
+// two, never both and never neither.
 type ToolMapping struct {
-	Tool        string      `json:"tool"`
-	ActionClass ActionClass `json:"action_class"`
+	Tool string `json:"tool"`
+	// ActionClass is the tool's fixed class. Empty only when ActionSelector is
+	// declared instead.
+	ActionClass ActionClass `json:"action_class,omitempty"`
+	// ActionSelector declares that this tool's class is chosen per call by a
+	// request argument (see ActionSelector).
+	ActionSelector *ActionSelector `json:"action_selector,omitempty"`
 	// Capability is the grant capability required to invoke the tool. Empty
-	// means "the default for this action class".
+	// means "the default for this action class". It may not be declared
+	// alongside an ActionSelector, where the class — and therefore the
+	// capability — is not fixed.
 	Capability policy.Capability `json:"capability,omitempty"`
 	// ArtifactID optionally declares where the affected artifact's identity can
 	// be read. Absent means the audit row records a digest of the request
 	// arguments and artifact id `unknown`.
 	ArtifactID *Extractor `json:"artifact_id,omitempty"`
+	// Guards declare capabilities a call needs IN ADDITION to its action
+	// class's, based on what its arguments ask the tool to do (see
+	// ArgumentGuard).
+	Guards []ArgumentGuard `json:"capability_guards,omitempty"`
+}
+
+// ArgumentGuard requires an EXTRA capability when a request argument shows the
+// call will do something its action class does not describe.
+//
+// The case that forced it is real and was missed by the action class alone: the
+// pinned Google connector's `manage_event` takes a `send_updates` argument that
+// defaults to "all", so creating, updating or deleting an event with attendees
+// emails every one of them. That is send authority — reaching third parties —
+// arriving through a tool classified `write` or `delete`. Without a guard, a
+// grant holding only connector.write can notify a room full of people, and the
+// audit row would call it a write.
+//
+// Two properties make this safe to express declaratively:
+//
+//   - A guard can only ever ADD a requirement. There is no form that removes or
+//     lowers one, so no manifest edit can weaken a call through this field.
+//   - It fires on doubt. The argument being absent, non-scalar, or carrying an
+//     unlisted value all mean the guard applies — which is the direction that
+//     matters, because the connector's DEFAULT (send to everyone) is exactly
+//     the omitted case.
+type ArgumentGuard struct {
+	// Pointer addresses the request argument that decides, in the same
+	// JSONPath-style subset extractors use (`$.send_updates`).
+	Pointer string `json:"pointer"`
+	// UnlessIn lists the values that make the guard NOT apply — the safe
+	// values. Anything else, including nothing at all, requires the capability.
+	UnlessIn []string `json:"unless_in"`
+	// Capability is what the call additionally requires when the guard fires.
+	Capability policy.Capability `json:"capability"`
+	// Reason explains the authority in operator terms. It is shown to a caller
+	// whose call is refused, so a denial says what the call was actually asking
+	// for rather than only which capability was missing.
+	Reason string `json:"reason"`
+}
+
+// Applies reports whether the guard's extra capability is required for a call
+// carrying these arguments. It is total: anything it cannot read safely means
+// the guard applies.
+func (g ArgumentGuard) Applies(args json.RawMessage) bool {
+	value, ok := Extract(Extractor{Source: FromRequest, Pointer: g.Pointer}, args)
+	if !ok {
+		return true
+	}
+	for _, safe := range g.UnlessIn {
+		if value == safe {
+			return false
+		}
+	}
+	return true
+}
+
+func (g ArgumentGuard) validate(provider, tool string) error {
+	if _, err := parsePointer(g.Pointer); err != nil {
+		return fmt.Errorf("%w: connector %q: tool %q capability_guard pointer: %v",
+			ErrInvalidManifest, provider, tool, err)
+	}
+	if !knownCapabilities[g.Capability] {
+		return fmt.Errorf("%w: connector %q: tool %q capability_guard requires unknown capability %q",
+			ErrInvalidManifest, provider, tool, g.Capability)
+	}
+	// A guard with no safe values can never be satisfied, which is an exclusion
+	// written in the wrong place: say so with `excluded_tools`, where the reason
+	// is recorded and the denial is audited as the deliberate exclusion it is.
+	if len(g.UnlessIn) == 0 {
+		return fmt.Errorf("%w: connector %q: tool %q capability_guard lists no safe values; "+
+			"exclude the tool instead", ErrInvalidManifest, provider, tool)
+	}
+	for _, v := range g.UnlessIn {
+		if strings.TrimSpace(v) == "" {
+			return fmt.Errorf("%w: connector %q: tool %q capability_guard has an empty safe value",
+				ErrInvalidManifest, provider, tool)
+		}
+		if len(v) > MaxIdentifierLen {
+			return fmt.Errorf("%w: connector %q: tool %q capability_guard safe value is %d bytes, the limit is %d",
+				ErrInvalidManifest, provider, tool, len(v), MaxIdentifierLen)
+		}
+	}
+	if strings.TrimSpace(g.Reason) == "" {
+		return fmt.Errorf("%w: connector %q: tool %q capability_guard needs a reason",
+			ErrInvalidManifest, provider, tool)
+	}
+	return nil
+}
+
+// ActionSelector classifies a POLYMORPHIC tool — one whose effect is chosen by
+// an argument rather than by which tool was called.
+//
+// Real connectors ship them: the pinned Google connector's `manage_event`
+// creates, updates, RSVPs to and DELETES events depending on its `action`
+// argument. Collapsing such a tool onto one fixed class forces a choice between
+// two wrong answers — classify it `delete` and a read/write grant cannot create
+// an event, classify it `write` and a deletion is audited (and authorized) as
+// a write. Neither is acceptable when the action class is simultaneously the
+// authorization input and the audit record.
+//
+// Resolution is deliberately total and fail-closed: a call whose discriminator
+// is missing, non-scalar, or not one of the declared cases resolves to NO class
+// and is denied `unresolved_action` as a policy violation. There is no default
+// case and no fallback class, because either would mean the manifest silently
+// guessing what an unrecognized action does.
+type ActionSelector struct {
+	// Pointer addresses the discriminating REQUEST argument, in the same
+	// JSONPath-style subset extractors use (`$.action`).
+	Pointer string `json:"pointer"`
+	// Cases maps each recognized discriminator value to its action class. Every
+	// value the tool accepts must be listed; anything else is refused.
+	Cases map[string]ActionClass `json:"cases"`
 }
 
 // ExtractorSource says which JSON document an extractor reads.
@@ -329,6 +506,11 @@ func (c Connector) validate() error {
 	if err := c.Server.validate(c.Provider); err != nil {
 		return err
 	}
+	if c.Delivery != nil {
+		if err := c.Delivery.validate(c.Provider); err != nil {
+			return err
+		}
+	}
 	if len(c.Tools) == 0 && len(c.Excluded) == 0 {
 		return fmt.Errorf("%w: connector %q declares no tools", ErrInvalidManifest, c.Provider)
 	}
@@ -404,6 +586,14 @@ func (t ToolMapping) validate(provider string) error {
 	if err := validateToolName(provider, t.Tool); err != nil {
 		return err
 	}
+	for _, g := range t.Guards {
+		if err := g.validate(provider, t.Tool); err != nil {
+			return err
+		}
+	}
+	if t.ActionSelector != nil {
+		return t.validateSelector(provider)
+	}
 	want, ok := classCapability[t.ActionClass]
 	if !ok {
 		return fmt.Errorf("%w: connector %q: tool %q has action_class %q (want read, write, send or delete)",
@@ -429,11 +619,74 @@ func (t ToolMapping) validate(provider string) error {
 	return nil
 }
 
+// validateSelector checks a polymorphic mapping. The rules mirror the fixed
+// case: every declared class must be one this build authorizes, and the
+// capability may not be restated independently — here it cannot be restated at
+// all, because there is no single class to restate it for.
+func (t ToolMapping) validateSelector(provider string) error {
+	if t.ActionClass != "" {
+		return fmt.Errorf("%w: connector %q: tool %q declares both action_class and action_selector",
+			ErrInvalidManifest, provider, t.Tool)
+	}
+	if t.Capability != "" {
+		return fmt.Errorf("%w: connector %q: tool %q is selector-classified, so its capability follows the "+
+			"resolved action class and may not be declared", ErrInvalidManifest, provider, t.Tool)
+	}
+	if _, err := parsePointer(t.ActionSelector.Pointer); err != nil {
+		return fmt.Errorf("%w: connector %q: tool %q action_selector pointer: %v",
+			ErrInvalidManifest, provider, t.Tool, err)
+	}
+	if len(t.ActionSelector.Cases) == 0 {
+		return fmt.Errorf("%w: connector %q: tool %q action_selector declares no cases",
+			ErrInvalidManifest, provider, t.Tool)
+	}
+	for value, class := range t.ActionSelector.Cases {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%w: connector %q: tool %q action_selector has an empty case value",
+				ErrInvalidManifest, provider, t.Tool)
+		}
+		if len(value) > MaxIdentifierLen {
+			return fmt.Errorf("%w: connector %q: tool %q action_selector case %d bytes, the limit is %d",
+				ErrInvalidManifest, provider, t.Tool, len(value), MaxIdentifierLen)
+		}
+		if _, ok := classCapability[class]; !ok {
+			return fmt.Errorf("%w: connector %q: tool %q action_selector case %q has action class %q "+
+				"(want read, write, send or delete)", ErrInvalidManifest, provider, t.Tool, value, class)
+		}
+	}
+	return nil
+}
+
 // RequiredCapability is the capability a grant must carry to invoke the tool.
 // It is derived from the action class; a manifest may restate it but cannot
-// change it (see validate).
+// change it (see validate). A selector-classified tool has no single required
+// capability, so this reports none — the capability follows the class resolved
+// per call by ResolveActionClass.
 func (t ToolMapping) RequiredCapability() policy.Capability {
 	return classCapability[t.ActionClass]
+}
+
+// ResolveActionClass reports the action class one CALL of this tool belongs to,
+// and whether it could be established at all.
+//
+// For a fixed mapping the answer is the declared class. For a selector-mapped
+// tool the discriminating argument decides, and an argument that is absent,
+// non-scalar or unrecognized resolves to nothing: the caller (the engine) then
+// denies the call rather than assuming a class.
+func (t ToolMapping) ResolveActionClass(args json.RawMessage) (ActionClass, bool) {
+	if t.ActionSelector == nil {
+		_, ok := classCapability[t.ActionClass]
+		return t.ActionClass, ok
+	}
+	value, ok := Extract(Extractor{Source: FromRequest, Pointer: t.ActionSelector.Pointer}, args)
+	if !ok {
+		return "", false
+	}
+	class, ok := t.ActionSelector.Cases[value]
+	if !ok {
+		return "", false
+	}
+	return class, true
 }
 
 func (e Extractor) validate(provider, tool string) error {

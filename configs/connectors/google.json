@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "connectors": [
+    {
+      "provider": "google",
+      "credential_ref": "google/oauth-session",
+      "credential_acquisition": {
+        "driver": "oauth2-authcode",
+        "params": {
+          "auth_endpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+          "token_endpoint": "https://oauth2.googleapis.com/token",
+          "client_id_ref": "google/client-id",
+          "client_secret_ref": "google/client-secret",
+          "access_type": "offline",
+          "prompt": "consent"
+        },
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.readonly",
+          "https://www.googleapis.com/auth/calendar.events",
+          "https://www.googleapis.com/auth/calendar.readonly"
+        ]
+      },
+      "credential_delivery": {
+        "format": "google-oauth-user-file"
+      },
+      "mcp_server": {
+        "name": "google-workspace",
+        "transport": "streamable-http",
+        "source": "uvx://workspace-mcp@1.24.0"
+      },
+      "tool_inventory": [
+        "check_drive_file_public_access",
+        "copy_drive_file",
+        "create_calendar",
+        "create_drive_file",
+        "create_drive_folder",
+        "get_drive_file_content",
+        "get_drive_file_download_url",
+        "get_drive_file_permissions",
+        "get_drive_shareable_link",
+        "get_events",
+        "import_to_google_doc",
+        "import_to_google_sheets",
+        "import_to_google_slides",
+        "list_calendars",
+        "list_drive_items",
+        "manage_drive_access",
+        "manage_event",
+        "manage_focus_time",
+        "manage_out_of_office",
+        "query_freebusy",
+        "search_drive_files",
+        "set_drive_file_permissions",
+        "start_google_auth",
+        "update_drive_file"
+      ],
+      "tools": [
+        {
+          "tool": "search_drive_files",
+          "action_class": "read"
+        },
+        {
+          "tool": "get_drive_file_content",
+          "action_class": "read",
+          "artifact_id": { "source": "request", "pointer": "$.file_id" }
+        },
+        {
+          "tool": "get_events",
+          "action_class": "read",
+          "artifact_id": { "source": "request", "pointer": "$.event_id" }
+        },
+        {
+          "tool": "manage_event",
+          "action_selector": {
+            "pointer": "$.action",
+            "cases": {
+              "create": "write",
+              "update": "write",
+              "delete": "delete"
+            }
+          },
+          "capability_guards": [
+            {
+              "pointer": "$.send_updates",
+              "unless_in": ["none"],
+              "capability": "connector.send",
+              "reason": "the connector defaults send_updates to \"all\", which emails every attendee; notifying people is send authority, not write"
+            }
+          ],
+          "artifact_id": { "source": "request", "pointer": "$.event_id" }
+        }
+      ],
+      "excluded_tools": [
+        { "tool": "create_drive_file", "reason": "D18: Drive is read-only in Homeplane" },
+        { "tool": "update_drive_file", "reason": "D18: Drive is read-only in Homeplane" },
+        { "tool": "create_drive_folder", "reason": "D18: Drive is read-only in Homeplane" },
+        { "tool": "copy_drive_file", "reason": "D18: Drive is read-only in Homeplane" },
+        { "tool": "import_to_google_doc", "reason": "D18: Drive is read-only in Homeplane" },
+        { "tool": "import_to_google_sheets", "reason": "D18: Drive is read-only in Homeplane" },
+        { "tool": "import_to_google_slides", "reason": "D18: Drive is read-only in Homeplane" },
+        { "tool": "manage_drive_access", "reason": "D18: Drive is read-only in Homeplane; changing sharing is a write" },
+        { "tool": "set_drive_file_permissions", "reason": "D18: Drive is read-only in Homeplane; changing sharing is a write" },
+        { "tool": "get_drive_shareable_link", "reason": "beyond the skeleton's Drive read surface (search + file content)" },
+        { "tool": "get_drive_file_download_url", "reason": "beyond the skeleton's Drive read surface (search + file content)" },
+        { "tool": "get_drive_file_permissions", "reason": "beyond the skeleton's Drive read surface (search + file content)" },
+        { "tool": "check_drive_file_public_access", "reason": "beyond the skeleton's Drive read surface (search + file content)" },
+        { "tool": "list_drive_items", "reason": "beyond the skeleton's Drive read surface (search + file content)" },
+        { "tool": "list_calendars", "reason": "beyond the skeleton's Calendar surface (get_events + manage_event)" },
+        { "tool": "query_freebusy", "reason": "beyond the skeleton's Calendar surface (get_events + manage_event)" },
+        { "tool": "manage_out_of_office", "reason": "beyond the skeleton's Calendar surface (get_events + manage_event)" },
+        { "tool": "manage_focus_time", "reason": "beyond the skeleton's Calendar surface (get_events + manage_event)" },
+        { "tool": "create_calendar", "reason": "D18 grants calendar.events only; creating a calendar needs the full calendar scope" },
+        { "tool": "start_google_auth", "reason": "credentials are brokered by Homeplane (add-credentials); a harness never starts a provider auth flow" }
+      ]
+    }
+  ]
+}
