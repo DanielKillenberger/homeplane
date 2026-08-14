@@ -247,11 +247,19 @@ func runSixOp(s *stage, h harnessUnderProof) {
 	// all has not established that the name is free, and treating its error text
 	// as "the summary is absent" is how a proof passes its safety check by
 	// failing its first call.
+	isolationSince := time.Now().UTC().Add(-30 * time.Second)
 	before := h.call(s, h.name+" step 0: the name is unused", connectorServer, "get_events", map[string]any{
 		"calendar_id": cal, "query": summary, "max_results": 5, "user_google_email": s.env.account,
 	})
+	// The listing must have REACHED Google, and the server is what says so. A
+	// harness process that exits 0 while its model declined to call the tool
+	// would otherwise satisfy "the summary is absent" by never having looked —
+	// which is the isolation check passing precisely when it did nothing.
+	listed, _ := lastRow(decisionRows(rowsForHarness(
+		s.audit("server audit: the isolation listing", isolationSince), h.grantHarness), "get_events"))
 	if !s.assert(h.name+": the test event's name is unused before the proof starts",
-		before.ok && !strings.Contains(before.text, summary), "%s", firstLine(before.text)) {
+		listed.Outcome == "allowed" && !strings.Contains(before.text, summary),
+		"audit: outcome=%s | harness said: %s", listed.Outcome, firstLine(before.text)) {
 		return
 	}
 
@@ -461,15 +469,22 @@ func stageRevocation(s *stage) {
 	elapsed := time.Since(revoked)
 	rows := s.audit("server audit after the revoked harness called", since)
 	var refused bool
-	for _, r := range rowsForHarness(rows, "") {
-		if r.Outcome == "denied" && (r.Reason == "grant_revoked" || strings.Contains(r.Reason, "revoked") ||
-			strings.Contains(r.Reason, "invalid_token")) {
+	var admittedAfter int
+	for _, r := range rows {
+		if r.Outcome == "denied" && (strings.Contains(r.Reason, "revoked") ||
+			strings.Contains(r.Reason, "invalid_token") || strings.Contains(r.Reason, "unknown_grant")) {
 			refused = true
 		}
+		// The property that matters is not only that something was refused: it
+		// is that the revoked grant admitted NOTHING afterwards.
+		if r.GrantID == claudeGrant && r.Outcome == "allowed" && r.TS.After(revoked.UTC()) {
+			admittedAfter++
+		}
 	}
-	s.assert("the revoked harness is refused within seconds", refused && elapsed < 5*time.Minute,
-		"refusal audited=%v, %s after revocation | harness said: %s",
-		refused, elapsed.Round(time.Second), firstLine(failing.text))
+	s.assert("the revoked harness is refused within seconds, and its grant admits nothing after",
+		refused && admittedAfter == 0 && elapsed < 5*time.Minute,
+		"refusal audited=%v, %d call(s) admitted on the revoked grant after revocation, %s elapsed | harness said: %s",
+		refused, admittedAfter, elapsed.Round(time.Second), firstLine(failing.text))
 
 	working := codexHarness.call(s, "Codex after the other harness was revoked (must still work)",
 		connectorServer, "search_drive_files", map[string]any{"query": "trashed = false", "page_size": 1,

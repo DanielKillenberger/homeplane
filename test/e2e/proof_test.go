@@ -89,10 +89,28 @@ func TestEndToEndProof(t *testing.T) {
 // degraded component must produce a non-zero exit and a non-2xx respectively —
 // a report that stays cheerful is worse than no report.
 func stageTruthTable(s *stage) {
-	// 1. Server reachable, everything up: status is ok and exits 0.
+	// 1. Server reachable, the machine as its owner chose to run it. The claim
+	// under test is TRUTHFULNESS, not greenness: the components that are fully
+	// configured report ok, the two that are deliberately not — the retrieval
+	// engine in stdio mode and a vault whose sync is another client's job — say
+	// so by name, and the overall exit code reflects that rather than rounding
+	// it up to fine.
 	rep, res := s.status()
-	s.assert("status exits 0 and reports ok when the machine is healthy",
-		res.ExitCode == 0 && rep.Status == "ok", "exit %d, status %q", res.ExitCode, rep.Status)
+	fullyConfigured := []string{"enrolment", "vault", "harnesses", "skills", "grants", "server"}
+	var notOK []string
+	for _, name := range fullyConfigured {
+		if state, detail := s.component(rep, name); state != "ok" {
+			notOK = append(notOK, name+"="+state+" ("+detail+")")
+		}
+	}
+	s.assert("every fully configured component reports ok", len(notOK) == 0,
+		"status %q (exit %d); not ok: %s", rep.Status, res.ExitCode, strings.Join(notOK, "; "))
+
+	gnoState, gnoDetail := s.component(rep, "gno")
+	syncState, syncDetail := s.component(rep, "sync")
+	s.assert("the deliberately unconfigured components are named rather than rounded up to fine",
+		gnoState != "ok" && syncState != "ok" && res.ExitCode != 0,
+		"exit %d; gno=%s (%s); sync=%s (%s)", res.ExitCode, gnoState, firstLine(gnoDetail), syncState, syncDetail)
 
 	health := s.run("server /healthz over the tailnet", 30*time.Second, "curl", "-sf", "-m", "20",
 		s.env.serverURL+"/healthz")
