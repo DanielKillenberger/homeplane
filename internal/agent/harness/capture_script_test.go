@@ -165,48 +165,6 @@ exit 0
 	}
 }
 
-// fullStub answers every probe the capture makes plausibly enough to reach the
-// END of the run, so a test can fail ONE late thing and prove the capture still
-// refuses. `extra` is spliced in ahead of the defaults to override a case.
-//
-// This exists because the earlier regressions all failed EARLY: a stub that
-// reports nothing trips the first gate, which cannot show whether the last
-// probe in the script is checked at all.
-func fullStub(extra string) string {
-	return `
-` + extra + `
-case "$1" in
-  --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
-  --help)    echo "stub help"; exit 0 ;;
-  help)      echo "stub help"; exit 0 ;;
-  inspect)
-    echo "  Skills (3)"
-    echo "  └ hp-probe-alpha         user"
-    echo "  └ frontmatter-beta-name  user"
-    echo "  └ gamma-dir-name         user"
-    exit 0 ;;
-  leader) echo "No leader candidates found."; exit 0 ;;
-esac
-
-if [ "$1" = mcp ]; then
-  case "$2" in
-    list)
-      echo "  homeplane-edge: https://edge.example.invalid/mcp"
-      echo "  staleness-probe: https://stale.example.invalid/mcp"
-      echo "  expand-probe: https://${HP_PROBE_HOST}/mcp"
-      exit 0 ;;
-    add)    echo "Added"; exit 0 ;;
-    remove) echo "No MCP server named 'x'"; exit 1 ;;
-    enable) echo "No MCP server named 'x'"; exit 1 ;;
-    doctor)
-      echo '{"sources":[],"servers":[{"name":"probe","transport":"http","target":"'"${HP_PROBE_HOST:-unset}"'","checks":[]}]}'
-      exit 1 ;;
-  esac
-fi
-exit 0
-`
-}
-
 // The LAST probe in the script used to fail open: its output was piped
 // straight into `sed ... || true`, so an unexpanded target still reached the
 // end marker and replaced the known-good contract with a capture that proved
@@ -214,7 +172,7 @@ exit 0
 func TestTheCaptureFailsWhenTheVariableIsNotExpanded(t *testing.T) {
 	// A grok that never expands ${VAR}: doctor reports the placeholder even
 	// with the variable set.
-	stub := fullStub(`
+	stub := wellBehavedStub(`
 if [ "$1" = mcp ] && [ "$2" = doctor ]; then
   echo '{"sources":[],"servers":[{"name":"probe","transport":"http","target":"https://${HP_PROBE_HOST}/mcp","checks":[]}]}'
   exit 1
@@ -227,6 +185,129 @@ fi
 	}
 	if !strings.Contains(out, "was NOT expanded") {
 		t.Errorf("the capture failed but not with an expansion diagnosis; output:\n%s", out)
+	}
+}
+
+// The negative tests above all prove the capture REFUSES bad input. This one
+// proves it still accepts good input — without it, a script that failed on
+// everything would pass the whole suite while producing no evidence at all.
+//
+// The stub behaves the way the real grok was observed to behave: it drops
+// comments, resets the mode, clobbers an entry wholesale, stores ${VAR}
+// verbatim and expands it at load, and reports the frontmatter name only.
+// wellBehavedStub is a grok that behaves the way the real one was OBSERVED to
+// behave: it drops comments, resets the mode to 0644, clobbers an entry
+// wholesale, stores ${VAR} verbatim, expands it at load time, and reports the
+// frontmatter name only. Tests override one behaviour at a time by splicing
+// `extra` in ahead of it, which is what lets a test reach a LATE probe before
+// failing — the early-failing stubs cannot show whether late probes are
+// checked at all.
+func wellBehavedStub(extra string) string {
+	return "\n" + extra + `
+cfg="$GROK_HOME/config.toml"
+
+emit_config() {
+  # A serializer round-trip: comments gone, entries kept, headers as a
+  # sub-table. Written fresh each time, and always at mode 0644.
+  {
+    echo '[ui]'
+    echo 'max_thoughts_width = 120'
+    echo
+    echo '[mcp_servers.preexisting-thing]'
+    echo 'command = "/usr/bin/true"'
+    echo 'args = ["--keep-me"]'
+    echo 'enabled = true'
+    cat "$GROK_HOME/.entries" 2>/dev/null
+  } > "$cfg"
+  chmod 644 "$cfg"
+}
+
+case "$1" in
+  --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  --help|help) echo "stub help"; exit 0 ;;
+  inspect)
+    echo "  Skills (3)"
+    echo "  └ hp-probe-alpha         user"
+    echo "  └ frontmatter-beta-name  user"
+    echo "  └ gamma-dir-name         user"
+    exit 0 ;;
+  leader) echo "No leader candidates found."; exit 0 ;;
+esac
+
+if [ "$1" = mcp ]; then
+  case "$2" in
+    add)
+      # Real grok refuses these before writing anything: its own refusal is 1,
+      # a clap parse error is 2. The capture asserts both exactly.
+      case " $* " in
+        *" -t carrier-pigeon "*) echo "error: invalid value" >&2; exit 2 ;;
+      esac
+      case " $* " in
+        *"bad name!"*) echo "Error: Invalid name" >&2; exit 1 ;;
+      esac
+      name=""; url=""; header=""
+      shift 2
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          -t|--transport|-s|--scope) shift 2; continue ;;
+          -H|--header) header="$2"; shift 2; continue ;;
+          --leader-socket) shift 2; continue ;;
+          -*) shift; continue ;;
+          *) if [ -z "$name" ]; then name="$1"; else url="$1"; fi; shift ;;
+        esac
+      done
+      # A differing re-add replaces the entry wholesale, so drop any previous
+      # copy (and its headers) before appending the new one.
+      if [ -f "$GROK_HOME/.entries" ]; then
+        grep -v "^#ENTRY $name\$" "$GROK_HOME/.entries" > "$GROK_HOME/.entries.new" 2>/dev/null || true
+        awk -v n="$name" '
+          $0 == "#ENTRY " n {skip=1; next}
+          /^#ENTRY /        {skip=0}
+          !skip             {print}
+        ' "$GROK_HOME/.entries" > "$GROK_HOME/.entries.new"
+        mv "$GROK_HOME/.entries.new" "$GROK_HOME/.entries"
+      fi
+      {
+        echo "#ENTRY $name"
+        echo
+        echo "[mcp_servers.$name]"
+        echo "url = \"$url\""
+        echo "enabled = true"
+        if [ -n "$header" ]; then
+          echo
+          echo "[mcp_servers.$name.headers]"
+          echo "Authorization = \"${header#Authorization: }\""
+        fi
+      } >> "$GROK_HOME/.entries"
+      emit_config
+      echo "Added"
+      exit 0 ;;
+    list)
+      # Names only; enough for the relocation gate's positive sentinels.
+      grep '^#ENTRY ' "$GROK_HOME/.entries" 2>/dev/null | sed 's/^#ENTRY /  /'
+      exit 0 ;;
+    remove) echo "No MCP server named 'x'"; exit 1 ;;
+    enable) echo "No MCP server named 'x'"; exit 1 ;;
+    doctor)
+      # ${VAR} expanded at LOAD time, exactly as observed.
+      target="https://${HP_PROBE_HOST:-UNSET-PLACEHOLDER}/mcp"
+      echo "{\"sources\":[],\"servers\":[{\"name\":\"probe\",\"transport\":\"http\",\"target\":\"$target\",\"checks\":[]}],\"healthy_count\":0,\"failing_count\":1}"
+      exit 1 ;;
+  esac
+fi
+exit 0
+`
+}
+
+func TestTheCaptureSucceedsAgainstAGrokThatBehavesAsRecorded(t *testing.T) {
+	stub := wellBehavedStub("")
+	out, err := runCapture(t, stubGrok(t, stub))
+	if err != nil {
+		t.Fatalf("the capture FAILED against a grok behaving exactly as recorded.\n"+
+			"A capture that refuses everything proves nothing.\nerror: %v\noutput:\n%s", err, out)
+	}
+	if !strings.Contains(out, "wrote ") {
+		t.Errorf("the capture succeeded but reported no output file; output:\n%s", out)
 	}
 }
 

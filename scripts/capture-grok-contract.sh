@@ -87,6 +87,26 @@ GROK_DIR="$WORK/grok-home-elsewhere"
 mkdir -p "$OS_HOME/.grok/skills" "$GROK_DIR"
 NO_LEADER="$WORK/definitely-absent.sock"
 
+# Two more seals, each closing a route by which the CALLER's machine could
+# contaminate a capture that claims to be machine-independent:
+#
+#   PROBE_CWD — grok reads PROJECT-level config from the working directory:
+#   `./.grok/skills`, `./.mcp.json`, `.agents/skills`, and every directory up
+#   to the git root. Running this script from a configured project would mix
+#   that project's servers and skills into the observations, and could change
+#   the compat and identity conclusions. Every probe therefore runs from an
+#   empty directory that is not inside any repository.
+#
+#   The `env -u` list — the probe variables are the ones the capture sets
+#   DELIBERATELY to demonstrate expansion. Inheriting them would mean the
+#   probe labelled "HP_PROBE_HOST unset" was not unset at all, and — since
+#   expansion reaches headers too — an exported REAL bearer token could be
+#   loaded and sent during `doctor`, contradicting this script's claim that no
+#   secret is ever used. They are unset for every probe, and set only for the
+#   one invocation whose whole purpose is to observe expansion.
+PROBE_CWD="$WORK/cwd"
+mkdir -p "$PROBE_CWD"
+
 # The decoy: a config and a skill that must NEVER appear in the capture.
 cat > "$OS_HOME/.grok/config.toml" <<'DECOY'
 [mcp_servers.decoy-must-never-appear]
@@ -121,12 +141,13 @@ grok_probe() {
   # state: a resident leader must be impossible by construction, including for
   # `inspect`, which is the skills-discovery oracle. Subcommands that do not
   # accept the flag are invoked through grok_probe_bare instead.
-  HOME="$OS_HOME" \
-  GROK_HOME="$GROK_DIR" \
-  GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
-  GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
-    perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" \
-      --leader-socket "$NO_LEADER" 2>&1 || GROK_RC=$?
+  ( cd "$PROBE_CWD" && env -u HP_PROBE_HOST -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
+    HOME="$OS_HOME" \
+    GROK_HOME="$GROK_DIR" \
+    GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
+    GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
+      perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" \
+        --leader-socket "$NO_LEADER" ) 2>&1 || GROK_RC=$?
   echo "$GROK_RC" > "$RC_FILE"
   return 0
 }
@@ -138,11 +159,12 @@ grok_probe() {
 grok_probe_bare() {
   local secs="$1"; shift
   GROK_RC=0
-  HOME="$OS_HOME" \
-  GROK_HOME="$GROK_DIR" \
-  GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
-  GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
-    perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" 2>&1 || GROK_RC=$?
+  ( cd "$PROBE_CWD" && env -u HP_PROBE_HOST -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
+    HOME="$OS_HOME" \
+    GROK_HOME="$GROK_DIR" \
+    GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
+    GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
+      perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" ) 2>&1 || GROK_RC=$?
   echo "$GROK_RC" > "$RC_FILE"
   return 0
 }
@@ -300,12 +322,25 @@ SEED
   # behavioural change in timestamp noise.
   diff -u --label "seeded config.toml" --label "config.toml after the add" \
     "$WORK/seed.toml" "$CONFIG" || true
+  # ASSERTED, not merely displayed: the heading above states a conclusion, so
+  # the conclusion is checked. If a future grok preserved comments, the diff
+  # would simply look different and the heading would go on lying.
+  grep -q '^# a hand-written preamble comment$' "$WORK/seed.toml" \
+    || fail "the seed lost its comment before the probe even ran"
+  if grep -q '^# a hand-written preamble comment$' "$CONFIG"; then
+    fail "grok mcp add PRESERVED comments: the 'comments are dropped' conclusion is FALSIFIED"
+  fi
+  grep -q 'preexisting-thing' "$CONFIG" \
+    || fail "the unrelated pre-existing entry was lost, not merely stripped of comments"
   echo
   echo "=== file mode: 0600 before the add, after the add ==="
   # Behaviour 2: the CLI rewrites via temp-file+rename and does not carry the
   # mode across, so a 0600 config comes back 0644 — world-readable.
+  mode_after="$(stat -f '%Lp' "$CONFIG" 2>/dev/null || stat -c '%a' "$CONFIG")"
   echo "before: 0600 (set explicitly above)"
-  echo "after:  $(stat -f '%Lp' "$CONFIG" 2>/dev/null || stat -c '%a' "$CONFIG")"
+  echo "after:  $mode_after"
+  [ "$mode_after" = "644" ] \
+    || fail "the mode after the add is $mode_after, not 644: the 'mode is reset' conclusion is FALSIFIED"
   echo
 
   # ---- Behaviour 3: idempotency, then clobber. ---------------------------
@@ -321,6 +356,8 @@ SEED
        "$WORK/after-add.toml" "$CONFIG"; then
     echo "(no diff: an identical re-add is idempotent)"
   fi
+  cmp -s "$WORK/after-add.toml" "$CONFIG" \
+    || fail "an identical re-add was NOT byte-identical: the idempotency conclusion is FALSIFIED"
   echo
   echo "=== re-add the SAME name with a different url and NO --header ==="
   grok_probe 30 mcp add --transport http homeplane-edge 'https://edge2.example.invalid/mcp'
@@ -328,6 +365,11 @@ SEED
   echo
   echo "=== config.toml after the differing re-add (the headers table is GONE) ==="
   cat "$CONFIG"
+  grep -q 'edge2.example.invalid' "$CONFIG" \
+    || fail "the differing re-add did not take effect at all"
+  if grep -q 'mcp_servers.homeplane-edge.headers' "$CONFIG"; then
+    fail "the headers sub-table SURVIVED a differing re-add: the wholesale-clobber conclusion is FALSIFIED"
+  fi
   echo
 
   # ---- The read surfaces. -------------------------------------------------
@@ -350,7 +392,13 @@ SEED
   # shellcheck disable=SC2016
   grok_probe 30 mcp add --transport http expand-probe 'https://${HP_PROBE_HOST}/mcp' >/dev/null
   expect_ok "mcp add expand-probe"
-  grep -A2 'expand-probe' "$CONFIG" || true
+  grep -A2 'expand-probe' "$CONFIG" \
+    || fail "the expand-probe entry is not in the config at all"
+  # The placeholder must be on disk LITERALLY. If grok expanded it at write
+  # time, the whole "the secret never reaches argv or the file" reasoning in
+  # docs/decisions/fn3-grok-surfaces.md section 3 would not hold.
+  grep -q 'HP_PROBE_HOST' "$CONFIG" \
+    || fail "the \${VAR} placeholder was NOT stored verbatim: it was expanded at write time"
   echo
   # doctor is captured with stdout and stderr SEPARATED, in full, with its exit
   # status. The separation is itself contract: doctor writes well-formed JSON to
@@ -367,7 +415,8 @@ SEED
     local rc=0 doctor_stdout=""
     # stdout is captured rather than streamed so it can be VALIDATED before it
     # is reported, and so stderr stays genuinely separate.
-    doctor_stdout="$(HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
+    doctor_stdout="$(cd "$PROBE_CWD" && env -u HP_PROBE_HOST -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
+      HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
       GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
         perl -e 'alarm shift; exec @ARGV' 90 "$GROK_BIN" mcp doctor "$@" --json \
           --leader-socket "$NO_LEADER" 2>"$WORK/doctor.err")" || rc=$?
@@ -420,7 +469,8 @@ SEED
   # stdout (2>&1) so its output can be captured verbatim into the contract, and
   # doctor's unstructured tracing line would make the JSON unparseable here.
   expand_rc=0
-  expand_out="$(HP_PROBE_HOST=expanded.example.invalid HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
+  expand_out="$(cd "$PROBE_CWD" && env -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
+    HP_PROBE_HOST=expanded.example.invalid HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
     GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
       perl -e 'alarm shift; exec @ARGV' 90 "$GROK_BIN" mcp doctor expand-probe --json \
         --leader-socket "$NO_LEADER" 2>/dev/null)" || expand_rc=$?
@@ -498,6 +548,16 @@ SK
   printf '%s\n' "$inspect_out" \
     | grep -E 'hp-probe-alpha|frontmatter-beta-name|gamma-dir-name|directory-beta-name' \
     || fail "inspect returned no probe skills: skills discovery cannot be reported"
+  # The D1 conclusion is that the frontmatter name WINS, which is only true if
+  # the directory name is ABSENT. Reporting both would mean grok indexes a
+  # skill under either name, and RuleNameMismatch would not apply as claimed.
+  printf '%s\n' "$inspect_out" | grep -q 'frontmatter-beta-name' \
+    || fail "the frontmatter name is missing: the 'frontmatter wins' conclusion is FALSIFIED"
+  if printf '%s\n' "$inspect_out" | grep -q 'directory-beta-name'; then
+    fail "grok reported the DIRECTORY name too: 'the frontmatter name wins' is FALSIFIED"
+  fi
+  printf '%s\n' "$inspect_out" | grep -q 'gamma-dir-name' \
+    || fail "the name-less skill was not reported by its directory name: the fallback conclusion is FALSIFIED"
   echo
 
   # ---- Leader semantics. --------------------------------------------------
