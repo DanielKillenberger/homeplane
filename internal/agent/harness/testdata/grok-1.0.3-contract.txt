@@ -593,6 +593,7 @@ note: upstream emits an unstructured tracing ERROR line here
 
 === grok mcp doctor expand-probe | target WITH HP_PROBE_HOST set ===
 target = "https://expanded.example.invalid/mcp"
+(asserted equal to the expected expansion, not merely scraped)
 
 === grok mcp remove <unknown> ===
 No MCP server named 'no-such-server' in user or project config

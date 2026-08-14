@@ -165,6 +165,71 @@ exit 0
 	}
 }
 
+// fullStub answers every probe the capture makes plausibly enough to reach the
+// END of the run, so a test can fail ONE late thing and prove the capture still
+// refuses. `extra` is spliced in ahead of the defaults to override a case.
+//
+// This exists because the earlier regressions all failed EARLY: a stub that
+// reports nothing trips the first gate, which cannot show whether the last
+// probe in the script is checked at all.
+func fullStub(extra string) string {
+	return `
+` + extra + `
+case "$1" in
+  --version) echo "grok 9.9.9 (stubbed)"; exit 0 ;;
+  --help)    echo "stub help"; exit 0 ;;
+  help)      echo "stub help"; exit 0 ;;
+  inspect)
+    echo "  Skills (3)"
+    echo "  └ hp-probe-alpha         user"
+    echo "  └ frontmatter-beta-name  user"
+    echo "  └ gamma-dir-name         user"
+    exit 0 ;;
+  leader) echo "No leader candidates found."; exit 0 ;;
+esac
+
+if [ "$1" = mcp ]; then
+  case "$2" in
+    list)
+      echo "  homeplane-edge: https://edge.example.invalid/mcp"
+      echo "  staleness-probe: https://stale.example.invalid/mcp"
+      echo "  expand-probe: https://${HP_PROBE_HOST}/mcp"
+      exit 0 ;;
+    add)    echo "Added"; exit 0 ;;
+    remove) echo "No MCP server named 'x'"; exit 1 ;;
+    enable) echo "No MCP server named 'x'"; exit 1 ;;
+    doctor)
+      echo '{"sources":[],"servers":[{"name":"probe","transport":"http","target":"'"${HP_PROBE_HOST:-unset}"'","checks":[]}]}'
+      exit 1 ;;
+  esac
+fi
+exit 0
+`
+}
+
+// The LAST probe in the script used to fail open: its output was piped
+// straight into `sed ... || true`, so an unexpanded target still reached the
+// end marker and replaced the known-good contract with a capture that proved
+// the opposite of what it claimed.
+func TestTheCaptureFailsWhenTheVariableIsNotExpanded(t *testing.T) {
+	// A grok that never expands ${VAR}: doctor reports the placeholder even
+	// with the variable set.
+	stub := fullStub(`
+if [ "$1" = mcp ] && [ "$2" = doctor ]; then
+  echo '{"sources":[],"servers":[{"name":"probe","transport":"http","target":"https://${HP_PROBE_HOST}/mcp","checks":[]}]}'
+  exit 1
+fi
+`)
+	out, err := runCapture(t, stubGrok(t, stub))
+	if err == nil {
+		t.Fatalf("the capture SUCCEEDED against a grok that never expanded ${VAR};\n"+
+			"the load-time expansion claim would have been recorded as proven.\noutput:\n%s", out)
+	}
+	if !strings.Contains(out, "was NOT expanded") {
+		t.Errorf("the capture failed but not with an expansion diagnosis; output:\n%s", out)
+	}
+}
+
 // A transient failure must not destroy the last known-good contract. Writing
 // straight to the committed path would truncate it before the replacement is
 // known to be any good.

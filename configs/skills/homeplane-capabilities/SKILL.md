@@ -52,8 +52,11 @@ own grant.
   `send_updates: "none"` — sending attendee notifications is a separately
   granted authority this grant does not have. Create/update/delete without
   notifying attendees is fine; anything that would email someone is not.
-- Check his schedule with `get_events` / `query_freebusy` before proposing
-  times; use `list_calendars` to find the right calendar.
+- Check his schedule with `get_events` before proposing times — it is the only
+  read surface this grant has. `list_calendars`, `query_freebusy`,
+  `manage_focus_time` and `manage_out_of_office` are **excluded by the
+  connector manifest** and will be refused; work from `get_events` on the
+  default calendar instead of reaching for them.
 
 ## Rules
 

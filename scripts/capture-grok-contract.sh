@@ -17,8 +17,11 @@
 #   2. `grok mcp add` RESETS the file mode to 0644, discarding a pre-set 0600.
 #   3. A re-add with different arguments CLOBBERS the entry wholesale — an add
 #      without `-H` silently deletes the entry's headers sub-table.
-#   4. `${VAR}` in a header/url value is stored VERBATIM and expanded at LOAD
-#      time (which is why the placeholder, not the secret, is what argv sees).
+#   4. `${VAR}` in a header or url value is stored VERBATIM rather than
+#      expanded at write time (which is why the placeholder, not the secret, is
+#      what argv sees). Expansion at LOAD time is observed here for `url`;
+#      header expansion is upstream-documented but NOT verified by this capture
+#      — see docs/decisions/fn3-grok-surfaces.md section 3.
 #
 # Every probe runs in a SEALED HOME: $HOME and $GROK_HOME point into a throwaway
 # directory (at two DIFFERENT roots, so GROK_HOME relocation is actually proven
@@ -405,9 +408,35 @@ SEED
   # The ${VAR} entry, unexpanded then expanded — the load-time expansion proof.
   doctor_probe "expand-probe (HP_PROBE_HOST unset)" classified expand-probe
   echo
+  # The load-time expansion proof, and the LAST probe that used to fail open:
+  # piping straight into `sed ... || true` meant a timeout, a CLI failure,
+  # malformed JSON, or an unchanged target all still reached the end marker and
+  # replaced the known-good contract. The expansion is now asserted, not
+  # scraped — if grok stops expanding `${VAR}`, this capture fails rather than
+  # quietly recording a placeholder as though it were the proof.
   echo "=== grok mcp doctor expand-probe | target WITH HP_PROBE_HOST set ==="
-  HP_PROBE_HOST=expanded.example.invalid grok_probe 90 mcp doctor expand-probe --json \
-    | sed -n 's/.*"target": \(".*"\),*/target = \1/p' || true
+  expand_want="https://expanded.example.invalid/mcp"
+  # Invoked directly rather than via grok_probe: grok_probe merges stderr into
+  # stdout (2>&1) so its output can be captured verbatim into the contract, and
+  # doctor's unstructured tracing line would make the JSON unparseable here.
+  expand_rc=0
+  expand_out="$(HP_PROBE_HOST=expanded.example.invalid HOME="$OS_HOME" GROK_HOME="$GROK_DIR" \
+    GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
+      perl -e 'alarm shift; exec @ARGV' 90 "$GROK_BIN" mcp doctor expand-probe --json \
+        --leader-socket "$NO_LEADER" 2>/dev/null)" || expand_rc=$?
+  # doctor exits 1 for an unhealthy server, which this deliberately is (the
+  # host does not resolve), so 1 is the expected status here — but a timeout is
+  # still refused, and the JSON must still parse.
+  reject_timeout "mcp doctor expand-probe (expanded)" "$expand_rc"
+  [ "$expand_rc" -eq 1 ] \
+    || fail "mcp doctor expand-probe (expanded) exited $expand_rc (expected 1)"
+  expand_target="$(printf '%s' "$expand_out" \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["servers"][0]["target"])' 2>/dev/null)" \
+    || fail "mcp doctor expand-probe (expanded) did not emit parseable JSON with a server target"
+  [ "$expand_target" = "$expand_want" ] \
+    || fail "\${VAR} was NOT expanded at load time: target is '$expand_target', expected '$expand_want'"
+  echo "target = \"$expand_target\""
+  echo "(asserted equal to the expected expansion, not merely scraped)"
   echo
 
   # ---- Non-interactive failure shapes. -----------------------------------
