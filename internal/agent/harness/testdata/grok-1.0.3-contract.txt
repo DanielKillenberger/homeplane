@@ -625,7 +625,7 @@ exit: 1
   └ gamma-dir-name         user
   └ hp-probe-alpha         user
 
-=== grok leader list (sealed home) ===
+=== grok leader list (sealed home, DEFAULT socket) ===
 No leader candidates found.
 
 === a config change is visible to the very NEXT invocation ===

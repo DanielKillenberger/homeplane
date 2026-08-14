@@ -172,9 +172,22 @@ exit 0
 func TestTheCaptureFailsWhenTheVariableIsNotExpanded(t *testing.T) {
 	// A grok that never expands ${VAR}: doctor reports the placeholder even
 	// with the variable set.
+	// The shape stays correct in every other respect — only the expansion is
+	// missing — so the failure this asserts is the expansion check itself and
+	// not some earlier assertion tripping first.
 	stub := wellBehavedStub(`
 if [ "$1" = mcp ] && [ "$2" = doctor ]; then
-  echo '{"sources":[],"servers":[{"name":"probe","transport":"http","target":"https://${HP_PROBE_HOST}/mcp","checks":[]}]}'
+  shift 2
+  who=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) shift ;;
+      --leader-socket) shift 2 ;;
+      -*) shift ;;
+      *) who="$1"; shift ;;
+    esac
+  done
+  printf '{"sources":[],"servers":[{"name":"%s","transport":"http","target":"https://PLACEHOLDER-NEVER-EXPANDED/mcp","checks":[{"label":"server started","passed":true},{"label":"handshake failed","passed":false}],"healthy":false}],"healthy_count":0,"failing_count":1}\n' "$who"
   exit 1
 fi
 `)
@@ -289,9 +302,21 @@ if [ "$1" = mcp ]; then
     remove) echo "No MCP server named 'x'"; exit 1 ;;
     enable) echo "No MCP server named 'x'"; exit 1 ;;
     doctor)
-      # ${VAR} expanded at LOAD time, exactly as observed.
+      # ${VAR} expanded at LOAD time, exactly as observed. The server name
+      # echoes the one asked about, and the failure shape is reported the way
+      # real grok reports it for a host that will not resolve.
+      shift 2
+      who=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --json) shift ;;
+          --leader-socket) shift 2 ;;
+          -*) shift ;;
+          *) who="$1"; shift ;;
+        esac
+      done
       target="https://${HP_PROBE_HOST:-UNSET-PLACEHOLDER}/mcp"
-      echo "{\"sources\":[],\"servers\":[{\"name\":\"probe\",\"transport\":\"http\",\"target\":\"$target\",\"checks\":[]}],\"healthy_count\":0,\"failing_count\":1}"
+      printf '{"sources":[],"servers":[{"name":"%s","transport":"http","target":"%s","checks":[{"label":"server started","passed":true},{"label":"handshake failed","passed":false,"detail":"dns error"}],"healthy":false}],"healthy_count":0,"failing_count":1}\n' "$who" "$target"
       exit 1 ;;
   esac
 fi
@@ -308,6 +333,95 @@ func TestTheCaptureSucceedsAgainstAGrokThatBehavesAsRecorded(t *testing.T) {
 	}
 	if !strings.Contains(out, "wrote ") {
 		t.Errorf("the capture succeeded but reported no output file; output:\n%s", out)
+	}
+}
+
+// The fresh-process contract rests on there being no resident leader. A
+// capture taken on a machine that DOES run one must fail loudly rather than
+// record a guarantee that machine cannot honour — and it very nearly could
+// not: forcing --leader-socket onto every probe made the leader DETECTOR
+// point at a socket guaranteed to be absent, so it answered "no leader" by
+// construction.
+func TestTheCaptureFailsWhenALeaderIsRunning(t *testing.T) {
+	stub := wellBehavedStub(`
+if [ "$1" = leader ]; then
+  echo "leader 4242 (pid 4242) on /somewhere/leader.sock"
+  exit 0
+fi
+`)
+	out, err := runCapture(t, stubGrok(t, stub))
+	if err == nil {
+		t.Fatalf("the capture SUCCEEDED on a machine with a resident leader;\n"+
+			"the fresh-process contract would have been recorded as observed.\noutput:\n%s", out)
+	}
+	if !strings.Contains(out, "leader IS running") {
+		t.Errorf("the capture failed but not with a leader diagnosis; output:\n%s", out)
+	}
+}
+
+// doctor's SHAPE is what the decision record cites — the server identity, the
+// handshake check, the health state. Parsing "some JSON" is not the same
+// claim, and an earlier revision accepted a doctor that reported a healthy
+// server with no checks at all.
+func TestTheCaptureFailsWhenDoctorReportsNoFailureShape(t *testing.T) {
+	for _, tc := range []struct {
+		name, doctorBody string
+	}{
+		{
+			name: "healthy despite an unreachable host",
+			doctorBody: `echo '{"sources":[],"servers":[{"name":"homeplane-edge","transport":"http","target":"https://x/mcp","checks":[{"label":"ok","passed":true}],"healthy":true}],"failing_count":0}'
+      exit 1`,
+		},
+		{
+			name: "no checks, so no evidenced failure shape",
+			doctorBody: `echo '{"sources":[],"servers":[{"name":"homeplane-edge","transport":"http","target":"https://x/mcp","checks":[],"healthy":false}],"failing_count":1}'
+      exit 1`,
+		},
+		{
+			name: "unexpected exit code",
+			doctorBody: `echo '{"sources":[],"servers":[{"name":"homeplane-edge","transport":"http","target":"https://x/mcp","checks":[{"label":"handshake failed","passed":false}],"healthy":false}],"failing_count":1}'
+      exit 0`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := wellBehavedStub(`
+if [ "$1" = mcp ] && [ "$2" = doctor ]; then
+      ` + tc.doctorBody + `
+fi
+`)
+			out, err := runCapture(t, stubGrok(t, stub))
+			if err == nil {
+				t.Fatalf("the capture SUCCEEDED with doctor reporting %s;\noutput:\n%s", tc.name, out)
+			}
+			if !strings.Contains(out, "CAPTURE ABORTED") {
+				t.Errorf("the capture failed but never said why; output:\n%s", out)
+			}
+		})
+	}
+}
+
+// The documented `[path-to-grok]` argument is allowed to be relative, but every
+// probe runs from a sealed working directory where a relative path no longer
+// resolves — so it must be canonicalised up front.
+func TestTheCaptureAcceptsARelativeBinaryPath(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(binDir, "grok")
+	body := "#!/usr/bin/env bash\n" + wellBehavedStub("") + "\n"
+	if err := os.WriteFile(bin, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, script := stagedScript(t)
+	cmd := exec.Command("bash", script, "./bin/grok")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("the capture failed with a RELATIVE binary path, which the usage line allows.\n"+
+			"error: %v\noutput:\n%s", err, out)
 	}
 }
 

@@ -38,6 +38,15 @@ set -euo pipefail
 GROK_BIN="${1:-grok}"
 command -v "$GROK_BIN" >/dev/null 2>&1 || { echo "capture-grok-contract.sh: $GROK_BIN not found" >&2; exit 1; }
 GROK_BIN="$(command -v "$GROK_BIN")"
+# Canonicalise BEFORE anything changes directory: `command -v ./bin/grok`
+# answers with a RELATIVE path, and every probe below runs from $PROBE_CWD,
+# where that path no longer resolves. Failing here beats failing in the middle
+# of a capture with a confusing "not found".
+case "$GROK_BIN" in
+  /*) ;;
+  *)  GROK_BIN="$(cd "$(dirname "$GROK_BIN")" && pwd -P)/$(basename "$GROK_BIN")" ;;
+esac
+[ -x "$GROK_BIN" ] || { echo "capture-grok-contract.sh: $GROK_BIN is not executable" >&2; exit 1; }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 OUT_DIR="$REPO_ROOT/internal/agent/harness/testdata"
@@ -148,6 +157,26 @@ grok_probe() {
     GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
       perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" \
         --leader-socket "$NO_LEADER" ) 2>&1 || GROK_RC=$?
+  echo "$GROK_RC" > "$RC_FILE"
+  return 0
+}
+
+# grok_probe_default_socket is for the ONE probe that must observe the leader
+# state as it really is: `leader list`. Every other probe forces a nonexistent
+# --leader-socket so it cannot attach to a resident leader — but pointing the
+# DETECTOR at a socket guaranteed to be absent would make it answer "no leader"
+# by construction, which is exactly the false negative the fresh-process
+# contract in docs/decisions/fn3-grok-surfaces.md section 4 depends on NOT
+# happening. This one looks at the default socket for the home under test.
+grok_probe_default_socket() {
+  local secs="$1"; shift
+  GROK_RC=0
+  ( cd "$PROBE_CWD" && env -u HP_PROBE_HOST -u HP_PROBE_TOKEN -u HOMEPLANE_GROK_TOKEN \
+    HOME="$OS_HOME" \
+    GROK_HOME="$GROK_DIR" \
+    GROK_CLAUDE_MCPS_ENABLED=false GROK_CURSOR_MCPS_ENABLED=false \
+    GROK_CLAUDE_SKILLS_ENABLED=false GROK_CURSOR_SKILLS_ENABLED=false \
+      perl -e 'alarm shift; exec @ARGV' "$secs" "$GROK_BIN" "$@" ) 2>&1 || GROK_RC=$?
   echo "$GROK_RC" > "$RC_FILE"
   return 0
 }
@@ -429,9 +458,35 @@ SEED
     # output. doctor exits non-zero for an unhealthy server, so a non-zero rc is
     # expected - but its stdout must still be well-formed JSON either way.
     reject_timeout "mcp doctor $label" "$rc"
-    if ! printf '%s' "$doctor_stdout" | python3 -m json.tool >/dev/null 2>&1; then
-      fail "mcp doctor $label did not emit parseable JSON on stdout"
-    fi
+    # doctor exits 1 when any server is unhealthy. Both probes here point at a
+    # host that cannot resolve, so 1 is the contract; 0 would mean the probe
+    # silently succeeded and proved nothing about the failure shape.
+    [ "$rc" -eq 1 ] || fail "mcp doctor $label exited $rc (expected 1 for an unhealthy server)"
+    # The decision record cites doctor's SHAPE — the server identity, the
+    # handshake check and the health state — so those fields are asserted, not
+    # just the fact that some JSON came back.
+    printf '%s' "$doctor_stdout" | python3 -c '
+import json, sys
+want_name = sys.argv[1]
+d = json.load(sys.stdin)
+servers = d.get("servers") or []
+if len(servers) != 1:
+    sys.exit("expected exactly one server, got %d" % len(servers))
+s = servers[0]
+if s.get("name") != want_name:
+    sys.exit("server name is %r, expected %r" % (s.get("name"), want_name))
+if not s.get("target"):
+    sys.exit("server has no target")
+checks = s.get("checks") or []
+if not checks:
+    sys.exit("server reports no checks: the failure shape is unevidenced")
+if not any(c.get("passed") is False for c in checks):
+    sys.exit("no failing check for an unreachable host: %r" % checks)
+if s.get("healthy") is not False:
+    sys.exit("server reports healthy=%r for an unreachable host" % s.get("healthy"))
+if d.get("failing_count") != 1:
+    sys.exit("failing_count is %r, expected 1" % d.get("failing_count"))
+' "$1" || fail "mcp doctor $label did not report the documented shape"
     if [ "$stderr_mode" = verbatim ]; then
       echo "=== grok mcp doctor $label | STDERR ==="
       cat "$WORK/doctor.err"
@@ -561,8 +616,16 @@ SK
   echo
 
   # ---- Leader semantics. --------------------------------------------------
-  echo "=== grok leader list (sealed home) ==="
-  grok_probe 30 leader list; expect_ok "grok leader list"
+  echo "=== grok leader list (sealed home, DEFAULT socket) ==="
+  # Deliberately NOT through grok_probe: see grok_probe_default_socket above.
+  leader_out="$(grok_probe_default_socket 30 leader list)"
+  expect_ok "grok leader list"
+  printf '%s\n' "$leader_out"
+  # The exit code alone says nothing here — the whole claim is the CONTENT.
+  # On a machine that does run a leader this must fail loudly rather than
+  # record a fresh-process guarantee the machine cannot honour.
+  printf '%s\n' "$leader_out" | grep -q 'No leader candidates found' \
+    || fail "a leader IS running for this home: the fresh-process contract cannot be recorded as observed here"
   echo
   echo "=== a config change is visible to the very NEXT invocation ==="
   grok_probe 30 mcp add --transport http staleness-probe 'https://stale.example.invalid/mcp' >/dev/null
