@@ -203,17 +203,27 @@ custody and revocation legs are unaffected because none of them touches
 `manage_event`. The `manifest_revision` field is what a later reader checks to
 know which manifest a run actually attests to.
 
-**The guarded Calendar path is proven in task .7, by Daniel's decision.**
-Re-running the Calendar legs here would need a fresh browser consent and a
-rebuilt workload after teardown, to prove a path .7's end-to-end run exercises
-anyway. Daniel explicitly authorized carrying it into
-`fn-1-homeplane-walking-skeleton-install.7` on **2026-08-14** — the same
-precedent as .15's deferred credential import — and .7 inherits the acceptance
-item: the guarded mutation path (`send_updates: "none"` under the
-`connector.send` gate) proven live, **including one denied `manage_event` call
-without `send_updates: "none"` audited as `capability_missing`**. The item is
-inherited, not dropped; see the live evidence file's `deferral` object. Until .7
-records it, no run in this repo attests to the guarded manifest.
+**The guarded Calendar path was proven in task .7 — the deferral is discharged.**
+The end-to-end proof (`test/e2e/`, `test/e2e/run.sh`) runs the guarded six-op
+sequence from BOTH harnesses against the deployed server, and includes the
+denial leg the inherited acceptance item required: a `manage_event` call without
+`send_updates: "none"` refused as `capability_missing` (required capability
+`connector.send`), audited. See
+`test/evidence/fn-1-homeplane-walking-skeleton-install.7.live.json`.
+
+That run also found two delivery faults that only appear an hour in, both now
+fixed and both worth knowing about if you ever re-plumb this:
+
+- **The connector resolves its OAuth CLIENT separately from the user
+  credential** (`GOOGLE_CLIENT_SECRET_PATH`, or an env pair) and refuses to
+  refresh without it. Everything works until the first access token expires,
+  and then every call fails with *OAuth client credentials not found*. The
+  server now delivers `client_secret.json` beside the credential.
+- **The connector PERSISTS the refreshed token**, so a credential it can read
+  and not rewrite dies at the same moment — with the connector reporting that
+  the user must authenticate again, moments after the refresh succeeded. The
+  credential is delivered `0660` to the connector's own group; the client
+  configuration stays `0640`.
 
 ## 5. Tear down
 

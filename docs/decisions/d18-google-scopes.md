@@ -123,3 +123,18 @@ been observed permitting is not a guard anyone has watched refuse.
 - If D18 is ever tightened back to two scopes, `get_events` must be replaced
   with a Calendar read path that runs under `calendar.events` — at v1.24.0 the
   pinned connector offers none.
+
+## The guarded path, proven live (task .7, 2026-08-14)
+
+The deferral recorded above is discharged. The end-to-end proof runs the
+Calendar six-op sequence from BOTH harnesses through the deployed server, every
+mutation carrying `send_updates: "none"`, and includes the leg that makes the
+guard worth having: the same tool called WITHOUT `send_updates` is refused
+before it reaches Google and audited as `capability_missing` with required
+capability `connector.send`. Claude Code and Codex each produced that refusal
+against the shipped manifest.
+
+Evidence: `test/evidence/fn-1-homeplane-walking-skeleton-install.7.live.json`
+(stages `calendar`, `connector`), which records the audit row behind every
+assertion — action class, artifact id and (machine, harness, grant) — rather
+than the harness's own account of what it did.

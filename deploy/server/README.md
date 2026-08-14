@@ -160,14 +160,12 @@ itself is verified on every deployment against a throwaway ref
 the plaintext does not appear in the database — and recorded in the audit log by
 ref and generation only.
 
-### Pending: the Google OAuth app credentials
+### The Google OAuth app credentials (done, 2026-08-14)
 
-`provider_secret_refs_present` in `verify.sh` **fails today**, on purpose. The
-refs the deployed manifest requires — `google/client-id`, `google/client-secret`
-— are not in the store, because the Homeplane-owned Google OAuth client does not
-exist yet. Creating it is Daniel's own action (an authenticated Google Cloud
-Console session on his account; nothing here can or should mint credentials
-inside it), and its output feeds fn-1.12.
+`google/client-id` and `google/client-secret` are in the store, so
+`provider_secret_refs_present` passes without `--pending`. The user credential
+(`google/oauth-session`) is brokered by `homeplane-agent add-credentials google`
+from an enrolled machine and never imported by hand.
 
 Deliberately NOT done: reusing the existing Hermes OAuth client on the same
 host. Two systems sharing one app identity blurs ownership, makes revocation
@@ -184,22 +182,65 @@ bin/homeplane-server admin secret import -state-dir var -file ~/.homeplane/googl
 rm -f ~/.homeplane/google-client-id ~/.homeplane/google-client-secret
 ```
 
-Then re-run `verify.sh` WITHOUT `--pending`; all ten checks must pass.
+Both are imported on this deployment, so `verify.sh` runs WITHOUT `--pending`
+and all ten checks must pass.
 
 ## Connector manifest
 
 `manifest.json` is what the **edge authorizes against**; it does not start
-anything. Only the read surface is mapped — Drive read and Calendar read — with
-the Calendar write tool and both Drive write tools declared and *excluded*, so
-the edge fails closed on them (D18: Drive is read-only; the Calendar write
-mapping and the through-the-stack six-op proof are **fn-1.12**'s).
+anything. It is a byte-identical copy of `configs/connectors/google.json` (a
+test fails if they drift): Drive read mapped, every Drive write tool declared
+and *excluded* so the edge fails closed on them, and Calendar read/write mapped
+with a `connector.send` guard on `manage_event`'s `send_updates` (D18).
 
-The workload the gateway actually supervises is `HOMEPLANE_GATEWAY_WORKLOAD` in
-`server.env`. Until fn-1.12 lands the real `workspace-mcp` workload it is the
-pinned `fetch` server from the D6 spike: a genuine containerized MCP workload,
-so the runtime, the supervision and the isolation boundary are all really
-exercised, and every tool call through the edge is refused as unmapped — which
-is the correct behavior for a server with no connector wired yet.
+The workload the gateway supervises is `HOMEPLANE_GATEWAY_WORKLOAD`, now the
+pinned `uvx://workspace-mcp@1.24.0`. Two more settings carry the connector's own
+requirements, so that onboarding a different connector is a config change rather
+than a template edit:
+
+| Setting | What it carries |
+|---|---|
+| `HOMEPLANE_GATEWAY_RUN_ARGS` | extra `thv run` flags: transport shape, `--build-with PySocks` (without it the container's egress proxy is ignored and every Google call fails with *Network is unreachable*), the workload's environment, and the credential volume |
+| `HOMEPLANE_GATEWAY_WORKLOAD_ARGS` | the workload's own argv after `--` (`--tools drive calendar`, which is what makes the manifest's `tool_inventory` complete) |
+
+Neither may re-declare `--host`, `--proxy-port` or `--foreground`: the installer
+refuses that outright, because a later flag wins and the loopback binding is the
+bypass boundary.
+
+## Credential delivery to the workload
+
+The connector reads its credential from a directory, not from Homeplane's
+database, so the server materializes it there — decrypted, briefly, and only
+ever server-side:
+
+| Setting | What it is |
+|---|---|
+| `HOMEPLANE_WORKLOAD_CREDENTIAL_DIR` | the directory the workload mounts (under `var/`, so it survives upgrades) |
+| `HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT` | whose credential it is — the connector looks the file up by account name, and it is the same address callers pass as `user_google_email` |
+| `HOMEPLANE_WORKLOAD_CREDENTIAL_GID` | the gid the connector's container runs as, in CONTAINER terms (999 for workspace-mcp) |
+
+Delivery happens on startup for whatever is already stored, and from a commit
+hook that runs BEFORE `add-credentials` reports success — so a client that polls
+its way to `completed` and immediately makes a call finds a deployment that is
+ready.
+
+**Why the gid setting exists.** Rootless Podman maps the container's uid/gid to
+a SUBORDINATE id of this user, so a 0600 file the server owns is unreadable by
+the very workload it is delivered for, and the container cannot be made to run
+as the server's user. The installer therefore chgrps the credential directory to
+that mapped group and sets its setgid bit — both inside `podman unshare`,
+because this user does not belong to the subordinate group and Linux drops the
+setgid bit when a non-member chmods such a directory. The credential is then
+written `0660` and the client configuration `0640`; `other` is never granted.
+
+**Two faults that only appear an hour in**, both found by the end-to-end proof
+and both fixed here — worth knowing if this is ever re-plumbed:
+
+- the connector resolves its OAuth CLIENT separately from the user credential
+  (`GOOGLE_CLIENT_SECRET_PATH`) and refuses to refresh without it;
+- it PERSISTS the refreshed token, so a credential it can read and not rewrite
+  dies at the first expiry — with the connector reporting that the user must
+  authenticate again, moments after the refresh succeeded.
 
 ## Verifying a deployment
 
@@ -220,7 +261,7 @@ deploy/server/verify.sh --host clawniel --fqdn homeplane.tailab4e9b.ts.net --jso
 | `healthz_green_over_tailnet` | every server component reports ok |
 | `admin_cli_audit` | the admin CLI reads and writes the real state directory |
 | `credential_key_0600` | the age key exists with 0600 |
-| `provider_secret_refs_present` | every `*_ref` the deployed manifest names is in the store **now**, encrypted (currently **pending**, above) |
+| `provider_secret_refs_present` | every `*_ref` the deployed manifest names is in the store **now**, encrypted |
 | `secrets_encrypted_at_rest` | every stored secret is an age message, checked per row |
 
 The last two ask the store, not the audit log: an audit row proves an import
