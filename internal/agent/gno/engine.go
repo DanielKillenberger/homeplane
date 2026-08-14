@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -463,25 +464,51 @@ func Install(opts InstallOptions) (Config, Descriptor, error) {
 	// Installation writes four things, and a failure part-way through used to
 	// leave the earlier ones behind — including a published endpoint descriptor
 	// for an activation that officially failed, which task .6 would then wire a
-	// harness to. So every write is registered for rollback, and the DESCRIPTOR
-	// IS PUBLISHED LAST: it is the file other components consume, so it must not
-	// exist until everything it describes does.
-	var written []string
+	// harness to. So the whole install is transactional, and the DESCRIPTOR IS
+	// PUBLISHED LAST: it is the file other components consume, so it must not
+	// change until everything it describes has.
+	//
+	// Transactional means SNAPSHOT, not delete. Install is also the re-activation
+	// path, where the unit, config, and removal plan already exist and describe a
+	// WORKING installation. Rolling that back by removing them would destroy a
+	// healthy machine on a failed upgrade — and leave the surviving descriptor
+	// pointing harnesses at a wrapper with no config to load. So each destination
+	// is captured (bytes and permissions) immediately before it is overwritten,
+	// and rollback puts the original back; only destinations that did not exist
+	// before are removed.
+	var snapshots []artifactSnapshot
 	rollback := func() {
-		for i := len(written) - 1; i >= 0; i-- {
-			_ = os.Remove(written[i])
+		for i := len(snapshots) - 1; i >= 0; i-- {
+			snapshots[i].restore()
 		}
+	}
+	// capture must be called before each write. A snapshot that cannot be taken
+	// is a write we refuse to make, because we could not undo it.
+	capture := func(path string) error {
+		snap, err := snapshotArtifact(path)
+		if err != nil {
+			rollback()
+			return err
+		}
+		snapshots = append(snapshots, snap)
+		return nil
 	}
 
 	unit, err := DaemonUnit(opts.AgentBinary, opts.StateDir, host, port, tokenFile)
 	if err != nil {
 		return Config{}, Descriptor{}, err
 	}
-	unitPath, err := opts.Installer.Install(unit)
+	unitPath, err := opts.Installer.Path(unit)
 	if err != nil {
 		return Config{}, Descriptor{}, err
 	}
-	written = append(written, unitPath)
+	if err := capture(unitPath); err != nil {
+		return Config{}, Descriptor{}, err
+	}
+	if unitPath, err = opts.Installer.Install(unit); err != nil {
+		rollback()
+		return Config{}, Descriptor{}, err
+	}
 
 	cfg := Config{
 		Bin:          opts.Prepared.Bin,
@@ -501,17 +528,21 @@ func Install(opts InstallOptions) (Config, Descriptor, error) {
 		InstalledAt:  now().UTC(),
 		Activation:   activationRecord(opts.Prepared),
 	}
+	if err := capture(ConfigPath(opts.StateDir)); err != nil {
+		return Config{}, Descriptor{}, err
+	}
 	if err := SaveConfig(opts.StateDir, cfg); err != nil {
 		rollback()
 		return Config{}, Descriptor{}, err
 	}
-	written = append(written, ConfigPath(opts.StateDir))
 
+	if err := capture(RemovalPlanPath(opts.StateDir)); err != nil {
+		return Config{}, Descriptor{}, err
+	}
 	if err := RegisterRemoval(opts.StateDir, cfg, opts.Installer, currentUID(), now()); err != nil {
 		rollback()
 		return Config{}, Descriptor{}, err
 	}
-	written = append(written, RemovalPlanPath(opts.StateDir))
 
 	descriptor := Descriptor{
 		SchemaVersion: DescriptorSchemaVersion,
@@ -546,6 +577,9 @@ func Install(opts InstallOptions) (Config, Descriptor, error) {
 		},
 		WrittenAt: now().UTC(),
 	}
+	if err := capture(DescriptorPath(opts.StateDir)); err != nil {
+		return Config{}, Descriptor{}, err
+	}
 	if err := SaveDescriptor(opts.StateDir, descriptor); err != nil {
 		rollback()
 		return Config{}, Descriptor{}, err
@@ -554,6 +588,60 @@ func Install(opts InstallOptions) (Config, Descriptor, error) {
 	// A fresh unit starts a fresh restart history.
 	_ = (supervise.Tracker{Dir: opts.StateDir, Label: unit.Label}).Reset()
 	return cfg, descriptor, nil
+}
+
+// artifactSnapshot is one installation destination as it looked BEFORE the
+// install touched it. It is what makes a failed re-activation a no-op instead of
+// a demolition.
+type artifactSnapshot struct {
+	path string
+	// existed means a regular file was there and its bytes are held below.
+	existed bool
+	// foreign means something we did not write and cannot restore occupies the
+	// path (a directory, a symlink, a device). Rollback leaves it strictly alone:
+	// we never created it, so removing it would be destroying a stranger's file.
+	foreign bool
+	data    []byte
+	perm    fs.FileMode
+}
+
+// snapshotArtifact captures a destination before it is overwritten.
+func snapshotArtifact(path string) (artifactSnapshot, error) {
+	snap := artifactSnapshot{path: path}
+	info, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return snap, nil
+		}
+		return artifactSnapshot{}, fmt.Errorf("gno: inspect %s before overwriting it: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		snap.foreign = true
+		return snap, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return artifactSnapshot{}, fmt.Errorf("gno: snapshot %s before overwriting it: %w", path, err)
+	}
+	snap.existed = true
+	snap.data = data
+	snap.perm = info.Mode().Perm()
+	return snap, nil
+}
+
+// restore undoes whatever the install did to this destination.
+func (s artifactSnapshot) restore() {
+	switch {
+	case s.foreign:
+		// Not ours. Leave it.
+	case s.existed:
+		// Atomic, so a rollback that itself dies cannot leave a truncated
+		// original where a whole one used to be.
+		_ = writeFileAtomic(s.path, s.data, s.perm)
+		_ = os.Chmod(s.path, s.perm)
+	default:
+		_ = os.Remove(s.path)
+	}
 }
 
 // DaemonUnit builds the supervised engine unit.

@@ -1,6 +1,7 @@
 package gno
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -394,6 +395,107 @@ func TestAFailedInstallPublishesNoDescriptor(t *testing.T) {
 	unitPath := filepath.Join(f.unitDir, UnitLabel+".plist")
 	if _, err := os.Stat(unitPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the supervision unit survived a failed install: %v", err)
+	}
+}
+
+// A failed RE-activation is the dangerous case the fresh-install test above
+// cannot see: there, "gone" is the correct rollback outcome because nothing was
+// there before. Over a working installation, deleting the unit, config, and
+// removal plan destroys the machine — and the surviving descriptor keeps
+// pointing harnesses at an agent wrapper with no config left to load. Rollback
+// must therefore RESTORE, byte for byte, not remove.
+func TestAFailedReactivationLeavesTheWorkingInstallIntact(t *testing.T) {
+	f := newFixture(t)
+	prepared := f.prepare(t)
+
+	cfg, descriptor := f.install(t, prepared)
+
+	type artifact struct {
+		name string
+		path string
+	}
+	artifacts := []artifact{
+		{"unit", cfg.UnitPath},
+		{"config", ConfigPath(f.stateDir)},
+		{"removal plan", RemovalPlanPath(f.stateDir)},
+		{"descriptor", DescriptorPath(f.stateDir)},
+	}
+	before := make(map[string][]byte, len(artifacts))
+	perms := make(map[string]os.FileMode, len(artifacts))
+	for _, a := range artifacts {
+		raw, err := os.ReadFile(a.path)
+		if err != nil {
+			t.Fatalf("read %s after the first install: %v", a.name, err)
+		}
+		info, err := os.Stat(a.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before[a.name] = raw
+		perms[a.name] = info.Mode().Perm()
+	}
+
+	// Force the SECOND install to fail after the unit and config have already
+	// been replaced: put a directory where the removal plan must be renamed into
+	// place, so RegisterRemoval's atomic write cannot land.
+	planPath := RemovalPlanPath(f.stateDir)
+	if err := os.Remove(planPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(planPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(planPath) })
+
+	// Different port and index, so a rollback that failed to restore would leave
+	// visibly different bytes rather than an accidental match.
+	if _, _, err := Install(InstallOptions{
+		StateDir: f.stateDir, Installer: f.installer, AgentBinary: f.agentBin, Prepared: prepared,
+		DaemonPort: 3178, Index: "second-index",
+	}); err == nil {
+		t.Fatal("re-activation succeeded despite an unwritable removal plan")
+	}
+
+	for _, a := range artifacts {
+		if a.name == "removal plan" {
+			// The test itself replaced this one; rollback correctly left the
+			// foreign directory alone.
+			continue
+		}
+		raw, err := os.ReadFile(a.path)
+		if err != nil {
+			t.Fatalf("the %s did not survive a failed re-activation: %v", a.name, err)
+		}
+		if !bytes.Equal(raw, before[a.name]) {
+			t.Fatalf("the %s was not restored byte-for-byte after a failed re-activation:\nwant:\n%s\ngot:\n%s",
+				a.name, before[a.name], raw)
+		}
+		info, err := os.Stat(a.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != perms[a.name] {
+			t.Fatalf("the %s came back with permissions %v, want %v", a.name, info.Mode().Perm(), perms[a.name])
+		}
+	}
+
+	// The whole point: the installation the machine is still running is coherent.
+	restoredCfg, err := LoadConfig(f.stateDir)
+	if err != nil {
+		t.Fatalf("the config is unloadable after a failed re-activation: %v", err)
+	}
+	if restoredCfg.DaemonPort != cfg.DaemonPort || restoredCfg.Index != cfg.Index {
+		t.Fatalf("the failed re-activation's values leaked into the live config: %+v", restoredCfg)
+	}
+	restored, err := LoadDescriptor(f.stateDir)
+	if err != nil {
+		t.Fatalf("the descriptor is unloadable after a failed re-activation: %v", err)
+	}
+	if restored.Command != descriptor.Command || len(restored.Args) != len(descriptor.Args) {
+		t.Fatalf("the descriptor changed for an activation that failed: %+v", restored)
+	}
+	if restoredCfg.UnitPath != cfg.UnitPath {
+		t.Fatalf("the descriptor now points at a different unit: %q", restoredCfg.UnitPath)
 	}
 }
 

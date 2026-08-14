@@ -295,7 +295,10 @@ func (i Installer) Install(u Unit, secrets ...string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", fmt.Errorf("supervise: create unit directory: %w", err)
 	}
-	if err := os.WriteFile(path, []byte(contents), unitFilePerm); err != nil {
+	// Atomic: a re-install that dies mid-write must never leave a truncated unit
+	// behind. A half-written plist is a unit the supervisor refuses to load, and
+	// the caller's rollback cannot tell a corrupt file from a replaced one.
+	if err := writeFileAtomic(path, []byte(contents), unitFilePerm); err != nil {
 		return "", fmt.Errorf("supervise: write unit %s: %w", path, err)
 	}
 	return path, nil
