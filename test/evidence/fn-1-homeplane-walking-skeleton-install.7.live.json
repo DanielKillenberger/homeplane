@@ -1,5 +1,5 @@
 {
-  "commit": "f1989bb1e765e934e4badeff6db8215ea635a2f0",
+  "commit": "ca067cb97af07ef65b6ac0077e4ff4c9b92dac99",
   "deployment": {
     "account": "daniel.killenberger@gmail.com",
     "agent": "/Users/daniel/.homeplane/bin/homeplane-agent",
@@ -342,16 +342,251 @@
           "detail": "state dir /Users/daniel/.homeplane; vault /Users/daniel/Documents/daniel-os"
         }
       ]
+    },
+    {
+      "stage": "skills",
+      "status": "pass",
+      "started_at": "2026-08-14T13:00:42Z",
+      "finished_at": "2026-08-14T13:00:46Z",
+      "steps": [
+        {
+          "what": "homeplane-agent skills provision -verify",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "skills",
+            "provision",
+            "-verify"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "profile:      daniel-skeleton (/Users/daniel/Documents/daniel-os/skills/homeplane.skills.toml)\nvault skills: /Users/daniel/Documents/daniel-os/skills\n\nclaude-code → /Users/daniel/.claude/skills\n  unchanged    casual-writing               → /Users/daniel/Documents/daniel-os/skills/casual-writing\n  unchanged    karpathy-guidelines          → /Users/daniel/Documents/daniel-os/skills/karpathy-guidelines\n  unchanged    professional-writing         → /Users/daniel/Documents/daniel-os/skills/professional-writing\n  verified by a fresh claude-code process (31 skills enumerated)\n\ncodex → /Users/daniel/.codex/skills\n  unchanged    casual-writing               → /Users/daniel/Documents/daniel-os/skills/casual-writing\n  unchanged    karpathy-guidelines          → /Users/daniel/Documents/daniel-os/skills/karpathy-guidelines\n  unchanged    professional-writing         → /Users/daniel/Documents/daniel-os/skills/professional-writing\n  verified by a fresh codex process (36 skills enumerated)\n\nnot linked (9):\n  context-gc                   unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  daily-dump                   unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  health-log                   unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  hermes                       unsupported [no-skill-md] not a skill: no SKILL.md at the directory root (a collection of skills is not itself linkable)\n  obsidian-link                unsupported [initiative-signal] the skill drives host scheduling or service control (systemd); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  restart                      unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  session-monitor              unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  ticktick                     unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  vault-refactor               unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T13:00:42Z",
+          "duration": "3.11s"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-14T13:00:45.950548Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 2\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"retrieval engine activation failed (retryable): gno: command failed: Error: Resident runtime already active for index \\\"default\\\". Stop the owning gno serve or gno daemon process and retry.: exit status 2\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no harness is configured yet\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"not_configured\",\n      \"detail\": \"no grants issued to this machine\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"grants\": [],\n  \"server\": {\n    \"status\": \"ok\",\n    \"components\": [\n      {\n        \"name\": \"credential_store\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"gateway_runtime\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"store\",\n        \"status\": \"ok\"\n      },\n      {\n        \"name\": \"tsnet\",\n        \"status\": \"ok\"\n      }\n    ]\n  }\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T13:00:45Z",
+          "duration": "356ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "skills provision with fresh-process verification",
+          "ok": true,
+          "detail": "exit 0"
+        },
+        {
+          "claim": "a fresh process of each harness enumerated the linked skills",
+          "ok": true,
+          "detail": "profile:      daniel-skeleton (/Users/daniel/Documents/daniel-os/skills/homeplane.skills.toml)"
+        },
+        {
+          "claim": "status reports the provisioned skills",
+          "ok": true,
+          "detail": "skills: ok (casual-writing, karpathy-guidelines, professional-writing)"
+        }
+      ]
+    },
+    {
+      "stage": "harnesses",
+      "status": "pass",
+      "started_at": "2026-08-14T13:08:40Z",
+      "finished_at": "2026-08-14T13:08:43Z",
+      "steps": [
+        {
+          "what": "homeplane-agent configure-harnesses",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "configure-harnesses",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"status\": \"configured\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"backup_path\": \"/Users/daniel/.claude.json.homeplane-backup-20260814T130840Z\",\n      \"managed_servers\": [\n        \"gno\",\n        \"homeplane\"\n      ],\n      \"grant_id\": \"g-9688189322f31a05\",\n      \"superseded_grant_id\": \"g-2844c31b144cba45\",\n      \"endpoint_url\": \"http://homeplane.tailab4e9b.ts.net/mcp\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"changed\": true,\n      \"configured_at\": \"2026-08-14T15:08:40.307695+02:00\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"status\": \"configured\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"backup_path\": \"/Users/daniel/.codex/config.toml.homeplane-backup-20260814T130840Z\",\n      \"managed_servers\": [\n        \"gno\",\n        \"homeplane\"\n      ],\n      \"grant_id\": \"g-3e71920a898f78a7\",\n      \"superseded_grant_id\": \"g-bc1102d86c957ce4\",\n      \"endpoint_url\": \"http://homeplane.tailab4e9b.ts.net/mcp\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"changed\": true,\n      \"configured_at\": \"2026-08-14T15:08:40.570582+02:00\"\n    }\n  ]\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T13:08:40Z",
+          "duration": "426ms"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-14T13:08:40.740121Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 2\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"retrieval engine activation failed (retryable): gno: command failed: Error: Resident runtime already active for index \\\"default\\\". Stop the owning gno serve or gno daemon process and retry.: exit status 2\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"ok\",\n      \"detail\": \"claude-code, codex\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex (revoked: claude-code/g-01522c231a20498c, claude-code/g-2844c31b144cba45, claude-code/g-7e22fef10f8b8ee7, claude-code/g-be8df289bdba3f77, codex/g-0bae4f8284e91a7a, codex/g-1af3ca7219f3d090, codex/g-2f083f700302a7da, codex/g-bc1102d86c957ce4)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"grants\": [\n    {\n      \"grant_id\": \"g-3e71920a898f78a7\",\n      \"harness\": \"codex\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"state\": \"active\"\n    },\n    {\n      \"grant_id\": \"g-9688189322f31a05\",\n      \"harness\": \"claude-code\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"state\": \"active\"\n    },\n    {\n      \"grant_id\": \"g-bc1102d86c957ce4\",\n      \"harness\": \"codex\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"state\": \"revoked\",\n      \"revoked_at\": \"2026-08-14T13:08:40.627163575Z\"\n    },\n    {\n      \"grant_id\": \"g-2844c31b144cba45\",\n      \"harness\": \"claude-code\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"state\": \"revoked\",\n      \"revoked_at\": \"2026-08-14T13:08:40.473056597Z\"\n    },\n    {\n      \"grant_id\": \"g-0bae4f8284e91a7a\",\n      \"harness\": \"codex\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"state\": \"revoked\",\n      \"revoked_at\": \"2026-08-14T13:07:26.385102363Z\"\n    },\n    {\n      \"grant_id\": \"g-7e22fef10f8b8ee7\",\n      \"harness\": \"claude-code\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"state\": \"revoked\",\n      \"revoked_at\": \"2026-08-14T13:07:26.230058458Z\"\n    },\n    {\n      \"grant_id\": \"g-2f083f700302a7da\",\n      \"harness\": \"codex\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"state\": \"revoked\",\n      \"revoked_at\": \"2026-08-14T13:01:09.670579763Z\"\n    },\n    {\n      \"grant_id\": \"g-be8df289bdba3f77\",\n      \"harness\": \"claude-code\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"state\": \"revoked\",\n      \"revoked_at\": \"2026-08-14T13:01:09.19536157Z\"\n    },\n    {\n      \"grant_id\": \"g-1af3ca7219f3d090\",\n      \"harness\": \"codex\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n   \n…[709 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T13:08:40Z",
+          "duration": "338ms"
+        },
+        {
+          "what": "look for a project-scoped MCP config in the repo",
+          "command": [
+            "git",
+            "-C",
+            "/Users/daniel/Projects/homeplane",
+            "ls-files",
+            ".mcp.json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T13:08:41Z",
+          "duration": "17ms"
+        },
+        {
+          "what": "a fresh Claude Code process opens both Homeplane MCP sessions",
+          "command": [
+            "claude",
+            "mcp",
+            "list"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "Checking MCP server health…\n\nplugin:playwright:playwright: npx @playwright/mcp@latest - ✔ Connected\nrize: https://mcp.rize.io/mcp (HTTP) - ✔ Connected\nhomeplane: http://homeplane.tailab4e9b.ts.net/mcp (HTTP) - ✔ Connected\ngno: /Users/daniel/.homeplane/bin/homeplane-agent gno mcp -state-dir /Users/daniel/.homeplane - ✔ Connected",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T13:08:41Z",
+          "duration": "2.16s"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "both harnesses are configured",
+          "ok": true,
+          "detail": "exit 0"
+        },
+        {
+          "claim": "harness claude-code was configured",
+          "ok": true,
+          "detail": "status \"configured\" config /Users/daniel/.claude.json backup /Users/daniel/.claude.json.homeplane-backup-20260814T130840Z"
+        },
+        {
+          "claim": "harness claude-code carries both Homeplane surfaces",
+          "ok": true,
+          "detail": "managed [gno homeplane], endpoint http://homeplane.tailab4e9b.ts.net/mcp"
+        },
+        {
+          "claim": "a timestamped backup precedes the write to claude-code",
+          "ok": true,
+          "detail": "/Users/daniel/.claude.json.homeplane-backup-20260814T130840Z"
+        },
+        {
+          "claim": "harness codex was configured",
+          "ok": true,
+          "detail": "status \"configured\" config /Users/daniel/.codex/config.toml backup /Users/daniel/.codex/config.toml.homeplane-backup-20260814T130840Z"
+        },
+        {
+          "claim": "harness codex carries both Homeplane surfaces",
+          "ok": true,
+          "detail": "managed [gno homeplane], endpoint http://homeplane.tailab4e9b.ts.net/mcp"
+        },
+        {
+          "claim": "a timestamped backup precedes the write to codex",
+          "ok": true,
+          "detail": "/Users/daniel/.codex/config.toml.homeplane-backup-20260814T130840Z"
+        },
+        {
+          "claim": "each harness holds its own active grant",
+          "ok": true,
+          "detail": "claude-code g-9688189322f31a05, codex g-3e71920a898f78a7"
+        },
+        {
+          "claim": "the harness config is 0600 (.claude.json)",
+          "ok": true,
+          "detail": "/Users/daniel/.claude.json mode 600"
+        },
+        {
+          "claim": "the harness config is 0600 (config.toml)",
+          "ok": true,
+          "detail": "/Users/daniel/.codex/config.toml mode 600"
+        },
+        {
+          "claim": "no grant token landed in a git-shared config",
+          "ok": true,
+          "detail": "git ls-files .mcp.json → \"\""
+        },
+        {
+          "claim": "Claude Code connects to both Homeplane MCP servers as configured",
+          "ok": true,
+          "detail": "Checking MCP server health…"
+        },
+        {
+          "claim": "Daniel's harness configs changed only where Homeplane manages them",
+          "ok": true,
+          "detail": "claude.json 2026-08-14T13:07:26Z 89685 → 2026-08-14T13:08:40Z 89685; codex config.toml 2026-08-14T13:07:29Z 10141 → 2026-08-14T13:08:40Z 10141"
+        }
+      ]
+    },
+    {
+      "stage": "gno-retrieval",
+      "status": "fail",
+      "started_at": "2026-08-14T13:07:26Z",
+      "finished_at": "2026-08-14T13:07:44Z",
+      "steps": [
+        {
+          "what": "Claude Code → local retrieval engine [claude -p]",
+          "command": [
+            "claude",
+            "-p",
+            "Use the gno MCP server to search the vault for \"homeplane\". Call exactly one search tool, then reply with the first result's file path and nothing else.",
+            "--output-format",
+            "json",
+            "--allowedTools",
+            "mcp__gno"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\"is_error\":true,\"duration_api_ms\":0,\"num_turns\":1,\"stop_reason\":\"stop_sequence\",\"session_id\":\"49134dff-3349-4955-af05-ae43dc776571\",\"total_cost_usd\":0,\"usage\":{\"output_tokens_details\":{\"thinking_tokens\":0},\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\"},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subtype\":\"success\",\"api_error_status\":null,\"result\":\"Failed to authenticate: OAuth session expired and could not be refreshed\",\"type\":\"result\",\"duration_ms\":52,\"uuid\":\"649276e3-0d84-4877-ae08-29d87faa4f8c\"}",
+          "stderr_excerpt": "",
+          "at": "2026-08-14T13:07:26Z",
+          "duration": "2.512s"
+        },
+        {
+          "what": "Codex → local retrieval engine [codex exec]",
+          "command": [
+            "codex",
+            "exec",
+            "--skip-git-repo-check",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "--color",
+            "never",
+            "Use the gno MCP server to search the vault for \"homeplane\". Call exactly one search tool, then reply with the first result's file path and nothing else."
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "/Users/daniel/Documents/daniel-os/projects/phone-home/log/2026-08-14-mac-fn115-deploy-msg300.md",
+          "stderr_excerpt": "Reading additional input from stdin...\n2026-08-14T13:07:29.491322Z ERROR codex_models_manager::cache: failed to load models cache: missing field `base_instructions` at line 94 column 5\nOpenAI Codex v0.146.0\n--------\nworkdir: /Users/daniel/Projects/homeplane/test/e2e\nmodel: gpt-5.6-sol\nprovider: openai\napproval: never\nsandbox: danger-full-access\nreasoning effort: high\nreasoning summaries: none\nsession id: 01a00062-7d49-72b3-99b1-7b997157cbf8\n--------\nuser\nUse the gno MCP server to search the vault for \"homeplane\". Call exactly one search tool, then reply with the first result's file path and nothing else.\n2026-08-14T13:07:32.386829Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `base_instructions` at line 94 column 5\n2026-08-14T13:07:37.969359Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `base_instructions` at line 94 column 5\nmcp: gno/gno_search started\nmcp: gno/gno_search (completed)\n2026-08-14T13:07:41.106370Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `base_instructions` at line 94 column 5\ncodex\n/Users/daniel/Documents/daniel-os/projects/phone-home/log/2026-08-14-mac-fn115-deploy-msg300.md\ntokens used\n20,563",
+          "at": "2026-08-14T13:07:29Z",
+          "duration": "14.964s"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "Claude Code retrieves real vault content through the local engine",
+          "ok": false,
+          "detail": "Failed to authenticate: OAuth session expired and could not be refreshed"
+        },
+        {
+          "claim": "Codex retrieves real vault content through the local engine",
+          "ok": true,
+          "detail": "/Users/daniel/Documents/daniel-os/projects/phone-home/log/2026-08-14-mac-fn115-deploy-msg300.md"
+        }
+      ]
     }
   ],
-  "started_at": "2026-08-14T12:58:25Z",
+  "started_at": "2026-08-14T13:08:40Z",
   "summary": {
-    "stages_failed": 0,
+    "stages_failed": 1,
     "stages_partial": 0,
-    "stages_passed": 4,
+    "stages_passed": 6,
     "stages_skipped": 0
   },
   "task": "fn-1-homeplane-walking-skeleton-install.7",
-  "updated_at": "2026-08-14T13:00:00Z",
+  "updated_at": "2026-08-14T13:08:43Z",
   "what_this_is": "The record of the end-to-end walking-skeleton proof: a real machine installed, enrolled and configured against the live server, and every capability exercised from the harnesses themselves. Nothing here can be produced by `go test ./...` — it needs a deployment and, once, a human at a consent screen. Each stage carries the commands it ran with their exit codes, and each assertion carries the observation that settles it. Connector claims are settled by the server's own audit log, never by what a harness said it did."
 }

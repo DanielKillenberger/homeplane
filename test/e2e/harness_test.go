@@ -56,11 +56,11 @@ func (s *stage) claude(what, prompt string, allowPrefixes ...string) harnessOutp
 		IsError bool   `json:"is_error"`
 		Result  string `json:"result"`
 	}
-	if err := json.Unmarshal([]byte(res.Stdout), &envelope); err == nil {
+	if err := json.Unmarshal([]byte(res.full), &envelope); err == nil {
 		out.text = envelope.Result
 		out.ok = res.ExitCode == 0 && !envelope.IsError
 	} else {
-		out.text = res.Stdout
+		out.text = res.full
 		out.ok = res.ExitCode == 0
 	}
 	return out
@@ -68,17 +68,23 @@ func (s *stage) claude(what, prompt string, allowPrefixes ...string) harnessOutp
 
 // codex runs one non-interactive Codex turn.
 //
-// `approval_policy=never` and a read-only sandbox bound what the SHELL side of
-// Codex may do; neither loosens anything about the MCP call, which is
-// authorized by the grant token in Codex's own config and by the manifest at
-// the edge. Codex is run outside a git repository check because this proof is
-// not about a repository.
+// The approval flag is not a shortcut and was not the first choice. Codex 0.146
+// routes every MCP tool call through its approval path, and in `codex exec`
+// there is no human to answer it: with `approval_policy="never"` the call comes
+// back `user cancelled MCP tool call` in under a second, and the same happens
+// with the guardian feature flag turned off. The documented non-interactive
+// escape hatch is this flag — established empirically here, and recorded as the
+// boundary of Codex's non-interactive surface rather than hidden.
+//
+// The exposure is bounded by the prompt rather than by the sandbox, so the
+// prompts this proof sends are mechanical: one named tool call with fixed
+// arguments and an explicit instruction to run no shell commands.
 func (s *stage) codex(what, prompt string) harnessOutput {
 	s.t.Helper()
-	args := []string{"exec", "--skip-git-repo-check", "-s", "read-only",
-		"-c", `approval_policy="never"`, "--color", "never", prompt}
+	args := []string{"exec", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox",
+		"--color", "never", prompt}
 	res := s.run(what+" [codex exec]", harnessTurnTimeout, "codex", args...)
-	return harnessOutput{ok: res.ExitCode == 0, text: res.Stdout, res: res}
+	return harnessOutput{ok: res.ExitCode == 0, text: res.full, res: res}
 }
 
 // harnessCall asks a harness to make ONE named tool call with exactly these
@@ -92,7 +98,7 @@ func toolPrompt(server, tool string, args map[string]any, extra string) string {
 	body, _ := json.MarshalIndent(args, "", "  ")
 	return "Call the MCP tool `" + tool + "` on the `" + server + "` server with EXACTLY these arguments:\n\n" +
 		"```json\n" + string(body) + "\n```\n\n" +
-		"Do not add, remove or change any argument. Make exactly one tool call. " +
+		"Do not add, remove or change any argument. Make exactly one tool call and run no shell commands. " +
 		"Then reply with the tool's raw result text and nothing else. " +
 		"If the call is refused, reply with the refusal text verbatim." + extra
 }

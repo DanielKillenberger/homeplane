@@ -97,6 +97,12 @@ type result struct {
 	Stderr   string   `json:"stderr_excerpt"`
 	At       string   `json:"at"`
 	Duration string   `json:"duration"`
+
+	// full is the untruncated stdout. Callers parse THIS; the excerpt above is
+	// for the record a human reads. Parsing the excerpt is how a proof starts
+	// failing on output that merely grew — which it did, the first time an
+	// agent accumulated enough grants to push its status report past the limit.
+	full string
 }
 
 const excerptLimit = 4000
@@ -146,7 +152,7 @@ func (s *stage) run(what string, timeout time.Duration, name string, args ...str
 	}
 	res := result{
 		What: what, Command: append([]string{name}, args...), ExitCode: code,
-		Stdout: excerpt(stdout.String()), Stderr: excerpt(stderr.String()),
+		Stdout: excerpt(stdout.String()), Stderr: excerpt(stderr.String()), full: stdout.String(),
 		At: started.Format(time.RFC3339), Duration: time.Since(started).Round(time.Millisecond).String(),
 	}
 	s.steps = append(s.steps, res)
@@ -204,7 +210,7 @@ func (s *stage) audit(what string, since time.Time) []auditRow {
 		s.t.Fatalf("reading the server audit log failed: exit %d\n%s", res.ExitCode, res.Stderr)
 	}
 	var rows []auditRow
-	dec := json.NewDecoder(strings.NewReader(res.Stdout))
+	dec := json.NewDecoder(strings.NewReader(res.full))
 	for {
 		var r auditRow
 		if err := dec.Decode(&r); err != nil {

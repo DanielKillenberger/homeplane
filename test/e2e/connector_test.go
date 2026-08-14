@@ -78,7 +78,7 @@ func stageCredentials(s *stage) {
 		fmt.Sprintf("%s/bin/homeplane-server admin secret list -state-dir %s",
 			serverPrefix(s.env), s.env.serverStateDir))
 	s.assert("the credential is in the server's encrypted store",
-		strings.Contains(list.Stdout, "google/oauth-session") && strings.Contains(list.Stdout, "true"),
+		strings.Contains(list.full, "google/oauth-session") && strings.Contains(list.full, "true"),
 		"%s", firstLine(strings.TrimSpace(list.Stdout)))
 
 	// …and this machine must hold nothing. The agent's whole state directory is
@@ -93,7 +93,7 @@ func stageCredentials(s *stage) {
 	delivered := s.ssh("server: the workload's credential file", 60*time.Second,
 		fmt.Sprintf("ls -l %s/var/workload-creds", serverPrefix(s.env)))
 	s.assert("the credential was delivered to the connector workload",
-		strings.Contains(delivered.Stdout, ".json"), "%s", firstLine(delivered.Stdout))
+		strings.Contains(delivered.full, ".json"), "%s", firstLine(delivered.Stdout))
 
 	rows := s.audit("server audit: the credential flow", since)
 	var committed bool

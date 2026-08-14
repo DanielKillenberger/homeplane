@@ -46,7 +46,7 @@ func (s *stage) status() (statusReport, result) {
 	s.t.Helper()
 	res := s.agent("homeplane-agent status -json", 90*time.Second, "status", "-json")
 	var rep statusReport
-	if err := json.Unmarshal([]byte(res.Stdout), &rep); err != nil {
+	if err := json.Unmarshal([]byte(res.full), &rep); err != nil {
 		s.t.Fatalf("status did not print JSON (exit %d): %v\n%s", res.ExitCode, err, res.Stdout)
 	}
 	return rep, res
@@ -172,7 +172,7 @@ func stageGNO(s *stage) {
 		ServerName string `json:"server_name"`
 		Engine     string `json:"engine"`
 	}
-	_ = json.Unmarshal([]byte(ep.Stdout), &desc)
+	_ = json.Unmarshal([]byte(ep.full), &desc)
 	s.assert("the endpoint descriptor is published", ep.ExitCode == 0 && desc.ServerName != "",
 		"server_name %q transport %q engine %q", desc.ServerName, desc.Transport, desc.Engine)
 
@@ -225,20 +225,28 @@ func stageHarnesses(s *stage) {
 	}
 	var report struct {
 		Harnesses []struct {
-			Harness string `json:"harness"`
-			State   string `json:"state"`
-			Config  string `json:"config_path"`
-			Backup  string `json:"backup_path"`
-			GrantID string `json:"grant_id"`
-			Detail  string `json:"detail"`
+			Harness      string   `json:"harness"`
+			Status       string   `json:"status"`
+			Installed    bool     `json:"installed"`
+			Config       string   `json:"config_path"`
+			Backup       string   `json:"backup_path"`
+			Managed      []string `json:"managed_servers"`
+			GrantID      string   `json:"grant_id"`
+			EndpointURL  string   `json:"endpoint_url"`
+			Capabilities []string `json:"capabilities"`
 		} `json:"harnesses"`
 	}
-	_ = json.Unmarshal([]byte(res.Stdout), &report)
+	_ = json.Unmarshal([]byte(res.full), &report)
 
 	grants := map[string]string{}
 	for _, h := range report.Harnesses {
-		s.assert("harness "+h.Harness+" was configured", h.State == "configured" || h.State == "ok",
-			"state %q config %s backup %s", h.State, h.Config, h.Backup)
+		s.assert("harness "+h.Harness+" was configured", h.Status == "configured",
+			"status %q config %s backup %s", h.Status, h.Config, h.Backup)
+		// Both surfaces, or the harness is only half-wired: the local retrieval
+		// engine and the server's connector endpoint.
+		s.assert("harness "+h.Harness+" carries both Homeplane surfaces",
+			len(h.Managed) == 2 && h.EndpointURL != "",
+			"managed %v, endpoint %s", h.Managed, h.EndpointURL)
 		if h.Backup != "" {
 			_, err := os.Stat(h.Backup)
 			s.assert("a timestamped backup precedes the write to "+h.Harness, err == nil, "%s", h.Backup)
@@ -272,6 +280,20 @@ func stageHarnesses(s *stage) {
 		"git", "-C", repoRoot(s), "ls-files", ".mcp.json")
 	s.assert("no grant token landed in a git-shared config", strings.TrimSpace(proj.Stdout) == "",
 		"git ls-files .mcp.json → %q", strings.TrimSpace(proj.Stdout))
+
+	// The configuration is only worth something if the harness can USE it. A
+	// fresh Claude Code process is asked to open a live MCP session against both
+	// written entries — which authenticates the connector token against the edge
+	// over the tailnet and launches the local engine — before any model turn is
+	// involved.
+	live := s.run("a fresh Claude Code process opens both Homeplane MCP sessions", 3*time.Minute,
+		"claude", "mcp", "list")
+	s.assert("Claude Code connects to both Homeplane MCP servers as configured",
+		live.ExitCode == 0 &&
+			strings.Contains(live.full, "homeplane: "+s.env.serverURL+"/mcp") &&
+			strings.Contains(live.full, "gno:") &&
+			!strings.Contains(live.full, "Failed to connect"),
+		"%s", firstLine(strings.TrimSpace(live.Stdout)))
 
 	afterClaude := fileFingerprint(s, claudeCfg)
 	afterCodex := fileFingerprint(s, codexCfg)

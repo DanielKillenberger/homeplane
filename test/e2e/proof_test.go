@@ -96,11 +96,11 @@ func stageTruthTable(s *stage) {
 	health := s.run("server /healthz over the tailnet", 30*time.Second, "curl", "-sf", "-m", "20",
 		s.env.serverURL+"/healthz")
 	s.assert("/healthz is 2xx and green while the server is healthy",
-		health.ExitCode == 0 && strings.Contains(health.Stdout, `"status":"ok"`),
+		health.ExitCode == 0 && strings.Contains(health.full, `"status":"ok"`),
 		"curl exit %d: %s", health.ExitCode, firstLine(health.Stdout))
 	s.assert("/healthz reports server components only — no machine state",
-		!strings.Contains(health.Stdout, "vault") && !strings.Contains(health.Stdout, "gno") &&
-			!strings.Contains(health.Stdout, "harness"),
+		!strings.Contains(health.full, "vault") && !strings.Contains(health.full, "gno") &&
+			!strings.Contains(health.full, "harness"),
 		"%s", firstLine(health.Stdout))
 
 	// 2. A revoked grant. The revocation stage leaves the machine restored, so
@@ -137,7 +137,7 @@ func stageTruthTable(s *stage) {
 	unreachable := s.agent("homeplane-agent status against an unreachable server", 90*time.Second,
 		"status", "-json", "-server", "http://127.0.0.1:9")
 	s.assert("status distinguishes an unreachable server from an active grant",
-		strings.Contains(unreachable.Stdout, "unknown") || strings.Contains(unreachable.Stdout, "unreachable") ||
+		strings.Contains(unreachable.full, "unknown") || strings.Contains(unreachable.full, "unreachable") ||
 			unreachable.ExitCode != 0,
 		"exit %d: %s", unreachable.ExitCode, firstLine(unreachable.Stdout))
 
@@ -155,7 +155,7 @@ func stageTruthTable(s *stage) {
 		health = s.run("server /healthz while THIS machine is degraded", 30*time.Second,
 			"curl", "-sf", "-m", "20", s.env.serverURL+"/healthz")
 		s.assert("a machine-local failure never reaches the server's /healthz",
-			health.ExitCode == 0 && strings.Contains(health.Stdout, `"status":"ok"`),
+			health.ExitCode == 0 && strings.Contains(health.full, `"status":"ok"`),
 			"curl exit %d: %s", health.ExitCode, firstLine(health.Stdout))
 
 		restart := s.agent("homeplane-agent gno activate (restore)", 20*time.Minute, "gno", "activate")
