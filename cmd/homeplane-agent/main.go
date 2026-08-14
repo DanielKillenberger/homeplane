@@ -34,6 +34,8 @@ Usage:
   homeplane-agent add-credentials <provider> [flags]
                                    authorize a provider; the credential is
                                    stored on the server, never on this machine
+  homeplane-agent skills <cmd>     link vault-authored skills into this
+                                   machine's harnesses (list/provision/refresh)
   homeplane-agent version          print the installed agent version
 
 Run any subcommand with -h for its flags.
@@ -81,6 +83,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return runConfigureHarnesses(ctx, args[1:], stdout, stderr)
 	case "add-credentials":
 		return runAddCredentials(ctx, args[1:], stdout, stderr)
+	case "skills":
+		return runSkills(ctx, args[1:], stdout, stderr)
 	case "version", "--version":
 		fmt.Fprintln(stdout, "homeplane-agent "+version)
 		return 0

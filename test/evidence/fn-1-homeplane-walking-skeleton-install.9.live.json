@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "kind": "live_harness_proof",
+  "task": "fn-1-homeplane-walking-skeleton-install.9",
+  "what_this_is": "The record of provisioning Daniel's REAL vault skills into his REAL harness skill directories (~/.claude/skills and ~/.codex/skills) and proving discovery with a fresh process of each installed CLI. scripts/emit-evidence.sh cannot run this: it mutates the operator's own harness directories, so it is recorded here and embedded verbatim under the artifact's \"live\" key. The go suite proves the same path against fixture harness directories with the same real binaries (internal/agent/skills/e2e_test.go); this file is the one run against the real ones.",
+  "recorded_by": "the worker that ran the proof, transcribed from the run's captured stdout",
+  "commit": "d909302d0f3a512dbd012d20b4a5cae37e66bde6",
+  "commit_note": "The tree that ran is committed as the implementation commit this evidence artifact accompanies; this SHA is the pre-commit HEAD anchor, not a checksum of the bytes that ran.",
+  "recorded_at": "2026-08-14T10:07:11Z",
+  "harness_versions": {
+    "claude": "2.1.227 (Claude Code)",
+    "codex": "codex-cli 0.146.0"
+  },
+  "profile": {
+    "path": "configs/skills/homeplane.skills.toml",
+    "name": "daniel-skeleton",
+    "skills": [
+      "professional-writing",
+      "casual-writing",
+      "karpathy-guidelines"
+    ],
+    "note": "The profile is vault-resident by design (<vault>/skills/homeplane.skills.toml). This run used the repository's reference copy via -profile because the task's boundaries make the real vault READ-ONLY for the implementer: the vault is a link SOURCE here and was never written. Daniel copies the reference file into the vault to make it resident."
+  },
+  "vault_skills_root": "/Users/daniel/Documents/daniel-os/skills",
+  "vault_written": false,
+  "harness_config_files_written": [],
+  "harness_config_note": "None. Both harnesses discover skills from a directory, so no config file is parsed or rewritten by this path and R5's merge machinery is not invoked.",
+  "assertions": [
+    {
+      "id": "linked-both-harnesses",
+      "claim": "All three profile skills are linked into BOTH real harness skill directories.",
+      "result": "pass",
+      "evidence": [
+        {
+          "harness": "claude-code",
+          "slug": "professional-writing",
+          "link_path": "/Users/daniel/.claude/skills/professional-writing",
+          "is_symlink": true,
+          "readlink": "/Users/daniel/Documents/daniel-os/skills/professional-writing",
+          "link_skill_md_inode": 115939275,
+          "vault_skill_md_inode": 115939275,
+          "same_file": true
+        },
+        {
+          "harness": "claude-code",
+          "slug": "casual-writing",
+          "link_path": "/Users/daniel/.claude/skills/casual-writing",
+          "is_symlink": true,
+          "readlink": "/Users/daniel/Documents/daniel-os/skills/casual-writing",
+          "link_skill_md_inode": 119414669,
+          "vault_skill_md_inode": 119414669,
+          "same_file": true
+        },
+        {
+          "harness": "claude-code",
+          "slug": "karpathy-guidelines",
+          "link_path": "/Users/daniel/.claude/skills/karpathy-guidelines",
+          "is_symlink": true,
+          "readlink": "/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines",
+          "link_skill_md_inode": 114803489,
+          "vault_skill_md_inode": 114803489,
+          "same_file": true
+        },
+        {
+          "harness": "codex",
+          "slug": "professional-writing",
+          "link_path": "/Users/daniel/.codex/skills/professional-writing",
+          "is_symlink": true,
+          "readlink": "/Users/daniel/Documents/daniel-os/skills/professional-writing",
+          "link_skill_md_inode": 115939275,
+          "vault_skill_md_inode": 115939275,
+          "same_file": true
+        },
+        {
+          "harness": "codex",
+          "slug": "casual-writing",
+          "link_path": "/Users/daniel/.codex/skills/casual-writing",
+          "is_symlink": true,
+          "readlink": "/Users/daniel/Documents/daniel-os/skills/casual-writing",
+          "link_skill_md_inode": 119414669,
+          "vault_skill_md_inode": 119414669,
+          "same_file": true
+        },
+        {
+          "harness": "codex",
+          "slug": "karpathy-guidelines",
+          "link_path": "/Users/daniel/.codex/skills/karpathy-guidelines",
+          "is_symlink": true,
+          "readlink": "/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines",
+          "link_skill_md_inode": 114803489,
+          "vault_skill_md_inode": 114803489,
+          "same_file": true
+        }
+      ]
+    },
+    {
+      "id": "canonical-files-only-in-vault",
+      "claim": "Each harness entry is a symlink whose SKILL.md is the SAME FILE (inode) as the vault's; no independent editable copy exists.",
+      "result": "pass",
+      "evidence": "every links[] entry has is_symlink=true, readlink into the vault, and same_file=true"
+    },
+    {
+      "id": "fresh-process-discovery-claude-code",
+      "claim": "A fresh `claude 2.1.227` process enumerates all three skills in its system/init event.",
+      "result": "pass",
+      "evidence": {
+        "command": "claude -p <probe> --output-format stream-json --verbose",
+        "total_skills_enumerated": 32,
+        "baseline_present": [
+          "professional-writing",
+          "casual-writing",
+          "karpathy-guidelines"
+        ],
+        "slash_commands_present": [
+          "professional-writing",
+          "casual-writing",
+          "karpathy-guidelines"
+        ]
+      }
+    },
+    {
+      "id": "fresh-process-discovery-codex",
+      "claim": "A fresh `codex-cli 0.146.0` process enumerates all three skills, and reports the VAULT path as each one's locator.",
+      "result": "pass",
+      "evidence": {
+        "command": "codex debug prompt-input",
+        "total_skills_enumerated": 36,
+        "locators": {
+          "professional-writing": "/Users/daniel/Documents/daniel-os/skills/professional-writing/SKILL.md",
+          "casual-writing": "/Users/daniel/Documents/daniel-os/skills/casual-writing/SKILL.md",
+          "karpathy-guidelines": "/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines/SKILL.md"
+        }
+      }
+    },
+    {
+      "id": "unrelated-entries-preserved",
+      "claim": "Every pre-existing entry in both skill directories is byte-identical after the run; only the three new symlinks were added.",
+      "result": "pass",
+      "evidence": {
+        "method": "`ls -la` snapshot of both directories taken before the run and diffed after, excluding the three added entries",
+        "claude_unrelated_diff": "empty",
+        "codex_unrelated_diff": "empty",
+        "snapshots_taken_at": "20260814T100435Z"
+      }
+    },
+    {
+      "id": "idempotent-rerun",
+      "claim": "A second `skills provision -verify` reports every skill unchanged, writes no link, and exits 0.",
+      "result": "pass",
+      "evidence": {
+        "stdout": "profile:      daniel-skeleton (configs/skills/homeplane.skills.toml)\nvault skills: /Users/daniel/Documents/daniel-os/skills\n\nclaude-code \u2192 /Users/daniel/.claude/skills\n  unchanged    casual-writing               \u2192 /Users/daniel/Documents/daniel-os/skills/casual-writing\n  unchanged    karpathy-guidelines          \u2192 /Users/daniel/Documents/daniel-os/skills/karpathy-guidelines\n  unchanged    professional-writing         \u2192 /Users/daniel/Documents/daniel-os/skills/professional-writing\n  verified by a fresh claude-code process (32 skills enumerated)\n\ncodex \u2192 /Users/daniel/.codex/skills\n  unchanged    casual-writing               \u2192 /Users/daniel/Documents/daniel-os/skills/casual-writing\n  unchanged    karpathy-guidelines          \u2192 /Users/daniel/Documents/daniel-os/skills/karpathy-guidelines\n  unchanged    professional-writing         \u2192 /Users/daniel/Documents/daniel-os/skills/professional-writing\n  verified by a fresh codex process (36 skills enumerated)\n\nnot linked (9):\n  context-gc                   unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  daily-dump                   unsupported [initiative-signal] the skill drives host scheduling or service control (launchd); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  health-log                   unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  hermes                       unsupported [no-skill-md] not a skill: no SKILL.md at the directory root (a collection of skills is not itself linkable)\n  obsidian-link                unsupported [initiative-signal] the skill drives host scheduling or service control (systemd); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  restart                      unsupported [initiative-signal] the skill drives host scheduling or service control (systemd); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  session-monitor              unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  ticktick                     unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness\n  vault-refactor               unsupported [initiative-signal] the skill drives host scheduling or service control (cron); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness"
+      }
+    },
+    {
+      "id": "ownership-recorded",
+      "claim": "Exactly the six created links are recorded in the 0600 ownership manifest, which is what makes `skills refresh` able to withdraw them and nothing else.",
+      "result": "pass",
+      "evidence": {
+        "path": "/Users/daniel/.homeplane/skills/skill-links.json",
+        "mode": "0o600",
+        "link_count": 6
+      }
+    }
+  ],
+  "caveats": [
+    "The claude probe reads the system/init event and kills the process, so it makes no model request. It was run with Daniel's real configuration, hooks included \u2014 which is how the hook_started prelude ahead of the init event was found.",
+    "The `initiative-signal` classifier is conservative and over-marks: in this vault it holds back `ticktick`, whose matched line is the words \"no cron\". Every marking quotes its line, so a false positive is visible at a glance.",
+    "`phone-home-coordinator` is NOT marked unsupported by these rules \u2014 it names no scheduler or service manager. It is simply not in the profile. The task's expected unsupported exemplars that DO trip a rule are `hermes` (no SKILL.md), `restart` and `session-monitor`."
+  ],
+  "result": "pass"
+}
