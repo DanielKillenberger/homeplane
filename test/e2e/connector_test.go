@@ -59,17 +59,33 @@ func rowsForHarness(rows []auditRow, harness string) []auditRow {
 // stageCredentials brokers the real Google credential. A human consents in a
 // browser on this machine; the credential lands on the server and nowhere else.
 func stageCredentials(s *stage) {
-	since := time.Now().UTC().Add(-1 * time.Minute)
+	since := time.Now().UTC().Add(-24 * time.Hour)
 
 	args := []string{"add-credentials", "google", "-timeout", "15m", "-poll-interval", "2s"}
 	if os.Getenv("HOMEPLANE_E2E_REPLACE_CREDENTIAL") == "1" {
 		args = append(args, "-replace")
 	}
-	s.t.Log("a browser window is about to open — consent as " + s.env.account +
+	s.t.Log("a browser window may open — consent as " + s.env.account +
 		" (Drive read-only, Calendar events, Calendar read-only)")
 	res := s.agent("homeplane-agent add-credentials google (real consent)", 20*time.Minute, args...)
-	if !s.assert("the consent flow completes and the server stores the credential", res.ExitCode == 0,
-		"exit %d%s", res.ExitCode, tail(res.Stderr)) {
+
+	// Two acceptable outcomes, and they prove different halves of R13.
+	//
+	// A clean exit means the consent flow ran and the server stored what it
+	// brokered. A refusal because the provider is ALREADY configured is the
+	// other half — the flow will not silently overwrite a working credential —
+	// and it is what a re-run of this stage hits, since the credential from the
+	// first run is still there. Anything else is a failure.
+	switch {
+	case res.ExitCode == 0:
+		s.assert("the consent flow completes and the server stores the credential", true,
+			"consent given at %s", res.At)
+	case strings.Contains(res.Stderr, "already has a credential"):
+		s.assert("an already-configured provider is refused rather than silently overwritten", true,
+			"exit %d: %s", res.ExitCode, firstLine(res.Stderr))
+	default:
+		s.assert("the consent flow completes and the server stores the credential", false,
+			"exit %d%s", res.ExitCode, tail(res.Stderr))
 		return
 	}
 
@@ -79,15 +95,19 @@ func stageCredentials(s *stage) {
 			serverPrefix(s.env), s.env.serverStateDir))
 	s.assert("the credential is in the server's encrypted store",
 		strings.Contains(list.full, "google/oauth-session") && strings.Contains(list.full, "true"),
-		"%s", firstLine(strings.TrimSpace(list.Stdout)))
+		"%s", strings.TrimSpace(firstLine(list.full)))
 
-	// …and this machine must hold nothing. The agent's whole state directory is
-	// searched for anything token-shaped, because "the machine never sees a
-	// provider token" is only worth something if something looks.
+	// …and this machine must hold nothing. The agent's own state is searched for
+	// anything Google-token shaped, because "the machine never sees a provider
+	// token" is only worth something if something looks. Harness configs are
+	// searched too: they legitimately carry a Homeplane GRANT token, and a
+	// provider token appearing there would be the custody failure itself.
 	home, _ := os.UserHomeDir()
 	leaks := scanForTokens(s, filepath.Join(home, ".homeplane"))
-	s.assert("no provider token is anywhere in the machine's agent state", len(leaks) == 0,
-		"%d suspicious file(s): %s", len(leaks), strings.Join(leaks, ", "))
+	leaks = append(leaks, scanForTokens(s, filepath.Join(home, ".codex", "config.toml"))...)
+	leaks = append(leaks, scanForTokens(s, filepath.Join(home, ".claude.json"))...)
+	s.assert("no provider token is anywhere on this machine", len(leaks) == 0,
+		"searched the agent state, both harness configs; %d hit(s): %s", len(leaks), strings.Join(leaks, ", "))
 
 	// The credential reached the connector workload, server-side only.
 	delivered := s.ssh("server: the workload's credential file", 60*time.Second,
@@ -108,23 +128,38 @@ func stageCredentials(s *stage) {
 	s.assert("the server audited the credential commit", committed, "%d row(s) since %s", len(rows), since.Format(time.RFC3339))
 }
 
-// scanForTokens looks for provider-token shapes in the machine's state. It
-// cannot know the token's value (that is the point — this machine never had
-// it), so it looks for the prefixes Google's tokens carry.
-func scanForTokens(s *stage, dir string) []string {
+// scanForTokens looks for Google token SHAPES in a file or tree.
+//
+// It cannot look for the credential's value: this machine never had it, which
+// is the property under test. So it looks for the two prefixes Google's tokens
+// carry — `ya29.` for an access token and `1//0` for a refresh token.
+//
+// The retrieval engine's index is skipped, and the reason is worth stating: it
+// is a derivative of the VAULT, so it contains whatever Daniel has written in
+// his own notes — including the words "refresh_token" in a note about OAuth.
+// Searching it would report the vault's contents as a custody failure, which is
+// how a check that cannot fail cleanly gets weakened until it stops checking.
+// Nothing Homeplane brokers is ever written there.
+func scanForTokens(s *stage, root string) []string {
 	s.t.Helper()
 	var found []string
-	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+	skip := filepath.Join(root, "gno")
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			if path == skip {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		body, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return nil
 		}
-		text := string(body)
-		for _, marker := range []string{"ya29.", "1//0", "refresh_token"} {
-			if strings.Contains(text, marker) {
+		for _, marker := range []string{"ya29.", "1//0"} {
+			if strings.Contains(string(body), marker) {
 				found = append(found, path+" ("+marker+")")
 				return nil
 			}
@@ -208,17 +243,22 @@ func runSixOp(s *stage, h harnessUnderProof) {
 
 	// STEP 0 — isolation. Nothing by this name exists, so nothing pre-existing
 	// can be touched by anything that follows.
+	// The listing has to SUCCEED: a harness that could not call the connector at
+	// all has not established that the name is free, and treating its error text
+	// as "the summary is absent" is how a proof passes its safety check by
+	// failing its first call.
 	before := h.call(s, h.name+" step 0: the name is unused", connectorServer, "get_events", map[string]any{
 		"calendar_id": cal, "query": summary, "max_results": 5, "user_google_email": s.env.account,
 	})
 	if !s.assert(h.name+": the test event's name is unused before the proof starts",
-		!strings.Contains(before.text, summary), "%s", firstLine(before.text)) {
+		before.ok && !strings.Contains(before.text, summary), "%s", firstLine(before.text)) {
 		return
 	}
 
 	// The event is deleted no matter how this ends. The cleanup is armed BEFORE
 	// the create, because the step that can fail while the event nevertheless
 	// exists is exactly the one that parses its id.
+	since := time.Now().UTC().Add(-30 * time.Second)
 	var eventID string
 	cleanupArmed := true
 	defer func() {
@@ -233,6 +273,23 @@ func runSixOp(s *stage, h harnessUnderProof) {
 			id = extractEventID(found.text)
 		}
 		if id == "" {
+			// Before shouting, ask the server whether this harness ever got a
+			// create THROUGH. A harness that never reached the connector cannot
+			// have left an event, and "DELETE IT BY HAND" on a calendar where
+			// nothing was ever created is a false alarm that teaches an operator
+			// to ignore the real one.
+			var created bool
+			for _, r := range decisionRows(rowsForHarness(s.audit("CLEANUP: did this harness ever create anything?",
+				since.Add(-5*time.Minute)), h.grantHarness), "manage_event") {
+				if r.Outcome == "allowed" && r.ActionClass == "write" {
+					created = true
+				}
+			}
+			if !created {
+				s.assert(h.name+": no test event was left behind", true,
+					"the server audited no admitted create for this harness; nothing to clean up")
+				return
+			}
 			s.assert(h.name+": the test event was cleaned up", false,
 				"CLEANUP FAILED — an event named %q may exist on calendar %q and could not be located; DELETE IT BY HAND",
 				summary, cal)
@@ -250,8 +307,6 @@ func runSixOp(s *stage, h harnessUnderProof) {
 			"CLEANUP %s — calendar %q event %q: %s", map[bool]string{true: "ok", false: "INCOMPLETE — DELETE BY HAND"}[gone],
 			cal, id, firstLine(del.text))
 	}()
-
-	since := time.Now().UTC().Add(-30 * time.Second)
 
 	// STEP 1 — create, through the GUARDED path: send_updates:"none" is what a
 	// real caller must pass, because the connector's default emails everyone.
