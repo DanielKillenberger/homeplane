@@ -23,9 +23,51 @@ Operator documentation written against observed behavior, plus the final small a
 
 
 ## Done summary
-TBD
+Wrote the operator documentation from observed behaviour — README as an
+install → enrol → verify entry point, `docs/ARCHITECTURE.md` (two-plane model,
+grant model with its same-OS-user threat-model honesty, composed-gateway bypass
+boundary, connector manifest, skills layer, D16 seam, deferred-hardening list),
+and `docs/RUNBOOK.md` (status vs /healthz, every degraded state and its retry,
+revocation, add-credentials re-run incl. Google Testing-mode token expiry,
+log/state/backup locations, hand-wiring recipes, and the `codex exec`
+read-only-sandbox MCP cancellation) — then built and ran the spec's final
+acceptance gate.
 
+**Gate: PASS, 14/14 executable requirements** (R1–R10, R12–R15) at
+`6251edb`, with `go build`/`go vet`/`go test ./... -count=1` all green and
+`deploy/server/verify.sh` passing 11/11 with zero pending. Completion summary at
+`.flow/specs/fn-1-homeplane-walking-skeleton-install.completion.md`;
+machine-readable result in `test/evidence/fn-1-homeplane-walking-skeleton-install.14.json`
+under `extra`.
+
+`scripts/final-gate.py` verifies rather than restates: each artifact must exist,
+name a commit that is an ancestor of the gate head, record a clean worktree,
+pass with zero failed assertions, and contain the named stages and tests. A
+`partial` live stage is not waved through — every false assertion must match a
+`RATIFIED_LIMITATIONS` entry by exact claim text, so a new limitation in a
+re-recorded artifact fails. R12's design-review row is resolved against tracker
+state (task, kind, verdict, head SHA, artifact hash, ancestry) and the decision
+document's existence. The negative suite (eleven tamper cases) was run and every
+one fails as required.
+
+The three evidence-chain caveats were reconciled against the live system:
+`.12`'s deferred guarded-Calendar leg is closed by `.7`'s calendar stage for both
+harnesses; the credflow race `.15` fixed did not recur under `-race -count=20`;
+`provider_secret_refs_present` passes, so `.15`'s deploy criterion is fully
+closed. The two non-`ok` components on Daniel's Mac (`sync: not_configured`,
+`gno: degraded`) are ratified arrangements, recorded in the spec's Boundaries.
+
+Open for Daniel, documented not resolved: the D8 gno 1.29.6 daemon-vs-stdio
+index-lock exclusivity (`docs/decisions/d8-gno.md` §8, `docs/RUNBOOK.md` §7),
+with both candidate resolutions and their costs.
+
+Review: codex (gpt-5.6-sol @ xhigh), 2 rounds — round 1 NEEDS_WORK with 6
+findings (3 P1 gate-strength, 2 P1 doc-correctness, 1 P2 each), all fixed with
+the negative suite as the regression proof; round 2 SHIP with zero findings.
+
+stage: impl-review - ran [round 1 NEEDS_WORK (6 findings) .. round 2 SHIP (0 findings)], backend codex/gpt-5.6-sol @ xhigh, receipt /tmp/impl-review-receipt-t14.json
+stage: delegation - skipped(config: delegation off)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 00912b3315923ccf69d3f34cd2d0bcf54271b8c6, 4f10b1272ed1420c5a194fc3cd9bf3710767c2ab, 0b315b943c186d20d49eef33f2dad168d403d306, e431d06dff109690073ee491019dd80188c6d0c0, 6251edb2c1468bd5a2fb92d0803a5a54b6b145a4, 6854b15eadad5beff9c9a0d123d8dc298fada07a
+- Tests: go build ./..., go vet ./..., go test ./... -count=1 (21 packages ok, 0 failures), go test ./internal/server/credflow/ -run TestARelayedFlowIsNotExpiredByTheConsentWindow -count=20 -race (the .12 flake did not recur), python3 scripts/final-gate.py --gate build=0 --gate vet=0 --gate test=0 --deploy-verify <json> -> pass, 14/14 requirements, deploy/server/verify.sh --host clawniel --fqdn homeplane.tailab4e9b.ts.net -> pass, 11/11 checks, 0 pending, scripts/emit-evidence.sh fn-1-homeplane-walking-skeleton-install.14 -> 876/876 assertions, clean worktree at 6251edb, negative suite against the gate: missing artifact, non-ancestor commit, dirty worktree, failed assertion, absent named test, absent named stage, unratified false assertion, tampered review receipt, missing decision doc, pending deployment check, empty gate list -> all fail as required
 - PRs:
