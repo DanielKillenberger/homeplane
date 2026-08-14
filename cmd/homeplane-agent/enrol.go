@@ -85,5 +85,10 @@ If the server cannot be reached, nothing is written to the state directory.
 	}
 	fmt.Fprintf(stdout, "%s machine %s (%s) with %s\n", verb, outcome.MachineID, outcome.MachineName, outcome.ServerURL)
 	fmt.Fprintf(stdout, "credential version %d, state in %s\n", outcome.CredentialVersion, outcome.StateDir)
+	// Enrolment gives the machine an identity; it gives the harnesses nothing.
+	// Naming the next step here is what keeps "enrolled" from being mistaken
+	// for "usable from an agent".
+	fmt.Fprintln(stdout, "next: `homeplane-agent gno activate` to bind the vault, "+
+		"then `homeplane-agent configure-harnesses` to wire Claude Code and Codex")
 	return 0
 }

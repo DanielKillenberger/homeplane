@@ -148,6 +148,46 @@ type Grant struct {
 	RevokedAt    string   `json:"revoked_at,omitempty"`
 }
 
+// GrantIssue is the server's answer to a grant request. It is the ONE response
+// in this client that carries a secret: the grant token is returned exactly
+// once, at issuance, and is never readable again from the server.
+type GrantIssue struct {
+	GrantID      string   `json:"grant_id"`
+	Harness      string   `json:"harness"`
+	Capabilities []string `json:"capabilities"`
+	// EndpointURL is the connector edge this grant is good against. It comes
+	// from the server rather than from a machine-side flag because the server
+	// refuses to issue a grant whose endpoint URL its edge does not answer.
+	EndpointURL string `json:"endpoint_url"`
+	GrantToken  string `json:"grant_token"`
+	// SupersededGrantID names the grant this issuance killed, if any. The
+	// lifecycle is single-phase and superseding: asking again is how a machine
+	// repairs a half-finished configuration.
+	SupersededGrantID string `json:"superseded_grant_id,omitempty"`
+}
+
+// IssueGrant asks the server for a grant for one harness on this machine.
+//
+// Note what is NOT a parameter: the machine. A grant is always for the caller,
+// identified by the credential in the Authorization header. Capabilities are
+// likewise absent — server-side policy decides them, and the response reports
+// what was decided rather than confirming what was asked.
+func (c *Client) IssueGrant(ctx context.Context, harness string) (GrantIssue, error) {
+	body := map[string]any{"harness": harness}
+	var out GrantIssue
+	if err := c.do(ctx, "issue grant", http.MethodPost, "/grants", body, &out); err != nil {
+		return GrantIssue{}, err
+	}
+	if out.GrantID == "" || out.GrantToken == "" {
+		return GrantIssue{}, errors.New("issue grant: server response is missing the grant or its token")
+	}
+	if out.EndpointURL == "" {
+		return GrantIssue{}, errors.New("issue grant: server response is missing the connector endpoint URL " +
+			"(the server is running without its connector edge wired)")
+	}
+	return out, nil
+}
+
 // ListGrants reads the calling machine's grants from the server. This is the
 // live reconcile behind `status`: the agent keeps no cached grant state to be
 // wrong about.

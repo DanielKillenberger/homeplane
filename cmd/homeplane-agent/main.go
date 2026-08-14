@@ -27,6 +27,10 @@ Usage:
   homeplane-agent vault <cmd>      find the vault; supervise continuous sync
   homeplane-agent gno <cmd>        supervise the local retrieval engine over the
                                    vault and publish its endpoint descriptor
+  homeplane-agent configure-harnesses [flags]
+                                   wire this machine's agent harnesses to the
+                                   local retrieval engine and the server's
+                                   connector endpoint (one grant per harness)
   homeplane-agent add-credentials <provider> [flags]
                                    authorize a provider; the credential is
                                    stored on the server, never on this machine
@@ -73,6 +77,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return runVault(ctx, args[1:], stdout, stderr)
 	case "gno":
 		return runGNO(ctx, args[1:], stdout, stderr)
+	case "configure-harnesses":
+		return runConfigureHarnesses(ctx, args[1:], stdout, stderr)
 	case "add-credentials":
 		return runAddCredentials(ctx, args[1:], stdout, stderr)
 	case "version", "--version":

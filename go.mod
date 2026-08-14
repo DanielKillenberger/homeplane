@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	filippo.io/age v1.3.1
+	github.com/BurntSushi/toml v1.5.0
 	modernc.org/sqlite v1.56.0
 	tailscale.com v1.102.2
 )
