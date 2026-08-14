@@ -280,11 +280,19 @@ func runSkillsProvision(ctx context.Context, args []string, prune bool, stdout, 
 		return code
 	}
 
+	store, err := agent.Open(sc.stateDir)
+	if err != nil {
+		fmt.Fprintln(stderr, "homeplane-agent "+name+": "+err.Error())
+		return 1
+	}
 	p := skills.Provisioner{
 		StateDir:  sc.stateDir,
 		Machine:   sc.machine,
 		Harnesses: sc.harnesses,
 		Prune:     prune,
+		// The manifest is a read-modify-write, so the run is serialised on the
+		// same state lock the harness configurator uses.
+		Lock: store.Lock,
 	}
 	report, err := p.Provision(sc.catalog, sc.profile)
 	if err != nil {
@@ -297,10 +305,23 @@ func runSkillsProvision(ctx context.Context, args []string, prune bool, stdout, 
 		verifyErr = skills.Verifier{}.Verify(ctx, &report)
 	}
 
-	// Record what landed, so `status` can report the skills layer without
-	// re-scanning the vault.
-	provisioned := provisionedSlugs(report)
-	if err := mutateState(sc.stateDir, func(st *agent.State) { st.Skills = provisioned }); err != nil {
+	// Record what landed. The list comes from the ownership MANIFEST, not from
+	// this run's report: a `-harness`-narrowed run touches one harness, and a
+	// non-pruning run deliberately leaves links it no longer assigns, so the
+	// report describes this run while the manifest describes the machine.
+	//
+	// Health is recorded AFTER verification, because a run whose links landed
+	// and whose harness could not see them is degraded, not ok.
+	installed, err := skills.InstalledSlugs(sc.stateDir)
+	if err != nil {
+		fmt.Fprintln(stderr, "homeplane-agent "+name+": "+err.Error())
+		return 1
+	}
+	health := skillsHealth(report, *verify, verifyErr)
+	if err := mutateState(sc.stateDir, func(st *agent.State) {
+		st.Skills = installed
+		st.SkillsHealth = health
+	}); err != nil {
 		fmt.Fprintln(stderr, "homeplane-agent "+name+": "+err.Error())
 		return 1
 	}
@@ -320,22 +341,33 @@ func runSkillsProvision(ctx context.Context, args []string, prune bool, stdout, 
 	return 0
 }
 
-func provisionedSlugs(report skills.Report) []string {
-	seen := map[string]bool{}
-	var out []string
+// skillsHealth judges the run for `status`.
+//
+// A skipped skill is not on its own a failure — an operator's own entry of the
+// same name, or a skill the profile marks unsupported, is the system working.
+// What IS a failure is a fresh harness that could not see what we linked, and a
+// run that never verified cannot claim it was verified.
+func skillsHealth(report skills.Report, verified bool, verifyErr error) *agent.ComponentState {
+	if verifyErr != nil {
+		return &agent.ComponentState{State: agent.StateDegraded, Detail: verifyErr.Error()}
+	}
+	var probed []string
 	for _, hr := range report.Harnesses {
-		for _, r := range hr.Results {
-			switch r.Action {
-			case skills.ActionLinked, skills.ActionUnchanged, skills.ActionRepointed:
-				if !seen[r.Slug] {
-					seen[r.Slug] = true
-					out = append(out, r.Slug)
-				}
-			}
+		if len(hr.Verified) > 0 {
+			probed = append(probed, hr.Harness)
 		}
 	}
-	sort.Strings(out)
-	return out
+	if verified && len(probed) > 0 {
+		sort.Strings(probed)
+		return &agent.ComponentState{
+			State:  agent.StateOK,
+			Detail: "discovery verified by a fresh process of: " + strings.Join(probed, ", "),
+		}
+	}
+	return &agent.ComponentState{
+		State:  agent.StateOK,
+		Detail: "links provisioned; discovery not verified this run (re-run with -verify)",
+	}
 }
 
 func printSkillsReport(w io.Writer, report skills.Report) {

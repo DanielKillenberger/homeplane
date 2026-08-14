@@ -89,6 +89,11 @@ const (
 	RuleRuntimeState     = "runtime-state"
 	RuleEscapesVault     = "escapes-vault"
 	RuleInitiativeSignal = "initiative-signal"
+	// RuleProfileUnsupported is the profile's own per-harness marking: the
+	// vault owner declared this skill unsupported on this harness, with a
+	// reason. It is the one verdict no mechanical rule can reach, which is why
+	// it is stated rather than inferred (see UnsupportedSkill).
+	RuleProfileUnsupported = "profile-unsupported"
 )
 
 // Skill is one discovered, linkable vault skill.

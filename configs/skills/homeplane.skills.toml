@@ -38,3 +38,22 @@ skills = [
 # Per-machine, per-harness override — the narrowest rule.
 # [machine."studio".harness.claude-code]
 # skills = []
+
+# ── Unsupported ──────────────────────────────────────────────────────────────
+#
+# Skills that must NOT be linked, with the reason. This BEATS every assignment
+# above: a skill named here and in [defaults] is refused, not linked. Omit
+# `harnesses` to mark it unsupported everywhere, or list the harnesses it is
+# unsupported on.
+#
+# Discovery already catches the mechanical cases on its own — a directory of
+# skills rather than a skill (`hermes`), and a skill whose text drives the
+# host's scheduler or service manager (`restart`, `session-monitor`). This
+# block is for the case no rule can see: a skill that is bound to a particular
+# agent's runtime rather than to any harness that reads it. That is a judgement
+# about what the skill IS, so the vault owner states it and Homeplane enforces
+# it, instead of a classifier guessing and being wrong in both directions.
+
+[unsupported.phone-home-coordinator]
+reason = "Bound to the always-on Clawniel session: it describes how THAT agent answers requests arriving on the palantir bus, and an ordinary harness has no bus, no owner profile and no authority to answer for Daniel. Instructions a harness cannot act on are worse than absent ones."
+harnesses = ["claude-code", "codex"]

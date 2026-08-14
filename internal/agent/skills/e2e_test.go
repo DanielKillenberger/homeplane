@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -40,6 +41,25 @@ func realVaultSkills(t *testing.T) string {
 		t.Skipf("no vault at %s (set %s to point elsewhere)", path, EnvTestVaultSkills)
 	}
 	return path
+}
+
+// unsupportedBlockFrom re-renders one of a profile's markings as TOML, so a
+// test can reuse the SHIPPED reason rather than inventing a weaker one.
+func unsupportedBlockFrom(t *testing.T, p Profile, slug string) string {
+	t.Helper()
+	u, ok := p.Unsupported[slug]
+	if !ok {
+		t.Fatalf("the shipped profile has no [unsupported.%s] marking", slug)
+	}
+	quoted := make([]string, 0, len(u.Harnesses))
+	for _, h := range u.Harnesses {
+		quoted = append(quoted, `"`+h+`"`)
+	}
+	block := "[unsupported." + slug + "]\nreason = " + strconv.Quote(u.Reason) + "\n"
+	if len(quoted) > 0 {
+		block += "harnesses = [" + strings.Join(quoted, ", ") + "]\n"
+	}
+	return block
 }
 
 func requireBin(t *testing.T, name string) string {
@@ -166,6 +186,52 @@ func TestRealVaultHarnessSpecificSkillsAreMarkedUnsupported(t *testing.T) {
 		t.Fatal("hermes is a collection of skills and must never be linkable")
 	}
 
+	// `phone-home-coordinator` is the case no mechanical rule can reach: its
+	// text names no scheduler and no service manager, and it is a perfectly
+	// well-formed skill — it is simply bound to the always-on server session.
+	// The shipped profile marks it, and the marking must be ENFORCED even
+	// though `[defaults]` also names it.
+	if _, linkable := cat.Lookup("phone-home-coordinator"); linkable {
+		profile, err := LoadProfile(filepath.Join("..", "..", "..", "configs", "skills", ProfileFileName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		base := t.TempDir()
+		p := Provisioner{
+			Locator:  Locator{ClaudeConfigDir: filepath.Join(base, "claude"), CodexHome: filepath.Join(base, "codex")},
+			StateDir: filepath.Join(base, "state"),
+		}
+		// Assign it deliberately, alongside the profile's own marking.
+		forced := filepath.Join(base, ProfileFileName)
+		if err := os.WriteFile(forced, []byte(`
+schema  = 1
+profile = "forced"
+
+[defaults]
+skills = ["phone-home-coordinator"]
+
+`+unsupportedBlockFrom(t, profile, "phone-home-coordinator")), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		forcedProfile, err := LoadProfile(forced)
+		if err != nil {
+			t.Fatal(err)
+		}
+		report, err := p.Provision(cat, forcedProfile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, h := range Known() {
+			res := resultFor(t, report, h, "phone-home-coordinator")
+			if res.Action != ActionSkipped || res.Rule != RuleProfileUnsupported {
+				t.Fatalf("%s: a profile-unsupported skill was provisioned: %+v", h, res)
+			}
+			if _, err := os.Lstat(res.LinkPath); err == nil {
+				t.Fatalf("%s: phone-home-coordinator was linked despite the marking", h)
+			}
+		}
+	}
+
 	// At least one initiative-bearing skill must be caught, with evidence.
 	var initiative []Finding
 	for _, f := range cat.Findings {
@@ -240,5 +306,19 @@ func TestCredentialBearingSkillIsRejectedAgainstRealHarnesses(t *testing.T) {
 		if _, err := os.Lstat(res.LinkPath); err == nil {
 			t.Fatalf("%s: the credential-bearing skill was linked anyway", h)
 		}
+	}
+}
+
+// The real vault must actually contain the case the shipped profile marks —
+// otherwise the enforcement assertion above is vacuously skipped and nobody
+// notices. This fails loudly if the vault changes shape.
+func TestRealVaultStillHasTheMarkedIncompatibility(t *testing.T) {
+	cat, err := Discover(realVaultSkills(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, linkable := cat.Lookup("phone-home-coordinator"); !linkable {
+		f, _ := cat.Finding("phone-home-coordinator")
+		t.Skipf("phone-home-coordinator is no longer a mechanically-linkable skill (%+v); the profile marking is now redundant", f)
 	}
 }

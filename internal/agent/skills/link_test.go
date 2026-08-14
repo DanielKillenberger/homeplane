@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -382,8 +383,44 @@ func TestProvisionWithoutPruneLeavesDroppedLinks(t *testing.T) {
 	}
 }
 
-// A stale link Homeplane owns is repointed when the vault moves.
+// A stale link Homeplane owns is repointed when the VAULT moves: the link still
+// points where the manifest records, so it is still ours.
 func TestProvisionRepointsOurOwnStaleLink(t *testing.T) {
+	f := newFixture(t)
+	oldVault := filepath.Join(t.TempDir(), "old-vault", "skills")
+	writeSkill(t, oldVault, "professional-writing", "Ours.")
+	oldCat := discover(t, oldVault)
+	profile := f.profile(t, skeletonProfileFor("professional-writing"))
+	report, err := f.provisioner().Provision(oldCat, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	linkPath := resultFor(t, report, ClaudeCode, "professional-writing").LinkPath
+
+	// The vault moves. The link is untouched — still pointing at the recorded
+	// old target — and the catalog now names the new location.
+	writeSkill(t, f.vaultSkills, "professional-writing", "Ours.")
+	newCat := f.catalog(t)
+
+	report, err = f.provisioner().Provision(newCat, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := resultFor(t, report, ClaudeCode, "professional-writing").Action; got != ActionRepointed {
+		t.Fatalf("action = %s, want repointed", got)
+	}
+	target, err := os.Readlink(linkPath)
+	if err != nil || target != filepath.Join(newCat.Root, "professional-writing") {
+		t.Fatalf("link target = %q (%v)", target, err)
+	}
+}
+
+// The takeover case, and the one the review caught: a link Homeplane made that
+// the OPERATOR has since repointed is no longer Homeplane's. Manifest
+// membership alone is not ownership — the link must still point where the
+// record says — or provisioning silently undoes a deliberate change and refresh
+// deletes an entry it does not own.
+func TestProvisionLeavesATakenOverLinkAlone(t *testing.T) {
 	f := newFixture(t)
 	writeSkill(t, f.vaultSkills, "professional-writing", "Ours.")
 	cat := f.catalog(t)
@@ -394,28 +431,164 @@ func TestProvisionRepointsOurOwnStaleLink(t *testing.T) {
 	}
 	linkPath := resultFor(t, report, ClaudeCode, "professional-writing").LinkPath
 
-	// Point our own link somewhere else, as a moved vault would.
+	// The operator repoints our link at their own copy of the skill.
+	theirs := filepath.Join(t.TempDir(), "their-fork")
+	writeSkill(t, theirs, "professional-writing", "Theirs.")
+	theirSkill := filepath.Join(theirs, "professional-writing")
 	if err := os.Remove(linkPath); err != nil {
 		t.Fatal(err)
 	}
-	stale := filepath.Join(t.TempDir(), "old-vault")
-	if err := os.MkdirAll(stale, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(stale, linkPath); err != nil {
+	if err := os.Symlink(theirSkill, linkPath); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
+	// Provisioning must not take it back.
 	report, err = f.provisioner().Provision(cat, profile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := resultFor(t, report, ClaudeCode, "professional-writing").Action; got != ActionRepointed {
-		t.Fatalf("action = %s, want repointed", got)
+	res := resultFor(t, report, ClaudeCode, "professional-writing")
+	if res.Action != ActionSkipped {
+		t.Fatalf("action = %s, want skipped", res.Action)
 	}
-	target, err := os.Readlink(linkPath)
-	if err != nil || target != filepath.Join(cat.Root, "professional-writing") {
-		t.Fatalf("link target = %q (%v)", target, err)
+	if !strings.Contains(res.Reason, "taken over") {
+		t.Fatalf("reason = %q, want it to name the takeover", res.Reason)
+	}
+	if got, _ := os.Readlink(linkPath); got != theirSkill {
+		t.Fatalf("the operator's link was repointed to %q", got)
+	}
+
+	// And refresh must not delete it either, even though the profile no longer
+	// assigns it.
+	p := f.provisioner()
+	p.Prune = true
+	report, err = p.Provision(cat, f.profile(t, skeletonProfileFor()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res = resultFor(t, report, ClaudeCode, "professional-writing")
+	if res.Action != ActionSkipped {
+		t.Fatalf("refresh action = %s, want skipped", res.Action)
+	}
+	if got, err := os.Readlink(linkPath); err != nil || got != theirSkill {
+		t.Fatalf("refresh deleted a link it did not own: %q (%v)", got, err)
+	}
+}
+
+// The profile's own per-harness marking beats every assignment. This is the
+// case no mechanical rule can reach — a skill bound to another agent's runtime
+// — so it is stated in the vault and ENFORCED here (R15).
+func TestProvisionRefusesProfileUnsupportedSkills(t *testing.T) {
+	f := newFixture(t)
+	writeSkill(t, f.vaultSkills, "phone-home-coordinator", "How the server agent answers the bus.")
+	writeSkill(t, f.vaultSkills, "professional-writing", "Ours.")
+
+	profile := f.profile(t, `
+schema  = 1
+profile = "test"
+
+[defaults]
+skills = ["phone-home-coordinator", "professional-writing"]
+
+[unsupported.phone-home-coordinator]
+reason = "bound to the always-on server session; an ordinary harness has no bus"
+harnesses = ["claude-code"]
+`)
+	report, err := f.provisioner().Provision(f.catalog(t), profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Refused on the marked harness...
+	res := resultFor(t, report, ClaudeCode, "phone-home-coordinator")
+	if res.Action != ActionSkipped || res.Rule != RuleProfileUnsupported {
+		t.Fatalf("result = %+v, want a profile-unsupported skip", res)
+	}
+	if !strings.Contains(res.Reason, "no bus") {
+		t.Fatalf("the marking's own reason must be surfaced, got %q", res.Reason)
+	}
+	if _, err := os.Lstat(res.LinkPath); err == nil {
+		t.Fatal("a profile-unsupported skill was linked anyway")
+	}
+	// ...and linked on the harness the marking does not name.
+	if got := resultFor(t, report, Codex, "phone-home-coordinator").Action; got != ActionLinked {
+		t.Fatalf("codex action = %s; the marking named only claude-code", got)
+	}
+	// Everything else is unaffected.
+	if got := resultFor(t, report, ClaudeCode, "professional-writing").Action; got != ActionLinked {
+		t.Fatalf("professional-writing action = %s", got)
+	}
+}
+
+// An unmarked profile is unchanged: this is a new refusal path, not a new
+// default.
+func TestProvisionUnsupportedMarkingIsOptional(t *testing.T) {
+	f := newFixture(t)
+	writeSkill(t, f.vaultSkills, "professional-writing", "Ours.")
+	report, err := f.provisioner().Provision(f.catalog(t), f.profile(t, skeletonProfileFor("professional-writing")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range Known() {
+		if got := resultFor(t, report, h, "professional-writing").Action; got != ActionLinked {
+			t.Fatalf("%s action = %s", h, got)
+		}
+	}
+}
+
+// A link must never exist without a record of it. Saving the manifest only at
+// the end meant a later failure left links nothing could withdraw, so
+// writability is proven BEFORE the first link is created.
+func TestProvisionRefusesWhenTheManifestCannotBeWritten(t *testing.T) {
+	f := newFixture(t)
+	writeSkill(t, f.vaultSkills, "professional-writing", "Ours.")
+
+	// A regular file where the manifest directory must go.
+	if err := os.WriteFile(filepath.Join(f.stateDir, "skills"), []byte("in the way\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := f.provisioner().Provision(f.catalog(t), f.profile(t, skeletonProfileFor("professional-writing")))
+	if err == nil {
+		t.Fatal("an unwritable manifest must stop the run")
+	}
+	for _, h := range Known() {
+		dir := f.skillsDir(t, h)
+		if _, statErr := os.Lstat(filepath.Join(dir, "professional-writing")); statErr == nil {
+			t.Fatalf("%s: a link was created that nothing recorded", h)
+		}
+	}
+}
+
+// The run is serialised on the agent state lock, because the manifest is a
+// read-modify-write: without it, two concurrent runs each save a manifest that
+// omits the other's links, and the omitted links become unremovable strangers.
+func TestProvisionHoldsTheLockAcrossTheRun(t *testing.T) {
+	f := newFixture(t)
+	writeSkill(t, f.vaultSkills, "professional-writing", "Ours.")
+
+	held := 0
+	maxHeld := 0
+	released := 0
+	p := f.provisioner()
+	p.Lock = func() (func(), error) {
+		held++
+		if held > maxHeld {
+			maxHeld = held
+		}
+		return func() { held--; released++ }, nil
+	}
+	if _, err := p.Provision(f.catalog(t), f.profile(t, skeletonProfileFor("professional-writing"))); err != nil {
+		t.Fatal(err)
+	}
+	if maxHeld != 1 || released != 1 || held != 0 {
+		t.Fatalf("lock taken %d / released %d / still held %d", maxHeld, released, held)
+	}
+
+	// A lock that cannot be taken stops the run before anything is linked.
+	p.Lock = func() (func(), error) { return nil, errors.New("busy") }
+	if _, err := p.Provision(f.catalog(t), f.profile(t, skeletonProfileFor("professional-writing"))); err == nil {
+		t.Fatal("an unavailable lock must stop the run")
 	}
 }
 

@@ -56,6 +56,55 @@ type Profile struct {
 	Harness map[string]Skills `toml:"harness"`
 	// Machine maps a machine name to its own defaults and per-harness sets.
 	Machine map[string]MachineProfile `toml:"machine"`
+	// Unsupported records skills that must NOT be linked into some or all
+	// harnesses, with the reason. See Unsupported.
+	Unsupported map[string]UnsupportedSkill `toml:"unsupported"`
+}
+
+// UnsupportedSkill records a skill that is harness-specific in a way no
+// mechanical rule can see.
+//
+// R15 requires genuinely harness-specific skills to be marked unsupported with
+// a reason rather than silently linked. Discovery catches the mechanical cases
+// (a directory of skills, a skill that drives the host's scheduler). It cannot
+// catch "this skill only means anything inside the always-on server session",
+// which is true of Daniel's `phone-home-coordinator` and is a judgement about
+// what the skill IS, not about what its text contains. Guessing at that would
+// be a classifier that is wrong in both directions.
+//
+// So the vault owner states it, in the same vault-resident file that assigns
+// the skills, and Homeplane ENFORCES it: an unsupported entry beats every
+// assignment, including a `[defaults]` block that names the skill. That is what
+// makes per-harness incompatibility representable rather than a comment.
+type UnsupportedSkill struct {
+	// Reason is required. A marking without one is not a marking.
+	Reason string `toml:"reason"`
+	// Harnesses narrows the marking. Empty means every harness.
+	Harnesses []string `toml:"harnesses"`
+}
+
+// Supports reports whether this marking applies to a harness.
+func (u UnsupportedSkill) applies(harnessID string) bool {
+	if len(u.Harnesses) == 0 {
+		return true
+	}
+	for _, h := range u.Harnesses {
+		if h == harnessID {
+			return true
+		}
+	}
+	return false
+}
+
+// UnsupportedOn reports whether the profile forbids this skill on this harness,
+// and why. It is consulted for every assignment, so a skill named in both
+// `[defaults]` and `[unsupported]` is refused rather than linked.
+func (p Profile) UnsupportedOn(slug, harnessID string) (string, bool) {
+	u, ok := p.Unsupported[slug]
+	if !ok || !u.applies(harnessID) {
+		return "", false
+	}
+	return u.Reason, true
 }
 
 // Skills is one skill set.
@@ -130,6 +179,23 @@ func parseProfile(path string, raw []byte) (Profile, error) {
 			mp.Harness[name] = s
 		}
 		p.Machine[machine] = mp
+	}
+
+	for slug, u := range p.Unsupported {
+		if err := validateSlug(path, slug); err != nil {
+			return Profile{}, err
+		}
+		// A marking with no reason is not a marking. R15's whole requirement is
+		// that an unsupported skill is recorded WITH a reason, so an empty one
+		// is refused rather than surfaced as an unexplained skip.
+		if strings.TrimSpace(u.Reason) == "" {
+			return Profile{}, fmt.Errorf("skills: profile %s: [unsupported.%s] needs a `reason`", path, slug)
+		}
+		for _, h := range u.Harnesses {
+			if err := validateHarness(path, h); err != nil {
+				return Profile{}, err
+			}
+		}
 	}
 
 	for _, slug := range p.allSlugs() {

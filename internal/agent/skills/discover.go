@@ -1,7 +1,6 @@
 package skills
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -110,8 +109,9 @@ func Discover(root string) (Catalog, error) {
 // deliberately NOT "cheapest check first" — a directory with no SKILL.md that
 // also contains a private key is reported as carrying a private key.
 func classify(slug, dir string) (Skill, *Finding) {
-	if f := scanContents(slug, dir); f != nil {
-		return Skill{}, f
+	containment, initiative := scanContents(slug, dir)
+	if containment != nil {
+		return Skill{}, containment
 	}
 
 	skillMD := filepath.Join(dir, "SKILL.md")
@@ -151,8 +151,12 @@ func classify(slug, dir string) (Skill, *Finding) {
 		}
 	}
 
-	if f := scanInitiative(slug, skillMD); f != nil {
-		return Skill{}, f
+	// The initiative verdict comes from the whole directory, not just SKILL.md.
+	// A benign-looking SKILL.md that points the harness at a bundled script
+	// which installs a cron job or a systemd unit is exactly the case a
+	// SKILL.md-only scan misses, and it is the case that matters most.
+	if initiative != nil {
+		return Skill{}, initiative
 	}
 
 	return Skill{Slug: slug, Name: name, Description: description, Dir: dir, SkillMD: skillMD}, nil
@@ -207,19 +211,23 @@ var secretPatterns = []struct {
 	{"assigned secret value", regexp.MustCompile(`(?i)\b(?:api[_\-]?key|secret[_\-]?key|access[_\-]?token|refresh[_\-]?token|client[_\-]?secret|password)\b\s*[:=]\s*["']?[A-Za-z0-9/+=_\-]{20,}`)},
 }
 
-// scanContents walks a skill directory looking for anything that must not be
-// published. Every unreadable or oversized file is a rejection, not a pass: the
-// classifier's whole value is that it cannot be talked into a maybe.
-func scanContents(slug, dir string) *Finding {
-	var finding *Finding
+// scanContents walks a skill directory and classifies every file in it.
+//
+// It returns TWO verdicts because they have different precedence and different
+// stopping rules. A containment problem (a credential, runtime state, a link
+// out of the directory, anything unscannable) is fatal and stops the walk
+// immediately. An initiative signal is not fatal — it is a verdict the caller
+// applies only after the shape checks — so the walk continues past the first
+// one, and the first is kept.
+//
+// Every unreadable or unscannable file is a containment rejection, not a pass:
+// the classifier's whole value is that it cannot be talked into a maybe.
+func scanContents(slug, dir string) (containment, initiative *Finding) {
 	files := 0
 
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			finding = &Finding{
-				Slug: slug, Status: StatusRejected, Rule: RuleRuntimeState,
-				Reason: "unreadable entry in the skill directory: " + err.Error(), Evidence: path,
-			}
+			containment = reject(slug, RuleRuntimeState, "unreadable entry in the skill directory: "+err.Error(), path)
 			return filepath.SkipAll
 		}
 		if path == dir {
@@ -233,11 +241,8 @@ func scanContents(slug, dir string) *Finding {
 		if d.Type()&fs.ModeSymlink != 0 {
 			target, resolveErr := filepath.EvalSymlinks(path)
 			if resolveErr != nil || !within(dir, target) {
-				finding = &Finding{
-					Slug: slug, Status: StatusRejected, Rule: RuleEscapesVault,
-					Reason:   "the skill contains a link that leaves the skill directory; a link published to a harness must not widen its reach",
-					Evidence: rel,
-				}
+				containment = reject(slug, RuleEscapesVault,
+					"the skill contains a link that leaves the skill directory; a link published to a harness must not widen its reach", rel)
 				return filepath.SkipAll
 			}
 			return nil
@@ -246,122 +251,110 @@ func scanContents(slug, dir string) *Finding {
 			return nil
 		}
 		if !d.Type().IsRegular() {
-			finding = &Finding{
-				Slug: slug, Status: StatusRejected, Rule: RuleRuntimeState,
-				Reason:   "the skill contains a non-regular file (socket, device or fifo), which is runtime state rather than instructions",
-				Evidence: rel,
-			}
+			containment = reject(slug, RuleRuntimeState,
+				"the skill contains a non-regular file (socket, device or fifo), which is runtime state rather than instructions", rel)
 			return filepath.SkipAll
 		}
 
 		files++
 		if files > maxFilesPerSkill {
-			finding = &Finding{
-				Slug: slug, Status: StatusRejected, Rule: RuleRuntimeState,
-				Reason:   fmt.Sprintf("the skill directory holds more than %d files; it was not scanned in full and an unscanned file is treated as unproven", maxFilesPerSkill),
-				Evidence: rel,
-			}
+			containment = reject(slug, RuleRuntimeState,
+				fmt.Sprintf("the skill directory holds more than %d files; it was not scanned in full and an unscanned file is treated as unproven", maxFilesPerSkill), rel)
 			return filepath.SkipAll
 		}
 
-		name := strings.ToLower(d.Name())
-		if secretFileNames[name] {
-			finding = &Finding{
-				Slug: slug, Status: StatusRejected, Rule: RuleCredential,
-				Reason: "the skill contains a credential file; skills carry instructions, and credentials live on the server", Evidence: rel,
-			}
+		bad, text := scanFile(slug, path, rel, d)
+		if bad != nil {
+			containment = bad
 			return filepath.SkipAll
 		}
-		for _, suffix := range secretFileSuffixes {
-			if strings.HasSuffix(name, suffix) {
-				finding = &Finding{
-					Slug: slug, Status: StatusRejected, Rule: RuleCredential,
-					Reason: "the skill contains a key file (" + suffix + "); skills carry instructions, and credentials live on the server", Evidence: rel,
-				}
-				return filepath.SkipAll
-			}
-		}
-		if stateFileNames[name] {
-			finding = &Finding{
-				Slug: slug, Status: StatusRejected, Rule: RuleRuntimeState,
-				Reason: "the skill contains runtime state (" + d.Name() + "); a synchronized skill must be instructions only", Evidence: rel,
-			}
-			return filepath.SkipAll
-		}
-		for _, suffix := range stateFileSuffixes {
-			if strings.HasSuffix(name, suffix) {
-				finding = &Finding{
-					Slug: slug, Status: StatusRejected, Rule: RuleRuntimeState,
-					Reason: "the skill contains runtime state (" + suffix + "); a synchronized skill must be instructions only", Evidence: rel,
-				}
-				return filepath.SkipAll
-			}
-		}
-
-		info, statErr := d.Info()
-		if statErr != nil {
-			finding = &Finding{
-				Slug: slug, Status: StatusRejected, Rule: RuleRuntimeState,
-				Reason: "unreadable entry in the skill directory: " + statErr.Error(), Evidence: rel,
-			}
-			return filepath.SkipAll
-		}
-		if info.Size() > maxScanBytes {
-			finding = &Finding{
-				Slug: slug, Status: StatusRejected, Rule: RuleRuntimeState,
-				Reason:   fmt.Sprintf("the skill contains a file larger than %d bytes, which was not scanned; an unscanned file is treated as unproven", maxScanBytes),
-				Evidence: rel,
-			}
-			return filepath.SkipAll
-		}
-
-		data, readErr := os.ReadFile(path)
-		if readErr != nil {
-			finding = &Finding{
-				Slug: slug, Status: StatusRejected, Rule: RuleRuntimeState,
-				Reason: "unreadable entry in the skill directory: " + readErr.Error(), Evidence: rel,
-			}
-			return filepath.SkipAll
-		}
-		if bytes.IndexByte(data, 0) >= 0 {
-			// Binary. Not classifiable as prose, so not publishable either.
-			finding = &Finding{
-				Slug: slug, Status: StatusRejected, Rule: RuleRuntimeState,
-				Reason: "the skill contains a binary file, which cannot be read as instructions", Evidence: rel,
-			}
-			return filepath.SkipAll
-		}
-		if kind, line, ok := matchSecret(data); ok {
-			finding = &Finding{
-				Slug: slug, Status: StatusRejected, Rule: RuleCredential,
-				Reason:   "the skill contains what looks like a credential (" + kind + "); skills carry instructions, and credentials live on the server",
-				Evidence: fmt.Sprintf("%s:%d", rel, line),
-			}
-			return filepath.SkipAll
+		if initiative == nil {
+			initiative = matchInitiative(slug, rel, text)
 		}
 		return nil
 	})
-	if err != nil && finding == nil {
-		return &Finding{
-			Slug: slug, Status: StatusRejected, Rule: RuleRuntimeState,
-			Reason: "the skill directory could not be scanned: " + err.Error(), Evidence: dir,
+	if err != nil && containment == nil {
+		containment = reject(slug, RuleRuntimeState, "the skill directory could not be scanned: "+err.Error(), dir)
+	}
+	if containment != nil {
+		return containment, nil
+	}
+	return nil, initiative
+}
+
+func reject(slug, rule, reason, evidence string) *Finding {
+	return &Finding{Slug: slug, Status: StatusRejected, Rule: rule, Reason: reason, Evidence: evidence}
+}
+
+// scanFile classifies one regular file. It returns a containment rejection, or
+// the file's text for the initiative scan to read.
+func scanFile(slug, path, rel string, d fs.DirEntry) (*Finding, []byte) {
+	name := strings.ToLower(d.Name())
+	if secretFileNames[name] {
+		return reject(slug, RuleCredential,
+			"the skill contains a credential file; skills carry instructions, and credentials live on the server", rel), nil
+	}
+	for _, suffix := range secretFileSuffixes {
+		if strings.HasSuffix(name, suffix) {
+			return reject(slug, RuleCredential,
+				"the skill contains a key file ("+suffix+"); skills carry instructions, and credentials live on the server", rel), nil
 		}
 	}
-	return finding
+	if stateFileNames[name] {
+		return reject(slug, RuleRuntimeState,
+			"the skill contains runtime state ("+d.Name()+"); a synchronized skill must be instructions only", rel), nil
+	}
+	for _, suffix := range stateFileSuffixes {
+		if strings.HasSuffix(name, suffix) {
+			return reject(slug, RuleRuntimeState,
+				"the skill contains runtime state ("+suffix+"); a synchronized skill must be instructions only", rel), nil
+		}
+	}
+
+	info, err := d.Info()
+	if err != nil {
+		return reject(slug, RuleRuntimeState, "unreadable entry in the skill directory: "+err.Error(), rel), nil
+	}
+	// `>=`, not `>`. At exactly maxScanBytes the file used to be accepted and
+	// then handed to a line scanner with the SAME maximum token size, so a
+	// single-line file of exactly that length produced ErrTooLong and was
+	// scanned as if it were empty — a credential in it passed silently. The
+	// scan is now over the whole (bounded) byte slice, and this boundary is
+	// closed as well, because two independent bugs met at one number.
+	if info.Size() >= maxScanBytes {
+		return reject(slug, RuleRuntimeState,
+			fmt.Sprintf("the skill contains a file of %d bytes or more, which is not scanned in full; an unscanned file is treated as unproven", maxScanBytes), rel), nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return reject(slug, RuleRuntimeState, "unreadable entry in the skill directory: "+err.Error(), rel), nil
+	}
+	if bytes.IndexByte(data, 0) >= 0 {
+		// Binary. Not classifiable as prose, so not publishable either.
+		return reject(slug, RuleRuntimeState,
+			"the skill contains a binary file, which cannot be read as instructions", rel), nil
+	}
+	if kind, line, ok := matchSecret(data); ok {
+		return &Finding{
+			Slug: slug, Status: StatusRejected, Rule: RuleCredential,
+			Reason:   "the skill contains what looks like a credential (" + kind + "); skills carry instructions, and credentials live on the server",
+			Evidence: fmt.Sprintf("%s:%d", rel, line),
+		}, nil
+	}
+	return nil, data
 }
 
 // matchSecret reports the first credential-shaped match and its 1-based line.
+//
+// The patterns run over the whole byte slice, which the caller has already
+// bounded, rather than over a line scanner: a line scanner has a maximum token
+// size, and a file with no newline before that limit would be silently skipped
+// instead of scanned. The line number is computed only once something matched.
 func matchSecret(data []byte) (string, int, bool) {
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 0, 64*1024), maxScanBytes)
-	line := 0
-	for scanner.Scan() {
-		line++
-		text := scanner.Bytes()
-		for _, p := range secretPatterns {
-			if p.re.Match(text) {
-				return p.name, line, true
-			}
+	for _, p := range secretPatterns {
+		if loc := p.re.FindIndex(data); loc != nil {
+			return p.name, bytes.Count(data[:loc[0]], []byte("\n")) + 1, true
 		}
 	}
 	return "", 0, false
@@ -385,28 +378,27 @@ var initiativePatterns = []struct {
 	{"scheduled wakeup", regexp.MustCompile(`(?i)\bschedule[sd]?\b[^.\n]{0,40}\b(check-?in|ping|wake-?up|job|task|restart)\b`)},
 }
 
-func scanInitiative(slug, skillMD string) *Finding {
-	data, err := os.ReadFile(skillMD)
-	if err != nil {
-		return &Finding{
-			Slug: slug, Status: StatusRejected, Rule: RuleInvalidSkillMD,
-			Reason: "SKILL.md is unreadable: " + err.Error(), Evidence: skillMD,
+// matchInitiative reports the first scheduling or service-control signal in one
+// file's text, naming the file so a signal inside a bundled script is as
+// visible as one in SKILL.md.
+func matchInitiative(slug, rel string, data []byte) *Finding {
+	for _, p := range initiativePatterns {
+		loc := p.re.FindIndex(data)
+		if loc == nil {
+			continue
 		}
-	}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 0, 64*1024), maxScanBytes)
-	line := 0
-	for scanner.Scan() {
-		line++
-		text := scanner.Text()
-		for _, p := range initiativePatterns {
-			if p.re.MatchString(text) {
-				return &Finding{
-					Slug: slug, Status: StatusUnsupported, Rule: RuleInitiativeSignal,
-					Reason:   "the skill drives host scheduling or service control (" + p.name + "); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness",
-					Evidence: fmt.Sprintf("SKILL.md:%d: %s", line, strings.TrimSpace(truncate(text, 120))),
-				}
-			}
+		line := bytes.Count(data[:loc[0]], []byte("\n")) + 1
+		start := bytes.LastIndexByte(data[:loc[0]], '\n') + 1
+		end := bytes.IndexByte(data[loc[0]:], '\n')
+		if end < 0 {
+			end = len(data)
+		} else {
+			end += loc[0]
+		}
+		return &Finding{
+			Slug: slug, Status: StatusUnsupported, Rule: RuleInitiativeSignal,
+			Reason:   "the skill drives host scheduling or service control (" + p.name + "); Homeplane distributes instructions, not initiative, so it is not linked into an ordinary harness",
+			Evidence: fmt.Sprintf("%s:%d: %s", rel, line, strings.TrimSpace(truncate(string(data[start:end]), 120))),
 		}
 	}
 	return nil

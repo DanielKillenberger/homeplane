@@ -165,6 +165,78 @@ func TestSkillsProvisionLinksAndRecordsState(t *testing.T) {
 	}
 }
 
+// Status must describe the MACHINE, not the last run. A run narrowed to one
+// harness leaves the other harness's links in place, so forgetting them would
+// report a machine that has fewer skills than it does.
+func TestSkillsStatusComesFromTheManifestNotTheRun(t *testing.T) {
+	m := newSkillsMachine(t, cliProfile, "professional-writing", "casual-writing")
+	if code, _, stderr := m.run(t, "provision"); code != 0 {
+		t.Fatalf("provision: %s", stderr)
+	}
+
+	// A later run touching only Codex must not erase Claude Code's skills.
+	if code, _, stderr := m.run(t, "provision", "-harness", "codex"); code != 0 {
+		t.Fatalf("narrowed provision: %s", stderr)
+	}
+
+	store, err := agent.Open(m.stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, _, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Skills) != 2 {
+		t.Fatalf("state.Skills = %v after a codex-only run; the claude-code links are still installed", state.Skills)
+	}
+	if state.SkillsHealth == nil || state.SkillsHealth.State != agent.StateOK {
+		t.Fatalf("skills health = %+v, want ok", state.SkillsHealth)
+	}
+}
+
+// A run whose links landed but whose harness could not see them is degraded.
+// Recording ok there would tell an operator the skills layer works when no
+// harness can read it.
+func TestSkillsVerificationFailureIsRecordedDegraded(t *testing.T) {
+	m := newSkillsMachine(t, cliProfile, "professional-writing", "casual-writing")
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty"))
+
+	if code, _, _ := m.run(t, "provision", "-verify"); code == 0 {
+		t.Fatal("a failed verification must not exit 0")
+	}
+	store, err := agent.Open(m.stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, _, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.SkillsHealth == nil || state.SkillsHealth.State != agent.StateDegraded {
+		t.Fatalf("skills health = %+v, want degraded", state.SkillsHealth)
+	}
+	// And status must surface it rather than reporting the list as healthy.
+	for _, c := range statusComponents(t, m.stateDir) {
+		if c.Name == agent.ComponentSkills {
+			if c.State != agent.StateDegraded {
+				t.Fatalf("status skills component = %+v, want degraded", c)
+			}
+			return
+		}
+	}
+	t.Fatal("status has no skills component")
+}
+
+func statusComponents(t *testing.T, stateDir string) []agent.ComponentReport {
+	t.Helper()
+	report, err := agent.Status(context.Background(), agent.StatusOptions{StateDir: stateDir, SkipServer: true})
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	return report.Components
+}
+
 func TestSkillsRefreshWithdrawsDroppedSkills(t *testing.T) {
 	m := newSkillsMachine(t, cliProfile, "professional-writing", "casual-writing")
 	if code, _, stderr := m.run(t, "provision"); code != 0 {

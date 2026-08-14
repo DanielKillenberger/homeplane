@@ -58,14 +58,27 @@ claude-code|codex` covers GNO's own MCP server and its own bundled skills. It
 does not provision arbitrary vault-authored skills, so it does not overlap this
 path. It stays what D8 recorded it as: the MCP-side option for task .11.
 
-### Why not a model turn
+### Why not a model turn, and what the probe DOES do
 
 The obvious proof — ask the harness to run the skill — costs a model turn, needs
-credentials, and is non-deterministic. Both probes above are local, offline and
-structured. Claude Code emits the init event **before** it makes any request, so
-the probe reads one line and kills the process; the negative control is that an
-unknown skill simply does not appear in the array (and an unknown slash command
-is answered locally with `Unknown command`).
+credentials, and is non-deterministic. Both probes above are structured and
+offline. Claude Code emits the init event **before** it makes any request, so the
+probe reads it and kills the process; the negative control is that an unknown
+skill simply does not appear in the array (and an unknown slash command is
+answered locally with `Unknown command`). The init event is not always the FIRST
+line — a machine with hooks configured emits `system`/`hook_started` events
+ahead of it, which is how the first version of this probe failed against
+Daniel's real Claude Code and nowhere else.
+
+What the probe is **not** is side-effect-free. It starts the real harness with
+the operator's real configuration, so Claude Code runs the operator's configured
+**hooks**, which can touch files, start processes, or use the network. That is
+inherent to spawning a fresh harness process, which is the point of the proof:
+the flags that suppress hooks (`--bare`, `--safe-mode`) also suppress the
+personal skills directory, so a hook-free probe would enumerate nothing and
+prove nothing. Verified, not assumed — `claude --bare` does not list personal
+skills. A caller that needs isolation points the probe's environment at a
+fixture configuration directory, which is what the test suite does.
 
 ## 2. Profile format (D15)
 
@@ -125,10 +138,46 @@ always carries a reason and concrete evidence. Nothing is silently skipped
 | `invalid-skill-md` | rejected | missing, unclosed or incomplete frontmatter |
 | `no-skill-md` | unsupported | a directory OF skills rather than a skill — Daniel's `hermes` |
 | `name-mismatch` | unsupported | directory name and frontmatter `name` disagree (see above) |
-| `initiative-signal` | unsupported | the skill drives host scheduling or service control (cron, launchd, systemd) |
+| `initiative-signal` | unsupported | any file in the skill drives host scheduling or service control (cron, launchd, systemd) |
+| `profile-unsupported` | unsupported | the profile's own `[unsupported.<skill>]` marking (see below) |
 
 The containment rules run **first**, so a directory that is both malformed and
 carrying a private key is reported as carrying a private key.
+
+Two of these are worth spelling out because the obvious narrower version of
+each is wrong:
+
+- **The containment and initiative scans read every file, not just SKILL.md.**
+  A benign-looking SKILL.md that points the harness at a bundled
+  `scripts/setup.sh` which installs a cron job is precisely the case a
+  SKILL.md-only scan waves through, and it is the case that matters most.
+- **A file is scanned in full or the skill is rejected.** The size guard and the
+  scanner used to share one number, so a single-line file of exactly that length
+  passed the guard and then produced nothing to scan — a credential in it was
+  accepted silently. The patterns now run over the whole (bounded) byte slice,
+  and the boundary itself rejects.
+
+### Per-harness incompatibility: `[unsupported]`
+
+Discovery's rules are mechanical, and some incompatibility is not. Daniel's
+`phone-home-coordinator` is a well-formed skill that names no scheduler and no
+service manager — it is simply bound to the always-on Clawniel session and the
+palantir bus, which an ordinary harness does not have. That is a judgement about
+what the skill IS, and a classifier guessing at it would be wrong in both
+directions.
+
+So the profile states it and Homeplane enforces it:
+
+```toml
+[unsupported.phone-home-coordinator]
+reason    = "Bound to the always-on Clawniel session: …"
+harnesses = ["claude-code", "codex"]   # omit ⇒ every harness
+```
+
+A marking **beats every assignment**: a skill named in both `[defaults]` and
+`[unsupported]` is refused, with the marking's own reason surfaced. A marking
+without a `reason` is refused at load time, because R15's requirement is a
+marking WITH a reason and an unexplained skip is what it exists to prevent.
 
 `initiative-signal` deserves its own note. The spec's boundary is that Homeplane
 distributes access and instructions and never initiative, so a skill whose text
@@ -154,15 +203,35 @@ homeplane-agent skills refresh    [-verify] [-json]  re-scan, re-link, and withd
 
 `provision` is idempotent and never removes anything. `refresh` additionally
 withdraws links Homeplane owns that the profile no longer assigns or whose vault
-skill has gone — and only those: an entry that is no longer the symlink we
-recorded is left alone and reported. Broader dangling-link repair is deferred
-per the spec's Boundaries.
+skill has gone — and only those. Broader dangling-link repair is deferred per
+the spec's Boundaries.
 
 `-verify` spawns each harness and requires it to enumerate what was linked. A
 link the harness does not report is a failure, because the link is our claim and
-the enumeration is the proof.
+the enumeration is the proof. `status` reports the skills component from the
+ownership manifest (the machine's state, not the last run's) and reads
+**degraded** when the last verification failed.
+
+### Ownership
 
 Ownership is recorded at `~/.homeplane/skills/skill-links.json` (0600). It lives
 in Homeplane's state and not in the harness's skills directory, because that
 directory is enumerated by the harness and a bookkeeping file there would be a
 file the harness has to be trusted to ignore.
+
+Being in the manifest is **not** ownership on its own. An entry is Homeplane's
+only while it is still the symlink the manifest records — same path, same
+target. If the operator repoints one of our links at their own copy, it is
+theirs: `provision` will not take it back and `refresh` will not delete it, both
+report the drift instead. A vault MOVE stays distinguishable, because there the
+link still points at the recorded target and is repointed normally.
+
+Two orderings protect that record:
+
+- The whole run holds the **agent state lock** (the same one the harness
+  configurator takes), because the manifest is a read-modify-write. Without it,
+  two concurrent runs each save a manifest missing the other's links, and those
+  links become entries nothing can withdraw.
+- The manifest's writability is proven **before** the first link is created, and
+  every mutation is recorded before the next is attempted. Saving once at the
+  end meant any later failure left links on disk that nothing claimed.

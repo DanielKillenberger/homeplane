@@ -178,7 +178,7 @@ func Status(ctx context.Context, opts StatusOptions) (Report, error) {
 	report.Components = append(report.Components, syncComponent(dir, state, opts.SyncLiveness))
 	report.Components = append(report.Components, gnoComponent(dir, state, opts.GNOLiveness))
 	report.Components = append(report.Components, harnessComponent(state))
-	report.Components = append(report.Components, listComponent(ComponentSkills, state.Skills, "no skills are provisioned yet"))
+	report.Components = append(report.Components, skillsComponent(state))
 
 	grants, server := serverComponents(ctx, opts, report.Enroled, state, credential)
 	report.Components = append(report.Components, grants.component, server.component)
@@ -452,6 +452,27 @@ func localComponent(name string, recorded *ComponentState, absentDetail string) 
 		return ComponentReport{Name: name, State: StateNotConfigured, Detail: absentDetail}
 	}
 	return ComponentReport{Name: name, State: recorded.State, Detail: recorded.Detail}
+}
+
+// skillsComponent reports the provisioned skills, degrading when the last run
+// could not prove a harness actually sees them.
+//
+// The list alone cannot carry that, for the same reason the harness list
+// cannot: links that landed and were never discovered leave exactly the list
+// that links that landed and WERE discovered leave. Reporting the first as ok
+// would say the skills layer works when no harness can read it.
+func skillsComponent(state State) ComponentReport {
+	c := listComponent(ComponentSkills, state.Skills, "no skills are provisioned yet")
+	if state.SkillsHealth == nil || state.SkillsHealth.State != StateDegraded {
+		return c
+	}
+	c.State = StateDegraded
+	if c.Detail == "" || len(state.Skills) == 0 {
+		c.Detail = state.SkillsHealth.Detail
+		return c
+	}
+	c.Detail = "provisioned: " + c.Detail + "; " + state.SkillsHealth.Detail
+	return c
 }
 
 // harnessComponent reports the harnesses, degrading on a partial run.

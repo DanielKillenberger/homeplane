@@ -130,6 +130,60 @@ func TestProfileUnknownKeyNamesIt(t *testing.T) {
 	}
 }
 
+// Per-harness incompatibility must be representable, and a marking without a
+// reason is not a marking (R15).
+func TestProfileUnsupportedMarkings(t *testing.T) {
+	p, err := LoadProfile(writeProfile(t, `
+schema  = 1
+profile = "marked"
+
+[defaults]
+skills = ["everywhere", "server-only"]
+
+[unsupported.server-only]
+reason = "bound to the always-on server session"
+harnesses = ["claude-code"]
+
+[unsupported.nowhere]
+reason = "not a skill any harness can act on"
+`))
+	if err != nil {
+		t.Fatalf("LoadProfile: %v", err)
+	}
+
+	if reason, blocked := p.UnsupportedOn("server-only", ClaudeCode); !blocked || reason == "" {
+		t.Fatalf("server-only must be blocked on claude-code with a reason (got %q, %v)", reason, blocked)
+	}
+	if _, blocked := p.UnsupportedOn("server-only", Codex); blocked {
+		t.Fatal("server-only must be allowed on codex; the marking named only claude-code")
+	}
+	// No `harnesses` means everywhere.
+	for _, h := range Known() {
+		if _, blocked := p.UnsupportedOn("nowhere", h); !blocked {
+			t.Fatalf("an unqualified marking must apply to %s", h)
+		}
+	}
+	if _, blocked := p.UnsupportedOn("everywhere", ClaudeCode); blocked {
+		t.Fatal("an unmarked skill must not be blocked")
+	}
+}
+
+func TestProfileRejectsBadUnsupportedMarkings(t *testing.T) {
+	cases := map[string]string{
+		"no reason":       "schema = 1\nprofile = \"x\"\n[unsupported.a]\nharnesses = [\"codex\"]\n",
+		"blank reason":    "schema = 1\nprofile = \"x\"\n[unsupported.a]\nreason = \"  \"\n",
+		"unknown harness": "schema = 1\nprofile = \"x\"\n[unsupported.a]\nreason = \"r\"\nharnesses = [\"cursor\"]\n",
+		"bad slug":        "schema = 1\nprofile = \"x\"\n[unsupported.\"../a\"]\nreason = \"r\"\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := LoadProfile(writeProfile(t, body)); err == nil {
+				t.Fatalf("%s must be refused", name)
+			}
+		})
+	}
+}
+
 func TestFindProfileReportsMissing(t *testing.T) {
 	root := t.TempDir()
 	_, err := FindProfile("", root)
@@ -155,6 +209,16 @@ func TestShippedReferenceProfileParses(t *testing.T) {
 	for _, h := range Known() {
 		if got := p.Assign("", h); !reflect.DeepEqual(got, want) {
 			t.Fatalf("%s assign = %v, want the skeleton three", h, got)
+		}
+	}
+	// The shipped profile carries the one incompatibility no rule can infer.
+	for _, h := range Known() {
+		reason, blocked := p.UnsupportedOn("phone-home-coordinator", h)
+		if !blocked {
+			t.Fatalf("phone-home-coordinator must be marked unsupported on %s", h)
+		}
+		if reason == "" {
+			t.Fatal("the marking carries no reason")
 		}
 	}
 }

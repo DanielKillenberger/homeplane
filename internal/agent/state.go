@@ -87,7 +87,17 @@ type State struct {
 	// configured; it cannot say that one of them FAILED, and a machine where
 	// one harness works and the other is broken must not report as healthy.
 	Harness *ComponentState `json:"harness,omitempty"`
-	Skills  []string        `json:"skills,omitempty"`
+	// Skills lists the vault skills this machine has provisioned, derived from
+	// the skills ownership manifest rather than from the last run's report — a
+	// narrowed or harness-scoped run must not make the untouched links vanish
+	// from status.
+	Skills []string `json:"skills,omitempty"`
+	// SkillsHealth records whether the last provisioning run left the skills
+	// layer working. The list above cannot carry that: a run whose links landed
+	// but whose fresh-process verification FAILED produces exactly the same
+	// list as a healthy one, and reporting that as ok would tell an operator
+	// their harnesses can see skills they cannot.
+	SkillsHealth *ComponentState `json:"skills_health,omitempty"`
 }
 
 // Enroled reports whether the state names an enrolled machine.
@@ -192,6 +202,7 @@ var knownStateKeys = []string{
 	"schema_version", "server_url", "machine_id", "machine_name", "os",
 	"credential_version", "enroled_at", "rotated_at",
 	"vault_path", "vault", "sync", "gno", "harnesses", "harness", "skills",
+	"skills_health",
 }
 
 // Save writes state.json atomically, preserving unrecognised keys.

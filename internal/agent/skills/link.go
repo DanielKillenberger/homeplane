@@ -226,7 +226,56 @@ func SaveManifest(stateDir string, m Manifest) error {
 	return nil
 }
 
+// owns reports whether Homeplane may change or withdraw this entry.
+//
+// Being in the manifest is NOT sufficient. Ownership is the manifest record AND
+// the link still pointing where the record says it points: if the operator
+// repointed or replaced our link with one of their own, it is theirs now, and
+// removing it would be exactly the silent clobber the preservation rule
+// forbids. A vault MOVE stays distinguishable — there the link still points at
+// the recorded (old) target, so it is still ours to repoint.
 func (m Manifest) owns(harnessID, linkPath string) (ManifestEntry, bool) {
+	for _, e := range m.Links {
+		if e.Harness != harnessID || e.LinkPath != linkPath {
+			continue
+		}
+		current, err := os.Readlink(linkPath)
+		if err != nil || current != e.Target {
+			return e, false
+		}
+		return e, true
+	}
+	return ManifestEntry{}, false
+}
+
+// recorded reports whether the manifest claims this entry at all, regardless of
+// where it currently points. It is how drift is told apart from a stranger's
+// entry that was never ours.
+// InstalledSlugs is every skill this machine currently has provisioned,
+// according to the ownership manifest.
+//
+// It is deliberately read from the manifest and not from a run's report: the
+// report describes ONE run — which may have been narrowed to a single harness,
+// or may have deliberately left links it no longer assigns — while the manifest
+// describes the machine. Status must describe the machine.
+func InstalledSlugs(stateDir string) ([]string, error) {
+	m, err := LoadManifest(stateDir)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(m.Links))
+	for _, e := range m.Links {
+		if !seen[e.Slug] {
+			seen[e.Slug] = true
+			out = append(out, e.Slug)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func (m Manifest) recorded(harnessID, linkPath string) (ManifestEntry, bool) {
 	for _, e := range m.Links {
 		if e.Harness == harnessID && e.LinkPath == linkPath {
 			return e, true
@@ -271,15 +320,35 @@ type Provisioner struct {
 	// or whose vault skill has gone. This is `skills refresh`; provisioning
 	// alone never removes anything.
 	Prune bool
+	// Lock serialises the whole run. It is the agent state lock
+	// (`agent.Store.Lock`), the same one the harness configurator holds, and it
+	// is not optional in production: the manifest is a read-modify-write, so
+	// two concurrent runs without it lose each other's records. Nil is the test
+	// seam, and nil in a real command is a bug.
+	Lock func() (func(), error)
 }
 
 // Provision links every assigned, linkable skill and returns what it did.
 //
 // It is idempotent: a second run over an unchanged vault and profile reports
-// every skill "unchanged" and writes no link. Everything that can fail locally
-// is decided before any link is created — the catalog is scanned, the profile
-// resolved, and each harness's directory prepared — because a half-provisioned
-// harness is worse than an unprovisioned one.
+// every skill "unchanged" and writes no link.
+//
+// Two orderings are load-bearing, and both are about the manifest being the
+// only thing that says which links are ours.
+//
+//   - The whole run is held under the agent state lock, because it is a
+//     read-modify-write of the manifest. Without it, two `skills provision`
+//     processes both load the same manifest and the loser's save erases the
+//     winner's links from the record — leaving real links on disk that nothing
+//     claims, which `refresh` can then never withdraw and a later run reads as
+//     a stranger's entry.
+//
+//   - Every filesystem mutation is recorded BEFORE the next one is attempted,
+//     and the manifest's writability is proven BEFORE the first link is made.
+//     Saving once at the end meant any later failure — a second harness's
+//     directory, an unwritable state directory — left links created and
+//     unrecorded. The cost is one small atomic write per changed link, which is
+//     nothing beside an untracked link in an operator's harness.
 func (p Provisioner) Provision(cat Catalog, profile Profile) (Report, error) {
 	targets := p.Harnesses
 	if len(targets) == 0 {
@@ -294,11 +363,27 @@ func (p Provisioner) Provision(cat Catalog, profile Profile) (Report, error) {
 		return Report{}, errors.New("skills: provision: empty state directory")
 	}
 
+	if p.Lock != nil {
+		release, err := p.Lock()
+		if err != nil {
+			return Report{}, fmt.Errorf("skills: provision: %w", err)
+		}
+		defer release()
+	}
+
 	manifest, err := LoadManifest(p.StateDir)
 	if err != nil {
 		return Report{}, err
 	}
 	manifest.Profile = profile.Name
+
+	// Preflight: prove the manifest can be written before anything on disk
+	// changes. A state directory that cannot hold the record is a run that must
+	// not create links.
+	if err := SaveManifest(p.StateDir, manifest); err != nil {
+		return Report{}, err
+	}
+	save := func() error { return SaveManifest(p.StateDir, manifest) }
 
 	report := Report{
 		Profile:     profile.Name,
@@ -325,6 +410,18 @@ func (p Provisioner) Provision(cat Catalog, profile Profile) (Report, error) {
 		wanted := make(map[string]bool, len(assigned))
 		for _, slug := range assigned {
 			linkPath := filepath.Join(dir, slug)
+
+			// The profile's own per-harness marking is checked FIRST and beats
+			// every assignment: a skill named in both `[defaults]` and
+			// `[unsupported]` is refused, never linked (R15).
+			if reason, blocked := profile.UnsupportedOn(slug, harnessID); blocked {
+				hr.Results = append(hr.Results, LinkResult{
+					Harness: harnessID, Slug: slug, Action: ActionSkipped, LinkPath: linkPath,
+					Rule: RuleProfileUnsupported, Reason: reason,
+				})
+				continue
+			}
+
 			skill, ok := cat.Lookup(slug)
 			if !ok {
 				res := LinkResult{Harness: harnessID, Slug: slug, Action: ActionSkipped, LinkPath: linkPath}
@@ -339,19 +436,29 @@ func (p Provisioner) Provision(cat Catalog, profile Profile) (Report, error) {
 				continue
 			}
 			wanted[linkPath] = true
-			res := p.link(&manifest, harnessID, skill, linkPath)
+			res, changed := p.link(&manifest, harnessID, skill, linkPath)
+			if changed {
+				if err := save(); err != nil {
+					return Report{}, err
+				}
+			}
 			hr.Results = append(hr.Results, res)
 		}
 
 		if p.Prune {
-			hr.Results = append(hr.Results, p.prune(&manifest, harnessID, dir, wanted, cat)...)
+			pruned, changed, err := p.prune(&manifest, harnessID, dir, wanted, cat, save)
+			if err != nil {
+				return Report{}, err
+			}
+			_ = changed
+			hr.Results = append(hr.Results, pruned...)
 		}
 
 		sort.Slice(hr.Results, func(i, j int) bool { return hr.Results[i].Slug < hr.Results[j].Slug })
 		report.Harnesses = append(report.Harnesses, hr)
 	}
 
-	if err := SaveManifest(p.StateDir, manifest); err != nil {
+	if err := save(); err != nil {
 		return Report{}, err
 	}
 	return report, nil
@@ -360,7 +467,9 @@ func (p Provisioner) Provision(cat Catalog, profile Profile) (Report, error) {
 // link creates, confirms or repoints one entry. It never removes something it
 // does not own, and never replaces a real directory: an operator's own skill of
 // the same name wins, and is reported.
-func (p Provisioner) link(manifest *Manifest, harnessID string, skill Skill, linkPath string) LinkResult {
+// It reports whether it CHANGED anything, so the caller records the change
+// before attempting the next one.
+func (p Provisioner) link(manifest *Manifest, harnessID string, skill Skill, linkPath string) (LinkResult, bool) {
 	res := LinkResult{Harness: harnessID, Slug: skill.Slug, LinkPath: linkPath, Target: skill.Dir}
 
 	info, err := os.Lstat(linkPath)
@@ -369,60 +478,73 @@ func (p Provisioner) link(manifest *Manifest, harnessID string, skill Skill, lin
 		if err := os.Symlink(skill.Dir, linkPath); err != nil {
 			res.Action = ActionSkipped
 			res.Reason = "could not create the link: " + err.Error()
-			return res
+			return res, false
 		}
 		manifest.record(ManifestEntry{Harness: harnessID, Slug: skill.Slug, LinkPath: linkPath, Target: skill.Dir, LinkedAt: time.Now().UTC().Truncate(time.Second)})
 		res.Action = ActionLinked
-		return res
+		return res, true
 
 	case err != nil:
 		res.Action = ActionSkipped
 		res.Reason = "could not inspect the existing entry: " + err.Error()
-		return res
+		return res, false
 
 	case info.Mode()&fs.ModeSymlink != 0:
 		owned, isOurs := manifest.owns(harnessID, linkPath)
 		current, readErr := os.Readlink(linkPath)
 		if !isOurs {
 			res.Action = ActionSkipped
-			res.Reason = "an existing entry Homeplane did not create is already here; it was left untouched"
-			return res
+			if claimed, wasOurs := manifest.recorded(harnessID, linkPath); wasOurs {
+				// We made this link once and somebody moved it. That is a
+				// takeover, not a stale link of ours: repointing it would undo
+				// a deliberate change the operator made.
+				res.Reason = fmt.Sprintf("this link was Homeplane's but now points at %s instead of the recorded %s; it was taken over and left untouched", current, claimed.Target)
+			} else {
+				res.Reason = "an existing entry Homeplane did not create is already here; it was left untouched"
+			}
+			return res, false
 		}
 		if readErr == nil && current == skill.Dir {
 			// Re-record: the target is right, but the manifest may predate a
 			// profile rename.
 			manifest.record(ManifestEntry{Harness: harnessID, Slug: skill.Slug, LinkPath: linkPath, Target: skill.Dir, LinkedAt: owned.LinkedAt})
 			res.Action = ActionUnchanged
-			return res
+			return res, false
 		}
+		// Still pointing where we recorded, but the vault moved: ours to repoint.
 		if err := os.Remove(linkPath); err != nil {
 			res.Action = ActionSkipped
 			res.Reason = "could not replace our stale link: " + err.Error()
-			return res
+			return res, false
 		}
 		if err := os.Symlink(skill.Dir, linkPath); err != nil {
 			manifest.forget(harnessID, linkPath)
 			res.Action = ActionSkipped
 			res.Reason = "could not recreate the link: " + err.Error()
-			return res
+			return res, true
 		}
 		manifest.record(ManifestEntry{Harness: harnessID, Slug: skill.Slug, LinkPath: linkPath, Target: skill.Dir, LinkedAt: time.Now().UTC().Truncate(time.Second)})
 		res.Action = ActionRepointed
-		return res
+		return res, true
 
 	default:
 		res.Action = ActionSkipped
 		res.Reason = "a real file or directory is already here; Homeplane links, and never replaces an operator's own skill"
-		return res
+		return res, false
 	}
 }
 
 // prune withdraws links we own that the profile no longer wants, or whose vault
-// skill is gone. It removes ONLY entries recorded in the manifest that are
-// still the symlink we recorded — a link replaced by somebody else's directory
-// is left alone and reported.
-func (p Provisioner) prune(manifest *Manifest, harnessID, dir string, wanted map[string]bool, cat Catalog) []LinkResult {
+// skill is gone.
+//
+// "Own" is the strict sense: recorded in the manifest AND still pointing where
+// the record says. A recorded entry that now points somewhere else has been
+// taken over by the operator and is reported as drift rather than removed —
+// removing it would delete something Homeplane no longer owns, which is the
+// preservation rule's whole point.
+func (p Provisioner) prune(manifest *Manifest, harnessID, dir string, wanted map[string]bool, cat Catalog, save func() error) ([]LinkResult, bool, error) {
 	var out []LinkResult
+	changed := false
 	var stale []ManifestEntry
 	for _, e := range manifest.Links {
 		if e.Harness != harnessID || wanted[e.LinkPath] {
@@ -437,10 +559,12 @@ func (p Provisioner) prune(manifest *Manifest, harnessID, dir string, wanted map
 	}
 	for _, e := range stale {
 		res := LinkResult{Harness: harnessID, Slug: e.Slug, LinkPath: e.LinkPath, Target: e.Target}
+		mutated := false
 		info, err := os.Lstat(e.LinkPath)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
 			manifest.forget(harnessID, e.LinkPath)
+			mutated = true
 			res.Action = ActionRemoved
 			res.Reason = "the link was already gone; the record was dropped"
 		case err != nil:
@@ -450,11 +574,18 @@ func (p Provisioner) prune(manifest *Manifest, harnessID, dir string, wanted map
 			res.Action = ActionSkipped
 			res.Reason = "the recorded entry is no longer a link; it was left untouched"
 		default:
+			if _, isOurs := manifest.owns(harnessID, e.LinkPath); !isOurs {
+				current, _ := os.Readlink(e.LinkPath)
+				res.Action = ActionSkipped
+				res.Reason = fmt.Sprintf("this link now points at %s instead of the recorded %s; it was taken over and left untouched", current, e.Target)
+				break
+			}
 			if err := os.Remove(e.LinkPath); err != nil {
 				res.Action = ActionSkipped
 				res.Reason = "could not remove our link: " + err.Error()
 			} else {
 				manifest.forget(harnessID, e.LinkPath)
+				mutated = true
 				res.Action = ActionRemoved
 				if _, ok := cat.Lookup(e.Slug); !ok {
 					res.Reason = "the skill is no longer discoverable in the vault"
@@ -463,9 +594,15 @@ func (p Provisioner) prune(manifest *Manifest, harnessID, dir string, wanted map
 				}
 			}
 		}
+		if mutated {
+			changed = true
+			if err := save(); err != nil {
+				return nil, changed, err
+			}
+		}
 		out = append(out, res)
 	}
-	return out
+	return out, changed, nil
 }
 
 // Canonical reports where a provisioned entry actually leads, and whether the

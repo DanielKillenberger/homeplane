@@ -24,7 +24,21 @@ const DefaultVerifyTimeout = 90 * time.Second
 // This is the R15 proof, and it is deliberately not our own bookkeeping: the
 // only thing that establishes provisioning is the harness itself enumerating
 // the skill. Both probes were chosen because they are local and need no model
-// turn:
+// turn.
+//
+// **What a probe is not: side-effect-free.** It starts the real harness with
+// the operator's real configuration, so whatever that harness does at startup —
+// Claude Code runs the operator's configured HOOKS, which can touch files,
+// start processes or reach the network — happens. That is inherent to spawning
+// a fresh harness process, which is the entire point of the proof; the
+// alternative flags that suppress hooks (`--bare`, `--safe-mode`) also suppress
+// the personal skills directory, so they would prove nothing. What the probe
+// does avoid is a model request: Claude Code emits the init event before making
+// one, and the probe reads it and kills the process. A caller that needs full
+// isolation points Env at a fixture configuration directory, which is what the
+// test suite does.
+//
+// The two probes:
 //
 //   - Claude Code emits a `system`/`init` event as the first line of
 //     `--output-format stream-json`, carrying the `skills` array it discovered.
