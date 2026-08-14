@@ -254,3 +254,33 @@ func TestMergeEnvPinsThePathForHarnessLaunches(t *testing.T) {
 		}
 	}
 }
+
+// TestMCPInstallDryRunForcesPastAnExistingEntry. GNO refuses `mcp install` when
+// the target client already has a `gno` entry — and refuses it even in a dry
+// run. Homeplane writes that entry itself, so without --force a machine could be
+// activated exactly once: every later activation failed while deriving the
+// launch template, reporting "no GNO configuration in the configured
+// directories", which points at the wrong thing entirely.
+func TestMCPInstallDryRunForcesPastAnExistingEntry(t *testing.T) {
+	dry := MCPInstallArgs(TargetClaudeCode, ScopeUser, true)
+	var sawDryRun, sawForce bool
+	for _, a := range dry {
+		switch a {
+		case "--dry-run":
+			sawDryRun = true
+		case "--force":
+			sawForce = true
+		}
+	}
+	if !sawDryRun || !sawForce {
+		t.Errorf("dry-run install args %v must carry both --dry-run and --force", dry)
+	}
+	// The NON-dry form is what the removal plan and any real install would use,
+	// and it must never carry --force: overwriting a client's configuration is
+	// task .6's decision under its own merge discipline, not a flag here.
+	for _, a := range MCPInstallArgs(TargetClaudeCode, ScopeUser, false) {
+		if a == "--force" {
+			t.Error("the non-dry-run install args carry --force; Homeplane must never overwrite a harness config through GNO")
+		}
+	}
+}

@@ -249,10 +249,20 @@ func MCPServeArgs() []string { return []string{"mcp"} }
 // it only with `--dry-run --json`, to DERIVE the launch template for the
 // endpoint descriptor: task .6 owns writing harness config, under its own
 // merge discipline.
+// The dry run carries --force for a reason that only appears on a machine that
+// is already configured: GNO refuses `mcp install` when the target client
+// already has a `gno` entry, and it refuses it even in a dry run. Homeplane
+// writes that entry itself (task .6), so without --force a machine could be
+// activated exactly once and never re-activated — the failure surfaces as
+// "no GNO configuration in the configured directories", which points at the
+// wrong thing entirely.
+//
+// --force cannot make this write anything: it is still a dry run, and the
+// caller refuses any answer whose reported action is not a dry-run action.
 func MCPInstallArgs(target, scope string, dryRun bool) []string {
 	args := []string{"mcp", "install", "--target", target, "--scope", scope}
 	if dryRun {
-		args = append(args, "--dry-run")
+		args = append(args, "--dry-run", "--force")
 	}
 	return append(args, "--json")
 }

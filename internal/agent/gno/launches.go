@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -221,11 +222,45 @@ func RunStdioEndpoint(ctx context.Context, opts StdioOptions) error {
 		if errors.As(err, &exitErr) {
 			code = exitErr.ExitCode()
 		}
+		// A session the CLIENT closed is not a failed launch. MCP clients end a
+		// stdio session by signalling the server — Claude Code and Codex both
+		// SIGKILL it when the session ends — so counting that as a failure makes
+		// every ordinary harness session degrade the component, and `status`
+		// starts reporting a working endpoint as broken. That is the opposite of
+		// what R4 asks this ledger for.
+		//
+		// A crash still counts: the signals that mean "the process died badly"
+		// (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE) are failures, and so is any
+		// ordinary non-zero exit.
+		if sig, ok := terminationSignal(err); ok {
+			record(Launch{OK: true, PID: pid, ExitCode: 0,
+				Detail: "session closed by the client (" + sig.String() + ")"})
+			return nil
+		}
 		record(Launch{OK: false, PID: pid, ExitCode: code, Detail: firstLine(err.Error())})
 		return fmt.Errorf("gno: the stdio endpoint exited with an error: %w", err)
 	}
 	record(Launch{OK: true, PID: pid, ExitCode: 0})
 	return nil
+}
+
+// terminationSignal reports the signal a process was ended BY, when that signal
+// means an orderly teardown rather than a crash.
+func terminationSignal(err error) (syscall.Signal, bool) {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return 0, false
+	}
+	status, ok := exitErr.Sys().(syscall.WaitStatus)
+	if !ok || !status.Signaled() {
+		return 0, false
+	}
+	switch sig := status.Signal(); sig {
+	case syscall.SIGTERM, syscall.SIGKILL, syscall.SIGINT, syscall.SIGHUP, syscall.SIGPIPE:
+		return sig, true
+	default:
+		return sig, false
+	}
 }
 
 // Client identifies the harness that launched the endpoint, when it says so.
