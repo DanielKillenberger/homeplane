@@ -13,8 +13,17 @@
     "at_commit": "11360881db6c92282a791940d75bcf548db3d133"
   },
   "attests_to_current_manifest": false,
+  "deferral": {
+    "what_is_missing": "A live run of the GUARDED Calendar mutation path — manage_event with send_updates:\"none\" under the connector.send gate — and a live denial of the same call WITHOUT send_updates:\"none\" (or an RSVP), audited as capability_missing.",
+    "deferred_to": "fn-1-homeplane-walking-skeleton-install.7",
+    "authorized_by": "Daniel",
+    "authorized_on": "2026-08-14",
+    "recorded_by": "the conductor, from Daniel's explicit decision",
+    "note": "Re-running the Calendar legs here would need a fresh browser consent and a rebuilt ToolHive workload after teardown, to prove a path .7's end-to-end run exercises anyway. Daniel authorized carrying it into .7 rather than paying for consent twice — the same precedent as .15's deferred credential import. The acceptance item is inherited by .7, not dropped: this task does NOT claim the guarded path is live-proven.",
+    "inherited_acceptance_item": "Inherited from .12 (Daniel-authorized deferral 2026-08-14): the guarded Calendar mutation path (send_updates:\"none\" + connector.send gating) is proven LIVE against real Google as part of this task's six-op run — including one denied manage_event call WITHOUT send_updates:\"none\" (or RSVP) audited as capability_missing."
+  },
   "caveats": [
-    "The Calendar legs (six-op) were run BEFORE the send_updates capability guard was added to the manifest, so their manage_event calls carried no send_updates argument. Under the current manifest those exact calls are REFUSED (connector.send missing) and a legitimate caller must pass send_updates:\"none\". The proof of what Google does end to end still stands; the proof that the CURRENT argument shape works against Google does not. Re-run the Calendar legs and replace this file before treating it as attesting to the guarded manifest.",
+    "The Calendar legs (six-op) were run BEFORE the send_updates capability guard was added to the manifest, so their manage_event calls carried no send_updates argument. Under the current manifest those exact calls are REFUSED (connector.send missing) and a legitimate caller must pass send_updates:\"none\". The proof of what Google does end to end still stands; the proof that the CURRENT argument shape works against Google does not. That live proof is DEFERRED to fn-1-homeplane-walking-skeleton-install.7 by Daniel's explicit authorization on 2026-08-14 — see this file's \"deferral\" object. Until .7 records it, nothing here attests to the guarded manifest.",
     "The Drive read, Drive write-refusal, consent/custody and revocation legs are unaffected by the guard — none of them calls manage_event.",
     "The gateway ran on loopback with the ToolHive workload's egress unrestricted; the network-isolation profile was not applied (see the runbook's known limitations).",
     "This file was transcribed from the run's captured stdout after the fact, not emitted by the test binary. Line references below are to the test file AT THE RUN'S COMMIT, not to HEAD."

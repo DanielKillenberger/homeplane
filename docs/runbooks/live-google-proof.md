@@ -200,9 +200,20 @@ commands, timestamps, redacted environment, commit and per-assertion results.
 (`attests_to_current_manifest: false`). Its Calendar legs called `manage_event`
 without `send_updates`, which the current manifest refuses; the Drive, consent,
 custody and revocation legs are unaffected because none of them touches
-`manage_event`. Re-run the Calendar legs and replace the file before treating it
-as evidence for the guarded manifest — the `manifest_revision` field is what a
-later reader checks to know which manifest a run actually attests to.
+`manage_event`. The `manifest_revision` field is what a later reader checks to
+know which manifest a run actually attests to.
+
+**The guarded Calendar path is proven in task .7, by Daniel's decision.**
+Re-running the Calendar legs here would need a fresh browser consent and a
+rebuilt workload after teardown, to prove a path .7's end-to-end run exercises
+anyway. Daniel explicitly authorized carrying it into
+`fn-1-homeplane-walking-skeleton-install.7` on **2026-08-14** — the same
+precedent as .15's deferred credential import — and .7 inherits the acceptance
+item: the guarded mutation path (`send_updates: "none"` under the
+`connector.send` gate) proven live, **including one denied `manage_event` call
+without `send_updates: "none"` audited as `capability_missing`**. The item is
+inherited, not dropped; see the live evidence file's `deferral` object. Until .7
+records it, no run in this repo attests to the guarded manifest.
 
 ## 5. Tear down
 

@@ -90,6 +90,29 @@ denied `unresolved_action` as a policy violation.
 Every live write in the proof passes `send_updates: "none"` explicitly, so the
 proof exercises the path a real caller must take.
 
+### The guard's live proof is deferred to task .7 (Daniel-authorized, 2026-08-14)
+
+The guard is proven in the unit and manifest tests, and every live write in the
+task .12 proof now passes `send_updates: "none"` — but the recorded live run
+predates the guard, so **no live run yet exercises the guarded path against real
+Google**. Re-running the Calendar legs in .12 would need a fresh browser consent
+and a rebuilt ToolHive workload after teardown, to prove a path that .7's
+end-to-end run exercises anyway.
+
+Daniel **explicitly authorized deferring that live leg into
+`fn-1-homeplane-walking-skeleton-install.7`** on **2026-08-14** — the same
+precedent as .15's deferred credential import. The acceptance item is
+**inherited by .7, not dropped**:
+
+> Inherited from .12 (Daniel-authorized deferral 2026-08-14): the guarded
+> Calendar mutation path (`send_updates:"none"` + `connector.send` gating) is
+> proven LIVE against real Google as part of this task's six-op run — including
+> one denied `manage_event` call WITHOUT `send_updates:"none"` (or RSVP) audited
+> as `capability_missing`.
+
+The denial half matters as much as the allow half: a guard that has only ever
+been observed permitting is not a guard anyone has watched refuse.
+
 ## Consequences
 
 - The consent screen lists three scopes. Anyone auditing the grant at
