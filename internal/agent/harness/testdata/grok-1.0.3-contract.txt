@@ -1,0 +1,518 @@
+# Captured from grok 1.0.3 by scripts/capture-grok-contract.sh.
+# Verbatim upstream output and observed behaviour. Do not hand-edit.
+
+=== grok --version ===
+grok 1.0.3 (1a29d5bc12d4) [stable]
+
+=== grok --help ===
+Grok Build TUI
+
+Usage: grok [OPTIONS] [PROMPT] [COMMAND]
+
+Arguments:
+  [PROMPT]
+          Initial prompt for the interactive session, e.g. `grok "fix the bug"` or `grok --worktree=feat "create this feature"`
+
+Options:
+      --agent <NAME>
+          Agent name or definition file path
+
+      --agents <JSON>
+          Inline subagent definitions as JSON
+
+      --allow <RULE>
+          Permission allow rule (compat alias: --allowedTools)
+
+      --always-approve
+          Auto-approve all tool executions
+
+  -c, --continue
+          Continue the most recent session for the current working directory
+
+      --cwd <CWD>
+          Working directory
+
+      --debug
+          Enable debug logging
+
+      --debug-file <FILE>
+          Write debug logs to FILE
+
+      --deny <RULE>
+          Permission deny rule (compat alias: --disallowedTools)
+
+      --disable-web-search
+          Disable web search and web fetch tools
+
+      --disallowed-tools <TOOLS>
+          Built-in tools to remove (comma-separated)
+
+      --experimental-memory
+          Enable cross-session memory
+
+      --fork-session
+          When resuming (`--resume` / `--continue`), create a new session ID instead of reusing the original (optionally set via `--session-id`)
+
+      --fullscreen
+          Open in the standard fullscreen TUI for this session, overriding a config `[ui] screen_mode = "minimal"` preference. Session-scoped only — does not write config. Fullscreen-vs-inline still follows the alt-screen policy (--no-alt-screen, [terminal] alt_screen, terminal auto-detection)
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+      --include-partial-messages
+          Emit incremental `stream_event` lines (text/thinking deltas) alongside whole messages. Only affects `--output-format streaming-messages-json`
+
+      --json-schema <SCHEMA>
+          JSON Schema for structured output. When set, the model is constrained to produce JSON matching this schema. Implies --output-format json. Example: --json-schema '{"type":"object","properties":{"name":{"type":"string"}}}'
+
+      --leader-socket <PATH>
+          Use a custom leader socket path instead of the default `~/.grok/leader.sock`
+
+  -m, --model <MODEL>
+          Model ID to use
+
+      --max-turns <N>
+          Maximum number of agent turns
+
+      --minimal
+          Experimental: scrollback-native rendering. Finalized blocks are printed into the terminal's native scrollback (use the terminal's own scroll / selection); a small pinned region holds the prompt + running turn. Session-scoped only — does not write config. To default plain `grok` to minimal, set `[ui] screen_mode = "minimal"` in ~/.grok/config.toml
+
+      --no-alt-screen
+          Run inline instead of using the terminal alternate screen
+
+      --no-memory
+          Disable cross-session memory for this session
+
+      --no-plan
+          Disable plan mode
+
+      --no-subagents
+          Disable subagent spawning
+
+      --oauth
+          Use OAuth when the welcome screen starts authentication
+
+      --output-format <OUTPUT_FORMAT>
+          Output format for headless mode
+
+          Possible values:
+          - plain
+          - json
+          - streaming-json:          NDJSON of the agent native ACP session updates
+          - streaming-messages-json: NDJSON in the Anthropic Messages API wire format
+          
+          [default: plain]
+
+  -p, --single <PROMPT>
+          Single-turn prompt. Prints the response to stdout and exits
+
+      --permission-mode <MODE>
+          Permission mode
+          
+          [possible values: default, acceptEdits, auto, dontAsk, bypassPermissions, plan]
+
+      --prompt-file <PATH>
+          Single-turn prompt from a file
+
+      --prompt-json <JSON>
+          Single-turn prompt as JSON content blocks
+
+  -r, --resume [<SESSION_ID_OR_TITLE>]
+          Resume a session by ID or title, or the most recent if omitted. Non-ID values match session titles for the current directory (ignoring letter case; a sole renamed match wins among duplicates, otherwise ambiguity errors; UUID-shaped values always mean IDs)
+
+      --reasoning-effort <EFFORT>
+          Reasoning effort for reasoning models
+          
+          [aliases: --effort]
+
+      --restore-code
+          Restore the original session's repository snapshot when resuming. Remote sessions require `--worktree` (never checks out into the current directory). Without this flag, resume restores conversation only
+
+      --rules <RULES>
+          Extra rules to append to the system prompt
+
+  -s, --session-id <SESSION_ID>
+          Use a specific session UUID for a **new** conversation (must be a valid UUID and must not already exist under the target session directory). With `--resume`/`--continue`, only valid together with `--fork-session` (names the forked session). Does not resume existing sessions — use `--resume` / `--continue` instead
+
+      --sandbox <PROFILE>
+          Sandbox profile for filesystem and network access
+          
+          [env: GROK_SANDBOX=]
+
+      --system-prompt-override <PROMPT>
+          Override the agent's system prompt (compat alias: --system-prompt)
+
+      --tools <TOOLS>
+          Built-in tools to allow (comma-separated)
+
+  -v, --version
+          Print version
+
+      --verbatim
+          Send the prompt exactly as given
+
+  -w, --worktree [<WORKTREE>]
+          Start the session in a new git worktree, optionally named. With `--resume` of a remote session, pass `--restore-code` to apply the snapshot codebase (conversation is restored either way). Headless (`-p`) does not create a worktree from this flag
+
+      --worktree-ref <WORKTREE_REF>
+          Branch, tag, or commit to base the worktree on (with `--worktree`). Defaults to the current HEAD of the source checkout when omitted
+          
+          [aliases: --ref]
+
+Commands:
+  agent        Run Grok without the interactive UI
+  completions  Generate shell completion scripts (bash, zsh, fish, powershell, ...)
+  dashboard    Open the Agent Dashboard view at startup
+  doctor       Check terminal, clipboard, color, and input support without starting Grok
+  du           Show what the grok home (~/.grok) uses on disk [aliases: disk-usage]
+  export       Export a session transcript as Markdown
+  help         Print this message or the help of the given subcommand(s)
+  inspect      Show the configuration Grok discovers for this directory
+  leader       Manage running leader processes
+  login        Sign in to Grok
+  logout       Sign out and clear cached credentials
+  mcp          Manage MCP server configurations
+  memory       Manage cross-session memory
+  models       List available models and exit
+  plugin       Manage plugins and marketplace sources
+  sessions     List, search, or restore sessions
+  setup        Fetch and install managed configuration
+  trace        Export or upload session trace data
+  update       Check for updates or install a specific version
+  version      Print version information [aliases: v]
+  worktree     Manage git worktrees
+  wrap         Run any command with local clipboard support (OSC 52 → system clipboard)
+
+=== grok mcp --help ===
+Manage MCP server configurations
+
+Usage: grok mcp [OPTIONS] <COMMAND>
+
+Commands:
+  list     List configured MCP servers
+  add      Add or update an MCP server
+  remove   Remove an MCP server
+  enable   Enable an MCP server
+  disable  Disable an MCP server
+  doctor   Diagnose MCP server configuration and connectivity
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --debug                 Enable debug logging
+      --debug-file <FILE>     Write debug logs to FILE
+  -h, --help                  Print help
+      --leader-socket <PATH>  Use a custom leader socket path instead of the default `~/.grok/leader.sock`
+
+=== grok help mcp add ===
+Add or update an MCP server
+
+Usage: grok mcp add [OPTIONS] <NAME> [COMMAND_OR_URL] [ARGS]...
+
+Arguments:
+  <NAME>
+          Server name
+
+  [COMMAND_OR_URL]
+          Command to launch (stdio) or URL to connect to (http, sse)
+
+  [ARGS]...
+          Arguments passed to the server command. Place them after `--` so flags such as `-y` are passed to the server instead of grok
+
+Options:
+  -t, --transport <TRANSPORT>
+          Transport type. Defaults to stdio
+
+          Possible values:
+          - stdio: Launch a local process and communicate over stdin/stdout
+          - http:  Connect to a remote server over streamable HTTP
+          - sse:   Connect to a remote server over Server-Sent Events
+
+  -s, --scope <SCOPE>
+          Config to write to: user (~/.grok/config.toml) or project (./.grok/config.toml)
+
+          Possible values:
+          - user:    `~/.grok/config.toml`, available in all your projects
+          - project: `./.grok/config.toml`, shared with everyone working in this directory
+          
+          [default: user]
+
+  -e, --env <KEY=value>
+          Environment variable for the server process (repeatable)
+
+  -H, --header <NAME: VALUE>
+          HTTP header for remote servers (repeatable)
+
+      --debug
+          Enable debug logging
+
+      --debug-file <FILE>
+          Write debug logs to FILE
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+      --leader-socket <PATH>
+          Use a custom leader socket path instead of the default `~/.grok/leader.sock`
+
+Examples:
+  # Add a stdio server (everything after -- is the server command)
+  grok mcp add xcode -- xcrun mcpbridge
+
+  # Add a stdio server with environment variables
+  grok mcp add postgres -e DATABASE_URL=postgres://localhost/mydb -- npx -y @modelcontextprotocol/server-postgres
+
+  # Add a remote HTTP server
+  grok mcp add --transport http sentry https://mcp.sentry.dev/mcp
+
+  # Add a remote server with an authentication header
+  grok mcp add --transport http api https://mcp.example.com/mcp --header "Authorization: Bearer YOUR_TOKEN"
+
+  # Add to the project config (./.grok/config.toml) instead of ~/.grok/config.toml
+  grok mcp add --scope project github -- npx -y @modelcontextprotocol/server-github
+
+=== grok help mcp list ===
+List configured MCP servers
+
+Usage: grok mcp list [OPTIONS]
+
+Options:
+      --json                  Emit machine-readable JSON output
+      --debug                 Enable debug logging
+      --debug-file <FILE>     Write debug logs to FILE
+  -h, --help                  Print help
+      --leader-socket <PATH>  Use a custom leader socket path instead of the default `~/.grok/leader.sock`
+
+=== grok help mcp remove ===
+Remove an MCP server
+
+Usage: grok mcp remove [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Server name to remove
+
+Options:
+  -s, --scope <SCOPE>
+          Config to remove from. When omitted, all scopes are searched
+
+          Possible values:
+          - user:    `~/.grok/config.toml`, available in all your projects
+          - project: `./.grok/config.toml`, shared with everyone working in this directory
+
+      --debug
+          Enable debug logging
+
+      --debug-file <FILE>
+          Write debug logs to FILE
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+      --leader-socket <PATH>
+          Use a custom leader socket path instead of the default `~/.grok/leader.sock`
+
+=== grok help mcp enable ===
+Enable an MCP server
+
+Usage: grok mcp enable [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>  Server name
+
+Options:
+      --debug                 Enable debug logging
+      --debug-file <FILE>     Write debug logs to FILE
+  -h, --help                  Print help
+      --leader-socket <PATH>  Use a custom leader socket path instead of the default `~/.grok/leader.sock`
+
+=== grok help mcp disable ===
+Disable an MCP server
+
+Usage: grok mcp disable [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>  Server name
+
+Options:
+      --debug                 Enable debug logging
+      --debug-file <FILE>     Write debug logs to FILE
+  -h, --help                  Print help
+      --leader-socket <PATH>  Use a custom leader socket path instead of the default `~/.grok/leader.sock`
+
+=== grok help mcp doctor ===
+Diagnose MCP server configuration and connectivity
+
+Usage: grok mcp doctor [OPTIONS] [NAME]
+
+Arguments:
+  [NAME]  Server name to check
+
+Options:
+      --json                  Emit machine-readable JSON output
+      --debug                 Enable debug logging
+      --debug-file <FILE>     Write debug logs to FILE
+  -h, --help                  Print help
+      --leader-socket <PATH>  Use a custom leader socket path instead of the default `~/.grok/leader.sock`
+
+=== never-launched sealed home: ls ~/.grok ===
+(empty)
+
+=== never-launched: grok mcp list --json ===
+[]
+
+=== never-launched: grok mcp list ===
+No MCP servers configured. Run `grok mcp add --help` to get started.
+
+=== seeded config.toml (mode 0600) ===
+# a hand-written preamble comment
+[ui]
+max_thoughts_width = 120
+
+# an unrelated pre-existing MCP entry, with its own comment
+[mcp_servers.preexisting-thing]
+command = "/usr/bin/true"
+args = ["--keep-me"]
+enabled = true
+
+=== grok mcp add --transport http <name> <url> --header 'Authorization: Bearer ${VAR}' ===
+Added HTTP MCP server 'homeplane-edge' with URL: https://edge.example.invalid/mcp to user config
+File modified: $GROK_HOME/config.toml
+
+=== config.toml after the add ===
+[ui]
+max_thoughts_width = 120
+
+[mcp_servers.preexisting-thing]
+command = "/usr/bin/true"
+args = ["--keep-me"]
+enabled = true
+
+[mcp_servers.homeplane-edge]
+url = "https://edge.example.invalid/mcp"
+enabled = true
+
+[mcp_servers.homeplane-edge.headers]
+Authorization = "Bearer ${HOMEPLANE_GROK_TOKEN}"
+
+=== diff: seeded -> after add (COMMENTS ARE DROPPED) ===
+--- seeded config.toml
++++ config.toml after the add
+@@ -1,9 +1,14 @@
+-# a hand-written preamble comment
+ [ui]
+ max_thoughts_width = 120
+ 
+-# an unrelated pre-existing MCP entry, with its own comment
+ [mcp_servers.preexisting-thing]
+ command = "/usr/bin/true"
+ args = ["--keep-me"]
+ enabled = true
++
++[mcp_servers.homeplane-edge]
++url = "https://edge.example.invalid/mcp"
++enabled = true
++
++[mcp_servers.homeplane-edge.headers]
++Authorization = "Bearer ${HOMEPLANE_GROK_TOKEN}"
+
+=== file mode: 0600 before the add, after the add ===
+before: 0600 (set explicitly above)
+after:  644
+
+=== re-run the IDENTICAL add ===
+Added HTTP MCP server 'homeplane-edge' with URL: https://edge.example.invalid/mcp to user config
+File modified: $GROK_HOME/config.toml
+
+=== diff after the identical re-run (expected: byte-identical) ===
+(no diff: an identical re-add is idempotent)
+
+=== re-add the SAME name with a different url and NO --header ===
+Added HTTP MCP server 'homeplane-edge' with URL: https://edge2.example.invalid/mcp to user config
+File modified: $GROK_HOME/config.toml
+
+=== config.toml after the differing re-add (the headers table is GONE) ===
+[ui]
+max_thoughts_width = 120
+
+[mcp_servers.preexisting-thing]
+command = "/usr/bin/true"
+args = ["--keep-me"]
+enabled = true
+
+[mcp_servers.homeplane-edge]
+url = "https://edge2.example.invalid/mcp"
+enabled = true
+
+=== grok mcp list --json ===
+[
+  {
+    "command": "/usr/bin/true",
+    "args": [
+      "--keep-me"
+    ],
+    "enabled": true,
+    "name": "preexisting-thing",
+    "scope": "user"
+  },
+  {
+    "url": "https://edge.example.invalid/mcp",
+    "headers": {
+      "Authorization": "Bearer ${HOMEPLANE_GROK_TOKEN}"
+    },
+    "enabled": true,
+    "name": "homeplane-edge",
+    "scope": "user"
+  }
+]
+
+=== grok mcp list ===
+  preexisting-thing: /usr/bin/true --keep-me
+  homeplane-edge: https://edge.example.invalid/mcp
+
+=== ${VAR} in a url: stored verbatim ===
+[mcp_servers.expand-probe]
+url = "https://${HP_PROBE_HOST}/mcp"
+enabled = true
+
+=== grok mcp doctor expand-probe --json | target, WITHOUT the env var ===
+target = "https://${HP_PROBE_HOST}/mcp"
+
+=== grok mcp doctor expand-probe --json | target, WITH HP_PROBE_HOST set ===
+target = "https://expanded.example.invalid/mcp"
+
+=== grok mcp remove <unknown> ===
+No MCP server named 'no-such-server' in user or project config
+exit: 1
+
+=== grok mcp add <invalid name> ===
+Error: Invalid name 'bad name!'. Names can only contain letters, numbers, hyphens, and underscores.
+exit: 1
+
+=== grok mcp add -t <invalid transport> ===
+error: invalid value 'carrier-pigeon' for '--transport <TRANSPORT>'
+  [possible values: stdio, http, sse]
+
+For more information, try '--help'.
+exit: 2
+
+=== grok mcp enable <unknown> ===
+No MCP server named 'no-such'.
+Available servers: expand-probe, homeplane-edge, preexisting-thing
+exit: 1
+
+=== linked skills (all three are SYMLINKS into a vault outside ~/.grok) ===
+  hp-probe-alpha      -> frontmatter name: hp-probe-alpha      (agrees with dir)
+  directory-beta-name -> frontmatter name: frontmatter-beta-name (disagrees)
+  gamma-dir-name      -> frontmatter name: (absent)
+
+=== grok inspect | discovered probe skills ===
+  └ frontmatter-beta-name  user
+  └ gamma-dir-name         user
+  └ hp-probe-alpha         user
+
+=== grok leader list (sealed home) ===
+No leader candidates found.
+
+=== a config change is visible to the very NEXT invocation ===
+  staleness-probe: https://stale.example.invalid/mcp
+
