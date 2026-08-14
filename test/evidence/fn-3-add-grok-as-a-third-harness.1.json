@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "fn-3-add-grok-as-a-third-harness.1",
-  "commit": "6f5e7ff236c647a6c4828d348a2b4f70232c5fbe",
+  "commit": "27f436ce045814199dbe09a7a5722ca079512551",
   "working_tree_dirty": false,
   "platform": {
     "go_version": "go version go1.26.5 darwin/arm64",
@@ -9,8 +9,8 @@
     "goarch": "arm64",
     "uname": "Darwin 25.5.0 arm64"
   },
-  "started_at": "2026-08-14T21:19:13Z",
-  "finished_at": "2026-08-14T21:19:44Z",
+  "started_at": "2026-08-14T21:35:02Z",
+  "finished_at": "2026-08-14T21:35:32Z",
   "gates": [
     {
       "gate": "build",
@@ -29,8 +29,8 @@
     }
   ],
   "assertion_counts": {
-    "total": 907,
-    "passed": 907,
+    "total": 911,
+    "passed": 911,
     "failed": 0
   },
   "assertions": [
@@ -38,19 +38,19 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestAPartiallyConfiguredMachineReportsDegraded",
       "result": "pass",
-      "elapsed_seconds": 0.06
+      "elapsed_seconds": 0.07
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestATargetedRunDoesNotEraseTheOtherHarnessFromStatus",
       "result": "pass",
-      "elapsed_seconds": 0.14
+      "elapsed_seconds": 0.19
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestAddCredentialsAgainstAServerWithoutTheBrokerFailsClearly",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
@@ -62,7 +62,7 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestAddCredentialsJSONModeEmitsOneJSONValueOnStdout",
       "result": "pass",
-      "elapsed_seconds": 0.04
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
@@ -98,19 +98,19 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestConfigureHarnessesEndToEndAgainstTheRealControlPlane",
       "result": "pass",
-      "elapsed_seconds": 0.09
+      "elapsed_seconds": 0.16
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestConfigureHarnessesRefusesAnUnenrolledMachine",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestConfigureHarnessesTwiceSupersedesRatherThanAccumulates",
       "result": "pass",
-      "elapsed_seconds": 0.15
+      "elapsed_seconds": 0.28
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
@@ -122,25 +122,25 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestEnrolThenStatusReportsADegradedButEnrolledMachine",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestGNOActivatePublishesADescriptorAndRecordsInstalledNotOK",
       "result": "pass",
-      "elapsed_seconds": 0.35
+      "elapsed_seconds": 0.34
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestGNOActivateRefusesANonLoopbackGateway",
       "result": "pass",
-      "elapsed_seconds": 0.71
+      "elapsed_seconds": 0.6
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestGNOActivateRefusesAnUnpinnedBuild",
       "result": "pass",
-      "elapsed_seconds": 3.6
+      "elapsed_seconds": 3.54
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
@@ -152,37 +152,37 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestGNODeactivateWithoutExecuteChangesNothing",
       "result": "pass",
-      "elapsed_seconds": 0.75
+      "elapsed_seconds": 0.84
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestGNOEndpointPrintsThePublishedDescriptor",
       "result": "pass",
-      "elapsed_seconds": 2.53
+      "elapsed_seconds": 2.57
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestGNOMCPWrapperRecordsEveryLaunch",
       "result": "pass",
-      "elapsed_seconds": 0.75
+      "elapsed_seconds": 0.63
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestGNORebuildRecoversADeletedIndex",
       "result": "pass",
-      "elapsed_seconds": 0.95
+      "elapsed_seconds": 0.83
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestGNORunRefusesANonLoopbackGateway",
       "result": "pass",
-      "elapsed_seconds": 0.83
+      "elapsed_seconds": 0.73
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestGNORunRefusesWithoutAVault",
       "result": "pass",
-      "elapsed_seconds": 0.6
+      "elapsed_seconds": 0.72
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
@@ -230,7 +230,7 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestSkillsProvisionLinksAndRecordsState",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
@@ -242,7 +242,7 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestSkillsRefreshWithdrawsDroppedSkills",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
@@ -260,7 +260,7 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestSkillsStatusComesFromTheManifestNotTheRun",
       "result": "pass",
-      "elapsed_seconds": 0.04
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
@@ -374,7 +374,7 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestVaultRetrieveFetchesAnAbsentVault",
       "result": "pass",
-      "elapsed_seconds": 0.86
+      "elapsed_seconds": 0.89
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
@@ -398,7 +398,7 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
       "test": "TestVaultSyncActivateRefusesAnUnpinnedCLI",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-agent",
@@ -422,37 +422,37 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminAuditReadsTheLogAndRecordsTheRead",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.06
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminRevokeCrossesMachineBoundaries",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminRevokeGrantIsIdempotentAndRejectsUnknownIDs",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminSecretImportRequiresProtectedInput",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.07
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminSecretImportRequiresProtectedInput/0600_file_imported_and_encrypted_at_rest",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminSecretImportRequiresProtectedInput/replacement_bumps_the_generation",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
@@ -464,43 +464,43 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminSecretInitKeyRefusesToClobber",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminSecretListDistinguishesMissingRefs",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestAdminSecretListReportsPresenceWithoutValues",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestComposeHandlerServesBothPlanesOnOneListener",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestEndpointURLIsDerivedFromTheMountPathWhenPathless",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestOperatorSurfaceIsNotReachableOverHTTP",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestResolveEdgeWiringRefusesUnsafeOrHalfConfigurations",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
@@ -524,13 +524,13 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestWorkloadDeliveryFailureIsVisibleToHealth",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestWorkloadDeliveryGroupAccessStaysClosedToOther",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
@@ -542,7 +542,7 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestWorkloadDeliveryKeepsTheDeploymentsDirectoryMode",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
@@ -560,25 +560,25 @@
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestWorkloadDeliveryTightensAWorldAccessibleDirectory",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestWorkloadDeliveryWritesTheClientConfiguration",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/cmd/homeplane-server",
       "test": "TestWorkloadDeliveryWritesTheConnectorsCredentialFile",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestConcurrentEnrolmentsLeaveTheMachineHoldingALiveCredential",
       "result": "pass",
-      "elapsed_seconds": 0.18
+      "elapsed_seconds": 0.17
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
@@ -602,13 +602,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestEnrolAgainstAnUnreachableServerLeavesNoLocalState",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestEnrolStoresIdentityWithOwnerOnlyPermissions",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
@@ -626,31 +626,31 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestPersistingAStaleEnrolmentResponseIsRefused",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestReEnrolPreservesStateOwnedByLaterTasks",
       "result": "pass",
-      "elapsed_seconds": 0.05
+      "elapsed_seconds": 0.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestReEnrolReusesTheRecordedServerURL",
       "result": "pass",
-      "elapsed_seconds": 0.05
+      "elapsed_seconds": 0.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestReEnrolRotatesTheCredentialAndKillsTheOldOne",
       "result": "pass",
-      "elapsed_seconds": 0.05
+      "elapsed_seconds": 0.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestSaveEnrolmentLeavesNoTemporaryFilesBehind",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
@@ -668,7 +668,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestStatusEnrolledWithoutVault",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
@@ -698,7 +698,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestStatusOfflineNeverClaimsServerState",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
@@ -716,13 +716,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestStatusReportsACrashLoopAsDegraded",
       "result": "pass",
-      "elapsed_seconds": 0.04
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestStatusReportsACrashLoopingEngineAsDegraded",
       "result": "pass",
-      "elapsed_seconds": 0.07
+      "elapsed_seconds": 0.06
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
@@ -752,19 +752,19 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestStatusReportsARunningEngineAsOK",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestStatusReportsARunningSyncAsOK",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestStatusReportsAVanishedVaultEvenWithALiveEngine",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
@@ -842,7 +842,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestStatusReportsUnknownWhenTheEnginesLivenessCannotBeEstablished",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
@@ -854,7 +854,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
       "test": "TestStatusWithAnUnreachableServerReportsUnknownNotStale",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent",
@@ -872,55 +872,55 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/credflow",
       "test": "TestAddCredentialsStoresTheCredentialServerSideOnly",
       "result": "pass",
-      "elapsed_seconds": 0.06
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/credflow",
       "test": "TestDeniedConsentIsReportedCleanly",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/credflow",
       "test": "TestLostRelayResponseStillConvergesOnTheServersOutcome",
       "result": "pass",
-      "elapsed_seconds": 0.04
+      "elapsed_seconds": 0.08
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/credflow",
       "test": "TestRedirectURIIsThisMachinesBoundLoopbackPort",
       "result": "pass",
-      "elapsed_seconds": 0.04
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/credflow",
       "test": "TestSlowProviderDoesNotBecomeAFalseFailure",
       "result": "pass",
-      "elapsed_seconds": 0.47
+      "elapsed_seconds": 0.44
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/credflow",
       "test": "TestStrayLoopbackRequestsDoNotConsumeTheFlow",
       "result": "pass",
-      "elapsed_seconds": 0.05
+      "elapsed_seconds": 0.06
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/credflow",
       "test": "TestUnknownProviderErrorNamesTheKnownProviders",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/credflow",
       "test": "TestUnknownProviderIsRefusedWithGuidance",
       "result": "pass",
-      "elapsed_seconds": 0.04
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestAFailedInstallPublishesNoDescriptor",
       "result": "pass",
-      "elapsed_seconds": 0.2
+      "elapsed_seconds": 0.19
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -932,13 +932,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestActivationRecordRoundTrips",
       "result": "pass",
-      "elapsed_seconds": 0.2
+      "elapsed_seconds": 0.17
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestApplyPreservesTheRecordedEndpointProbe",
       "result": "pass",
-      "elapsed_seconds": 0.36
+      "elapsed_seconds": 0.38
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -992,25 +992,25 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestDeactivateRefusesToDeleteAnythingInsideTheVault",
       "result": "pass",
-      "elapsed_seconds": 0.32
+      "elapsed_seconds": 0.31
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestDeactivateStopsTheUnitAndOptionallyDropsState",
       "result": "pass",
-      "elapsed_seconds": 0.32
+      "elapsed_seconds": 0.3
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestDeactivateSurvivesAnUnloadedUnit",
       "result": "pass",
-      "elapsed_seconds": 0.32
+      "elapsed_seconds": 0.31
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestDeactivateWithoutARunnerChangesNothing",
       "result": "pass",
-      "elapsed_seconds": 0.27
+      "elapsed_seconds": 0.22
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1022,13 +1022,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestDeriveLaunchTemplateRefusesANonDryRunResult",
       "result": "pass",
-      "elapsed_seconds": 0.44
+      "elapsed_seconds": 0.74
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestDeriveLaunchTemplateUsesUpstreamsOwnEntry",
       "result": "pass",
-      "elapsed_seconds": 0.67
+      "elapsed_seconds": 0.59
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1040,7 +1040,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestDescriptorPublishesTheWrapperAndTheUnderlyingTemplate",
       "result": "pass",
-      "elapsed_seconds": 0.19
+      "elapsed_seconds": 0.4
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1076,7 +1076,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestDoctorParsesUpstreamJSONIncludingFailure",
       "result": "pass",
-      "elapsed_seconds": 0.97
+      "elapsed_seconds": 0.84
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1112,7 +1112,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestEnvironmentIsolationDropsAmbientGNOVariables",
       "result": "pass",
-      "elapsed_seconds": 2.36
+      "elapsed_seconds": 2.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1124,7 +1124,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestInstallRefusesANonLoopbackGateway",
       "result": "pass",
-      "elapsed_seconds": 0.2
+      "elapsed_seconds": 0.18
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1136,7 +1136,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestInstallWritesUnitDescriptorAndRemovalPlan",
       "result": "pass",
-      "elapsed_seconds": 0.92
+      "elapsed_seconds": 0.78
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1172,31 +1172,31 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestPrepareBindsVerifiesAndProbes",
       "result": "pass",
-      "elapsed_seconds": 0.85
+      "elapsed_seconds": 0.76
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestPrepareRefusesAFailingStdioEndpoint",
       "result": "pass",
-      "elapsed_seconds": 0.57
+      "elapsed_seconds": 0.47
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestPrepareRefusesAnUnhealthyEngine",
       "result": "pass",
-      "elapsed_seconds": 0.52
+      "elapsed_seconds": 0.6
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestPrepareRefusesWhenSetupProducesNoIndex",
       "result": "pass",
-      "elapsed_seconds": 0.73
+      "elapsed_seconds": 0.52
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestPrepareRefusesWhenTheIndexAnswersNothing",
       "result": "pass",
-      "elapsed_seconds": 0.32
+      "elapsed_seconds": 0.29
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1208,13 +1208,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestPrepareVerifiesTheEndpointAgainstTheIndexsOwnAnswer",
       "result": "pass",
-      "elapsed_seconds": 0.34
+      "elapsed_seconds": 0.32
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestProbeAcceptsEvidenceFromStructuredContent",
       "result": "pass",
-      "elapsed_seconds": 0.44
+      "elapsed_seconds": 0.41
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1226,25 +1226,25 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestProbeRejectsAnEmptyResult",
       "result": "pass",
-      "elapsed_seconds": 0.42
+      "elapsed_seconds": 0.53
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestProbeRejectsAnMCPErrorResult",
       "result": "pass",
-      "elapsed_seconds": 0.44
+      "elapsed_seconds": 0.43
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestProbeRejectsContentFromAnotherIndex",
       "result": "pass",
-      "elapsed_seconds": 0.56
+      "elapsed_seconds": 0.43
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestRebuildRefusesAnIndexThatIsNoLongerMachineLocal",
       "result": "pass",
-      "elapsed_seconds": 0.23
+      "elapsed_seconds": 0.16
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1256,25 +1256,25 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestRebuildRefusesWhileTheEngineIsRunning",
       "result": "pass",
-      "elapsed_seconds": 0.25
+      "elapsed_seconds": 0.24
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestRebuildResumesTheEngineEvenWhenItFails",
       "result": "pass",
-      "elapsed_seconds": 0.2
+      "elapsed_seconds": 0.19
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestRebuildSelfHealsADeletedIndex",
       "result": "pass",
-      "elapsed_seconds": 0.19
+      "elapsed_seconds": 0.18
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestRebuildStopsAndResumesTheEngine",
       "result": "pass",
-      "elapsed_seconds": 0.22
+      "elapsed_seconds": 0.21
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1286,13 +1286,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestReclaimLeavesAnotherIndexAlone",
       "result": "pass",
-      "elapsed_seconds": 0.24
+      "elapsed_seconds": 0.23
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestReclaimStrandedResidentHolder",
       "result": "pass",
-      "elapsed_seconds": 2.28
+      "elapsed_seconds": 2.27
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1364,7 +1364,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestTheDaemonGatewayIsTokenProtected",
       "result": "pass",
-      "elapsed_seconds": 0.35
+      "elapsed_seconds": 0.23
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1382,7 +1382,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
       "test": "TestVerifyAcceptsThePinnedVersionAndRejectsOthers",
       "result": "pass",
-      "elapsed_seconds": 3.01
+      "elapsed_seconds": 2.85
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/gno",
@@ -1394,7 +1394,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestAConfigPathInsideARepositoryIsRefused",
       "result": "pass",
-      "elapsed_seconds": 0.06
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1418,7 +1418,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestAConfigThatNeverStopsChangingIsReportedRatherThanSpunOn",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.06
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1428,9 +1428,15 @@
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
+      "test": "TestAFailedCaptureLeavesNoContractFile",
+      "result": "pass",
+      "elapsed_seconds": 1.06
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestAGitManagedHomeIsRefusedUnlessTheConfigIsIgnored",
       "result": "pass",
-      "elapsed_seconds": 0.1
+      "elapsed_seconds": 0.07
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1454,7 +1460,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestAMachineWithoutTheEngineActivatedStillGetsItsConnector",
       "result": "pass",
-      "elapsed_seconds": 0.05
+      "elapsed_seconds": 0.07
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1490,61 +1496,61 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestAMalformedConfigThatCannotBeBackedUpFailsRatherThanSkipsQuietly",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestANewTokenReplacesTheOldOneAndLeavesNoTrace",
       "result": "pass",
-      "elapsed_seconds": 0.06
+      "elapsed_seconds": 0.1
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestANewTokenReplacesTheOldOneAndLeavesNoTrace/claude-code",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestANewTokenReplacesTheOldOneAndLeavesNoTrace/codex",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestARunThatCannotWriteConvergesOnTheNextRun",
       "result": "pass",
-      "elapsed_seconds": 0.1
+      "elapsed_seconds": 0.08
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestASymlinkedConfigDirIsJudgedByWhereItActuallyLands",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestATrackedConfigIsRefusedEvenWhenAnIgnoreRuleWouldMatch",
       "result": "pass",
-      "elapsed_seconds": 0.08
+      "elapsed_seconds": 0.07
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestAWriteThatWouldLoseConfigurationIsRefusedBeforeItHappens",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestAnEditLandingDuringTheMergeIsNotLost",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestAnEngineRenameRetiresTheOldEntry",
       "result": "pass",
-      "elapsed_seconds": 0.12
+      "elapsed_seconds": 0.11
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1556,7 +1562,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestBothHarnessesAreConfiguredWithDistinctGrantTokens",
       "result": "pass",
-      "elapsed_seconds": 0.06
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1568,43 +1574,43 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestCodexReadsBothConfiguredEndpointsFromWhatWeWrote",
       "result": "pass",
-      "elapsed_seconds": 1.5
+      "elapsed_seconds": 0.97
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestCodexResolvesTheTokenInAnEmptyEnvironment",
       "result": "pass",
-      "elapsed_seconds": 0.09
+      "elapsed_seconds": 0.06
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestConfigureHoldsTheLockAcrossTheWholeRun",
       "result": "pass",
-      "elapsed_seconds": 0.1
+      "elapsed_seconds": 0.06
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestConfigureRefusesToRunWhenTheLockCannotBeTaken",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestCreatingAConfigFromNothingProducesOnlyManagedEntries",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestCreatingAConfigFromNothingProducesOnlyManagedEntries/claude",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestCreatingAConfigFromNothingProducesOnlyManagedEntries/codex",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1640,13 +1646,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestFromClaudeCodeBothConfiguredEndpointsAnswer",
       "result": "pass",
-      "elapsed_seconds": 2.98
+      "elapsed_seconds": 1.18
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestJSONLayoutIsPreserved",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1658,7 +1664,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestOnlyRestrictsTheRunAndUnknownHarnessesAreRefused",
       "result": "pass",
-      "elapsed_seconds": 0.04
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1670,13 +1676,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestReRunningSupersedesTheGrantAndLeavesOneTokenPerHarness",
       "result": "pass",
-      "elapsed_seconds": 0.1
+      "elapsed_seconds": 0.11
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestRecordsHoldNoTokenAndAreOwnerOnly",
       "result": "pass",
-      "elapsed_seconds": 0.08
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1706,13 +1712,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestRetiringAnEntryRemovesItAndNothingElse",
       "result": "pass",
-      "elapsed_seconds": 0.06
+      "elapsed_seconds": 0.08
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestRetiringAnEntryRemovesItAndNothingElse/claude-code",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1724,19 +1730,19 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestRewritingIsIdempotentDownToTheByte",
       "result": "pass",
-      "elapsed_seconds": 0.04
+      "elapsed_seconds": 0.06
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestRewritingIsIdempotentDownToTheByte/claude-code",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestRewritingIsIdempotentDownToTheByte/codex",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1830,9 +1836,27 @@
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
+      "test": "TestTheCaptureFailsWhenAProbeFails",
+      "result": "pass",
+      "elapsed_seconds": 3.82
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
+      "test": "TestTheCaptureFailsWhenProbesSucceedButReportNothing",
+      "result": "pass",
+      "elapsed_seconds": 2.44
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestTheCodexEntryCarriesItsTokenWithNoEnvironmentIndirection",
       "result": "pass",
-      "elapsed_seconds": 0.04
+      "elapsed_seconds": 0.02
+    },
+    {
+      "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
+      "test": "TestTheCommittedGrokContractIsComplete",
+      "result": "pass",
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
@@ -1850,61 +1874,61 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestWriteAddsManagedEntriesAndPreservesEverythingElse",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestWriteAddsManagedEntriesAndPreservesEverythingElse/claude-code",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestWriteAddsManagedEntriesAndPreservesEverythingElse/codex",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestWrittenConfigsAreOwnerOnly",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.05
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestWrittenConfigsAreOwnerOnly/claude-code",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/harness",
       "test": "TestWrittenConfigsAreOwnerOnly/codex",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestCredentialBearingSkillIsRejectedAgainstRealHarnesses",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverClaudeReadsInitEvent",
       "result": "pass",
-      "elapsed_seconds": 2.55
+      "elapsed_seconds": 1.97
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverClaudeSkipsHookPrelude",
       "result": "pass",
-      "elapsed_seconds": 0.74
+      "elapsed_seconds": 0.84
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverCodexReadsPromptInput",
       "result": "pass",
-      "elapsed_seconds": 0.75
+      "elapsed_seconds": 0.73
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -1916,25 +1940,25 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverFindsWellFormedSkills",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverKeepsBaselineSkillsLinkable",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverMarksCollectionUnsupported",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverMarksInitiativeBearingUnsupported",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -1946,7 +1970,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverMarksInitiativeBearingUnsupported/restart",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -1958,7 +1982,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverMarksInitiativeInBundledScripts",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -1982,13 +2006,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverReadsBlockScalarDescriptions",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverReadsBlockScalarDescriptions/folded",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -2000,19 +2024,19 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsCredentialMaterial",
       "result": "pass",
-      "elapsed_seconds": 0.05
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsCredentialMaterial/anthropic_key_in_prose",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsCredentialMaterial/assigned_secret",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -2024,13 +2048,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsCredentialMaterial/pem_file",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsCredentialMaterial/private_key_body",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -2042,19 +2066,19 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsCredentialMaterial/sqlite_state",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsEscapingLinks",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsMalformedFrontmatter",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -2066,13 +2090,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsMalformedFrontmatter/no_frontmatter",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsMalformedFrontmatter/no_name",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -2084,43 +2108,43 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsMalformedFrontmatter/unclosed",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsSkillLinkedFromOutsideTheVault",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverRejectsUnusableHarnessOutput",
       "result": "pass",
-      "elapsed_seconds": 3.15
+      "elapsed_seconds": 3.07
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverScansTheSizeBoundary",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverScansTheSizeBoundary/exactly_at_the_limit",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverScansTheSizeBoundary/just_over_the_limit",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestDiscoverScansTheSizeBoundary/just_under_the_limit",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -2354,19 +2378,19 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestRealHarnessesDiscoverRealVaultSkills",
       "result": "pass",
-      "elapsed_seconds": 2.16
+      "elapsed_seconds": 1.13
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestRealVaultHarnessSpecificSkillsAreMarkedUnsupported",
       "result": "pass",
-      "elapsed_seconds": 0.28
+      "elapsed_seconds": 0.26
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestRealVaultStillHasTheMarkedIncompatibility",
       "result": "pass",
-      "elapsed_seconds": 0.27
+      "elapsed_seconds": 0.26
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
@@ -2390,13 +2414,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestVerifyFailsWhenTheHarnessDoesNotSeeTheSkill",
       "result": "pass",
-      "elapsed_seconds": 1.42
+      "elapsed_seconds": 1.38
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/skills",
       "test": "TestVerifyPassesAndSkipsEmptyHarnesses",
       "result": "pass",
-      "elapsed_seconds": 0.42
+      "elapsed_seconds": 0.41
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
@@ -2420,7 +2444,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
       "test": "TestCrashLoopDetection",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
@@ -2456,7 +2480,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
       "test": "TestInstallAndUninstall/systemd",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
@@ -2480,7 +2504,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
       "test": "TestLedgerIsBounded",
       "result": "pass",
-      "elapsed_seconds": 0.72
+      "elapsed_seconds": 0.71
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
@@ -2516,7 +2540,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
       "test": "TestProcessProbeUsesARecordedExitWhenThereIsOne",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
@@ -2582,13 +2606,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
       "test": "TestSummaryReportsPidAndExit",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
       "test": "TestSupervisorProbeLaunchd",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/supervise",
@@ -2660,7 +2684,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestAmbientAuthTokenIsNotInherited",
       "result": "pass",
-      "elapsed_seconds": 0.64
+      "elapsed_seconds": 0.84
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -2696,7 +2720,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestAuthTokenTravelsThroughTheEnvironment",
       "result": "pass",
-      "elapsed_seconds": 0.75
+      "elapsed_seconds": 0.63
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -2714,25 +2738,25 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestClassifiesAuthAndNetworkFailures",
       "result": "pass",
-      "elapsed_seconds": 1.9
+      "elapsed_seconds": 1.71
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestClassifiesAuthAndNetworkFailures/auth",
       "result": "pass",
-      "elapsed_seconds": 0.88
+      "elapsed_seconds": 0.62
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestClassifiesAuthAndNetworkFailures/network",
       "result": "pass",
-      "elapsed_seconds": 0.59
+      "elapsed_seconds": 0.57
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestClassifiesAuthAndNetworkFailures/other",
       "result": "pass",
-      "elapsed_seconds": 0.44
+      "elapsed_seconds": 0.51
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -2750,13 +2774,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestContractSmokeExpectsAnUnconfiguredRefusal",
       "result": "pass",
-      "elapsed_seconds": 0.21
+      "elapsed_seconds": 0.19
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestContractSmokeRejectsAnOverlyPermissiveBinary",
       "result": "pass",
-      "elapsed_seconds": 0.43
+      "elapsed_seconds": 0.64
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -2834,7 +2858,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestE2EPasswordTravelsThroughStdin",
       "result": "pass",
-      "elapsed_seconds": 0.61
+      "elapsed_seconds": 0.63
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -2846,7 +2870,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestErrorsAreRedacted",
       "result": "pass",
-      "elapsed_seconds": 0.67
+      "elapsed_seconds": 0.66
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -2858,7 +2882,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestFallbackIsNotUsedForAuthFailures",
       "result": "pass",
-      "elapsed_seconds": 0.31
+      "elapsed_seconds": 0.2
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -2900,31 +2924,31 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestInstallResetsTheRestartLedger",
       "result": "pass",
-      "elapsed_seconds": 0.32
+      "elapsed_seconds": 0.33
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestInstalledUnitCarriesTheResolvedCLIPath",
       "result": "pass",
-      "elapsed_seconds": 0.45
+      "elapsed_seconds": 0.29
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestInstalledUnitIsSecretFree",
       "result": "pass",
-      "elapsed_seconds": 0.44
+      "elapsed_seconds": 0.42
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestLifecycleSmokeRefusesWhenTheDisposableVaultIsDestroyed",
       "result": "pass",
-      "elapsed_seconds": 0.2
+      "elapsed_seconds": 0.29
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestLifecycleSmokeRunsSetupBeforeSync",
       "result": "pass",
-      "elapsed_seconds": 0.22
+      "elapsed_seconds": 0.21
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -2942,7 +2966,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestLoginCapturesTheTokenWithoutArgvExposure",
       "result": "pass",
-      "elapsed_seconds": 0.14
+      "elapsed_seconds": 0.21
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -2954,7 +2978,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestLoginSurfacesAuthFailure",
       "result": "pass",
-      "elapsed_seconds": 0.2
+      "elapsed_seconds": 0.11
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -3002,19 +3026,19 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestPrepareRunsTheWholeSafetySequence",
       "result": "pass",
-      "elapsed_seconds": 0.14
+      "elapsed_seconds": 0.17
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestPrepareSurfacesAnUnconfiguredVault",
       "result": "pass",
-      "elapsed_seconds": 0.44
+      "elapsed_seconds": 0.43
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestPrepareSurfacesAuthFailureWithoutSupervising",
       "result": "pass",
-      "elapsed_seconds": 0.55
+      "elapsed_seconds": 0.41
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -3038,25 +3062,25 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrieveConfiguresModeOnlyAfterSetup",
       "result": "pass",
-      "elapsed_seconds": 0.22
+      "elapsed_seconds": 0.2
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrieveDistinguishesAuthFailureFromNoVault",
       "result": "pass",
-      "elapsed_seconds": 0.44
+      "elapsed_seconds": 0.34
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrieveDistinguishesAuthFailureFromNoVault/auth_failure",
       "result": "pass",
-      "elapsed_seconds": 0.19
+      "elapsed_seconds": 0.12
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrieveDistinguishesAuthFailureFromNoVault/network_failure",
       "result": "pass",
-      "elapsed_seconds": 0.12
+      "elapsed_seconds": 0.11
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -3068,43 +3092,43 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrieveDistinguishesAuthFailureFromNoVault/no_remote_vault",
       "result": "pass",
-      "elapsed_seconds": 0.12
+      "elapsed_seconds": 0.11
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrieveFailsLoudlyIfBidirectionalCannotBeRestored",
       "result": "pass",
-      "elapsed_seconds": 0.25
+      "elapsed_seconds": 0.22
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrieveFallsBackToTheObsidianApp",
       "result": "pass",
-      "elapsed_seconds": 0.32
+      "elapsed_seconds": 0.31
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrievePullsAnAbsentVault",
       "result": "pass",
-      "elapsed_seconds": 0.15
+      "elapsed_seconds": 0.18
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrieveRefusesAnExistingVault",
       "result": "pass",
-      "elapsed_seconds": 0.3
+      "elapsed_seconds": 0.29
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrieveRefusesToGuessBetweenRemoteVaults",
       "result": "pass",
-      "elapsed_seconds": 0.16
+      "elapsed_seconds": 0.31
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestRetrieveSelectsANamedRemote",
       "result": "pass",
-      "elapsed_seconds": 0.24
+      "elapsed_seconds": 0.31
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -3200,7 +3224,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestStreamIsNotKilledByTheOneShotTimeout",
       "result": "pass",
-      "elapsed_seconds": 1.06
+      "elapsed_seconds": 1.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -3230,7 +3254,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestVerifyAcceptsThePinnedBuild",
       "result": "pass",
-      "elapsed_seconds": 1.8
+      "elapsed_seconds": 0.82
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -3254,7 +3278,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestVerifyRefusesAVersionMismatch",
       "result": "pass",
-      "elapsed_seconds": 3.29
+      "elapsed_seconds": 2.51
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -3266,7 +3290,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
       "test": "TestVerifyResolvesTheShimSymlink",
       "result": "pass",
-      "elapsed_seconds": 0.74
+      "elapsed_seconds": 0.83
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/agent/vault",
@@ -3422,13 +3446,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestAuditRowsAreMetadataOnly",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestCapabilitiesAreServerPolicyBound",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
@@ -3458,13 +3482,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestCredentialEndpointsAreAbsentWithoutAManifest",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestCredentialFlowEndpointsRequireAMachineCredential",
       "result": "pass",
-      "elapsed_seconds": 0.06
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
@@ -3506,19 +3530,19 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestCredentialReplayedFromAnotherMachineIsForbidden",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestCrossMachineGrantIssuanceIsImpossible",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestDenialsFailClosedWhenTheyCannotBeRecorded",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
@@ -3548,31 +3572,31 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestEnrolAutoApprovesTailnetNodeAndAudits",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestEnrolWithoutTailnetIdentityIsRefused",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestGrantForOtherHarnessIsIndependent",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestGrantSupersedesPriorGrantForSameHarness",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestHealthzReportsServerComponentsOnly",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
@@ -3596,31 +3620,31 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestListGrantsIsScopedToCallerAndNonSecret",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestMutationFailsWhenItsAuditRecordCannotBeWritten",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestReenrolRotatesCredentialInPlace",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestRejectedCredentialFlowCallsAreAudited",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestRevocationIsIdempotentAndScoped",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
@@ -3644,7 +3668,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
       "test": "TestUnauthenticatedAndUnenrolledCallsAreRejected",
       "result": "pass",
-      "elapsed_seconds": 0.05
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server",
@@ -3674,7 +3698,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
       "test": "TestAMalformedNameDoesNotPreventPersistingTheDenial",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/connectors",
@@ -4454,13 +4478,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
       "test": "TestARelayedFlowIsNotExpiredByTheConsentWindow",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.04
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
       "test": "TestARelayedFlowIsNotExpiredByTheConsentWindow/exchange_fails_after_the_deadline",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
@@ -4502,7 +4526,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
       "test": "TestCommitHookFailureDoesNotUnstoreTheCredential",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
@@ -4514,7 +4538,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
       "test": "TestCommitHookRunsBeforeTheFlowReportsCompleted",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
@@ -4532,7 +4556,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
       "test": "TestCredentialIsImmediatelyVisibleToAGrantHoldingCaller",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
@@ -4706,7 +4730,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
       "test": "TestRelayReturnsBeforeTheExchangeFinishes",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
@@ -4724,7 +4748,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
       "test": "TestSecondProviderOnboardsThroughTheManifestAlone/beta",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
@@ -4754,7 +4778,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
       "test": "TestSuccessfulDeliveryLeavesACleanOutcome",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
@@ -4766,7 +4790,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
       "test": "TestTerminalEventsCarryTheActorThatCausedThem/exchange_failure_is_the_server's_job",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
@@ -4778,7 +4802,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
       "test": "TestTerminalEventsCarryTheActorThatCausedThem/relayed_denial_is_the_machine's_report",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/credflow",
@@ -4832,7 +4856,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestBatchedFramesAreRefusedRatherThanForwarded",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -4844,7 +4868,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestCallsAreRefusedWhenTheAuditLogIsBroken/admitted_call",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -4856,7 +4880,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestCapabilityMissingIsDeniedAndAudited",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -4868,13 +4892,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestEachMachineIsBoundToItsOwnGrant",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestGatewayIsUnreachableOffLoopbackWhileTheEdgeIsReachable",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -4892,7 +4916,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestManifestRefusalsAreDeniedAndAudited",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -4904,13 +4928,13 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestManifestRefusalsAreDeniedAndAudited/qualified_unmapped_tool",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestManifestRefusalsAreDeniedAndAudited/unknown_connector",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -4928,7 +4952,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestNoPayloadReachesTheAuditLog",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -4940,7 +4964,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestReplayedTokenFromAnotherNodeIsRejectedAndAudited",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -4952,7 +4976,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestRevokedGrantStopsWorkingImmediately",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -4976,19 +5000,19 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestSilentGatewayDoesNotHangForwardedFrames",
       "result": "pass",
-      "elapsed_seconds": 0.25
+      "elapsed_seconds": 0.26
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestTransportFramesAreForwardedWithoutTheGrantToken",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestTransportFramesRequireAuthentication",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -5000,7 +5024,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
       "test": "TestUnreachableGatewayIsReportedAsGatewayFailure",
       "result": "pass",
-      "elapsed_seconds": 0
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/edge",
@@ -5024,7 +5048,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/server/workloadcred",
       "test": "TestMaterializeOmitsAnUnknownExpiry",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/server/workloadcred",
@@ -5066,7 +5090,7 @@
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
       "test": "TestEnrolIsIdentityPreservingRotation",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/internal/store",
@@ -5198,7 +5222,7 @@
       "package": "github.com/DanielKillenberger/homeplane/test/deploy",
       "test": "TestDeployScriptsAreSyntacticallyValid",
       "result": "pass",
-      "elapsed_seconds": 0.04
+      "elapsed_seconds": 0.03
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/deploy",
@@ -5216,7 +5240,7 @@
       "package": "github.com/DanielKillenberger/homeplane/test/deploy",
       "test": "TestDeployedManifestIsValid",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/deploy",
@@ -5258,7 +5282,7 @@
       "package": "github.com/DanielKillenberger/homeplane/test/deploy",
       "test": "TestStagingBuildsTheServerArtifact",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/deploy",
@@ -5276,25 +5300,25 @@
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestABunArchiveWithoutARuntimeIsRejectedBeforeTheSwap",
       "result": "pass",
-      "elapsed_seconds": 0.61
+      "elapsed_seconds": 0.62
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestAFailedInstallRestoresThePreviousNodeRuntime",
       "result": "pass",
-      "elapsed_seconds": 1.41
+      "elapsed_seconds": 1.88
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestAFailureAfterTheNodeSwapRollsTheRuntimeBack",
       "result": "pass",
-      "elapsed_seconds": 1.26
+      "elapsed_seconds": 1.23
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestAReleaseWithoutABundledNodeBinaryIsRejectedBeforeTheSwap",
       "result": "pass",
-      "elapsed_seconds": 0.85
+      "elapsed_seconds": 0.82
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
@@ -5306,19 +5330,19 @@
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestAnArtifactThatCannotRunHereIsRefusedAndLeavesTheOldAgentInPlace",
       "result": "pass",
-      "elapsed_seconds": 0.67
+      "elapsed_seconds": 0.6
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestBunIsProvisionedFromTheChecksummedArchive",
       "result": "pass",
-      "elapsed_seconds": 1.87
+      "elapsed_seconds": 1.76
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestInstallPlacesTheAgentAndIsIdempotent",
       "result": "pass",
-      "elapsed_seconds": 1.53
+      "elapsed_seconds": 1.35
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
@@ -5342,13 +5366,13 @@
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestLinuxWithoutAUsableUserManagerIsRejectedBeforeInstalling",
       "result": "pass",
-      "elapsed_seconds": 0.03
+      "elapsed_seconds": 0.02
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestLinuxWithoutAUsableUserManagerIsRejectedBeforeInstalling/no_user_bus",
       "result": "pass",
-      "elapsed_seconds": 0.02
+      "elapsed_seconds": 0.01
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
@@ -5366,7 +5390,7 @@
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestMissingBunWithoutAStagedArchiveFailsTheInstall",
       "result": "pass",
-      "elapsed_seconds": 1.7
+      "elapsed_seconds": 1.78
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
@@ -5378,13 +5402,13 @@
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestMissingNodeWithoutAProvisioningSourceFailsTheInstall",
       "result": "pass",
-      "elapsed_seconds": 0.52
+      "elapsed_seconds": 0.49
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestNodeIsProvisionedFromTheChecksummedTarball",
       "result": "pass",
-      "elapsed_seconds": 1.75
+      "elapsed_seconds": 1.27
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
@@ -5408,25 +5432,25 @@
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestSkipNodeStagesAnAgentOnlyRelease",
       "result": "pass",
-      "elapsed_seconds": 0.65
+      "elapsed_seconds": 0.63
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestStagedReleaseInstallsOntoAMachineWithNoNodeAtAll",
       "result": "pass",
-      "elapsed_seconds": 0.97
+      "elapsed_seconds": 0.95
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestStagingRefusesARuntimeThatFailsItsPinnedChecksum",
       "result": "pass",
-      "elapsed_seconds": 0.36
+      "elapsed_seconds": 0.32
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestStagingVerifiesTheBunArchiveAgainstThePin",
       "result": "pass",
-      "elapsed_seconds": 1.16
+      "elapsed_seconds": 1.1
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
@@ -5438,13 +5462,13 @@
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestTamperedBunArchiveAbortsBeforeInstallingTheAgent",
       "result": "pass",
-      "elapsed_seconds": 1.26
+      "elapsed_seconds": 1.23
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestTamperedNodeTarballAbortsBeforeInstallingTheAgent",
       "result": "pass",
-      "elapsed_seconds": 0.85
+      "elapsed_seconds": 0.83
     },
     {
       "package": "github.com/DanielKillenberger/homeplane/test/install",
@@ -5474,7 +5498,7 @@
       "package": "github.com/DanielKillenberger/homeplane/test/install",
       "test": "TestUnsupportedOperatingSystemIsRejected",
       "result": "pass",
-      "elapsed_seconds": 0.01
+      "elapsed_seconds": 0
     }
   ],
   "result": "pass",
@@ -5593,7 +5617,21 @@
           "byte-span discipline applies to this key too - semantic-preserving, rest of [compat.claude] untouched",
           "must be re-asserted on idempotent re-runs, like the 0600 mode",
           "[compat.claude] skills stays ON - grok seeing Claude's skills is a feature"
-        ]
+        ],
+        "measured_other_compat_sources": {
+          "cursor_user_scope": "~/.cursor/mcp.json exists but is EMPTY (0 bytes) - contributes nothing today",
+          "cursor_project_scope": "no .cursor/mcp.json in this repo",
+          "with_claude_mcps_disabled": "grok inspect shows homeplane, gno and rize still LISTED but marked [disabled]; no cursor-sourced server appears",
+          "merge_order": "config.toml > claude > cursor > .mcp.json - disabling claude promotes cursor to the next inheriting source",
+          "conclusion": "D4 achieves exclusivity TODAY as a matter of current contents, not as a structural guarantee",
+          "r6_note": "[disabled] entries are still LISTED - status modelling must read the disabled marker, not mere presence"
+        }
+      },
+      "D4b_other_compat_sources": {
+        "status": "OPEN - needs Daniel",
+        "recommendation": "also set [compat.cursor] mcps = false, making the isolation structural rather than contingent on ~/.cursor/mcp.json staying empty; it costs nothing today precisely because cursor defines nothing",
+        "residual": ".mcp.json is project-scope and cannot be settled by a user-config key; R6's status surface should report active compat sources so inheritance stays visible",
+        "not_assumed_by": "task .2"
       }
     },
     "acceptance": {
@@ -5602,7 +5640,8 @@
       "d1_d2_d3_marked_resolved_in_spec": true,
       "config_bearing_grok_surfaces_byte_identical": true,
       "whole_grok_home_byte_identical": false,
-      "whole_grok_home_note": "not demonstrable while Daniel's three live sessions run; the probe was proven not to have caused the one stable-surface change"
+      "whole_grok_home_note": "not demonstrable while Daniel's three live sessions run; the probe was proven not to have caused the one stable-surface change",
+      "whole_grok_home_byte_identical_note": "ratified limitation - see ratified_limitations[0]; the literal criterion was not met and is not claimed. Non-interference and attribution were proven instead."
     },
     "findings_resolved_by_daniel": [
       {
@@ -5618,6 +5657,19 @@
         "recommendation": "the second, scoped and explicit \u2014 but it is Daniel's call and task .2 must not assume it",
         "note": "the same default also makes grok discover Claude's skills including the vault-authored homeplane-capabilities; that is likely desirable and should be left on",
         "status": "RESOLVED by Daniel 2026-08-14 - see resolved_decisions.D4_compat_isolation"
+      }
+    ],
+    "ratified_limitations": [
+      {
+        "id": "whole-grok-home-byte-identity",
+        "criterion": "task acceptance: 'Real ~/.grok left byte-identical to pre-probe state (snapshot-verified)'",
+        "status": "NOT satisfied literally; ratified as a narrower criterion in docs/decisions/fn3-grok-surfaces.md",
+        "why": "~/.grok is live: Daniel's three grok sessions ran throughout and continuously wrote sessions/, logs/, memtrace/, active_sessions.json and models_cache.json. Whole-directory identity could only be shown by stopping his running sessions, which this task deliberately declined to do.",
+        "what_was_proven": [
+          "non-interference: config.toml, skills/ and hooks/ byte-identical, config.toml mtime predating the probe window",
+          "attribution: the one changed stable-surface file (models_cache.json) shown not ours by re-running the isolated probes"
+        ],
+        "to_satisfy_literally": "re-run the probe against a quiescent grok home with no live sessions"
       }
     ]
   }
