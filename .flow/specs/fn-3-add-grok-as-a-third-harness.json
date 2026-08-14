@@ -10,7 +10,9 @@
     "fn-1-homeplane-walking-skeleton-install"
   ],
   "id": "fn-3-add-grok-as-a-third-harness",
-  "impl_review_rounds": {},
+  "impl_review_rounds": {
+    "fn-3-add-grok-as-a-third-harness.1": 1
+  },
   "next_task": 1,
   "plan_review_rounds": 0,
   "plan_review_status": "ship",
@@ -94,8 +96,18 @@
     "plan": 1,
     "plan#completion": 0
   },
-  "review_pending_rounds": {},
-  "review_reservations": {},
+  "review_pending_rounds": {
+    "impl:fn-3-add-grok-as-a-third-harness.1": 1
+  },
+  "review_reservations": {
+    "61f0fac4dc5d464d907365ba284e14f7": {
+      "artifact_sha256": "139b0b1767a4986ec47e808027f1110c06565baa0d7a0aabdd8c5583761fe7df",
+      "counter_scope": "impl:fn-3-add-grok-as-a-third-harness.1",
+      "epoch": 0,
+      "forced": false,
+      "review_type": "impl"
+    }
+  },
   "review_transport_failures": {
     "plan": 0
   },
@@ -113,5 +125,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-08-14T20:53:19.164682Z"
+  "updated_at": "2026-08-14T21:07:45.431457Z"
 }

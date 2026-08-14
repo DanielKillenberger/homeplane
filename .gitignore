@@ -22,3 +22,6 @@ spike/edge-proxy/edge-proxy
 # Python bytecode from scripts/
 __pycache__/
 *.pyc
+
+# flow-next transient run artifacts (regenerable; includes lock files)
+.flow/artifacts/
