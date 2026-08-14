@@ -958,24 +958,36 @@ func SupervisorQuiesce(stateDir string, cfg Config, installer supervise.Installe
 		if err != nil {
 			return nil, err
 		}
-		for _, c := range stop {
-			if err := installer.Runner(c.Name, c.Args...); err != nil {
-				return nil, fmt.Errorf("%s: %w", c, err)
-			}
+		if err := installer.RunCommands(stop); err != nil {
+			return nil, err
+		}
+		// The engine is stopped now, so a holder that outlived a PREVIOUS engine
+		// is the only thing that can still be holding the index. Reclaiming here
+		// rather than before the stop is what keeps this from killing the live
+		// engine's own holder out from under it.
+		if res, rErr := ReclaimResidentRuntime(ctx, dataDirFor(stateDir, cfg), 3*time.Second); rErr == nil && res.Cleared() {
+			// Nothing to report to the caller: the resume below brings the
+			// engine back, and the reclaim is only ever removing something no
+			// engine owns any more.
+			_ = res
 		}
 		return func() error {
 			start, err := installer.StartCommands(unit, uid)
 			if err != nil {
 				return err
 			}
-			for _, c := range start {
-				if err := installer.Runner(c.Name, c.Args...); err != nil {
-					return fmt.Errorf("%s: %w", c, err)
-				}
-			}
-			return nil
+			return installer.RunCommands(start)
 		}, nil
 	}
 }
 
 func currentUID() string { return strconv.Itoa(os.Getuid()) }
+
+// dataDirFor is the engine's machine-local index directory: what the config
+// recorded, or the default for this state directory when it recorded nothing.
+func dataDirFor(stateDir string, cfg Config) string {
+	if cfg.Paths.Data != "" {
+		return cfg.Paths.Data
+	}
+	return DefaultPaths(stateDir).Data
+}

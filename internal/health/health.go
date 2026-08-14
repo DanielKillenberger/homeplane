@@ -31,6 +31,11 @@ const (
 	ComponentGatewayRuntime  = "gateway_runtime"
 	ComponentTsnet           = "tsnet"
 	ComponentCredentialStore = "credential_store"
+	// ComponentWorkloadCredential is the delivery of a brokered credential into
+	// the connector workload's own directory. It is a SERVER component: the
+	// credential is stored here, materialized here, and read by a workload
+	// running here.
+	ComponentWorkloadCredential = "workload_credential"
 )
 
 // Probe is a component liveness check. A nil error means healthy.

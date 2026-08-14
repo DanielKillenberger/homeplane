@@ -28,11 +28,16 @@
 package e2e_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DanielKillenberger/homeplane/internal/health"
 )
 
 func TestEndToEndProof(t *testing.T) {
@@ -112,90 +117,223 @@ func stageTruthTable(s *stage) {
 		gnoState != "ok" && syncState != "ok" && res.ExitCode != 0,
 		"exit %d; gno=%s (%s); sync=%s (%s)", res.ExitCode, gnoState, firstLine(gnoDetail), syncState, syncDetail)
 
-	health := s.run("server /healthz over the tailnet", 30*time.Second, "curl", "-sf", "-m", "20",
+	healthyProbe := s.run("server /healthz over the tailnet", 30*time.Second, "curl", "-sf", "-m", "20",
 		s.env.serverURL+"/healthz")
 	s.assert("/healthz is 2xx and green while the server is healthy",
-		health.ExitCode == 0 && strings.Contains(health.full, `"status":"ok"`),
-		"curl exit %d: %s", health.ExitCode, firstLine(health.Stdout))
+		healthyProbe.ExitCode == 0 && strings.Contains(healthyProbe.full, `"status":"ok"`),
+		"curl exit %d: %s", healthyProbe.ExitCode, firstLine(healthyProbe.Stdout))
 	s.assert("/healthz reports server components only — no machine state",
-		!strings.Contains(health.full, "vault") && !strings.Contains(health.full, "gno") &&
-			!strings.Contains(health.full, "harness"),
-		"%s", firstLine(health.Stdout))
+		!strings.Contains(healthyProbe.full, "vault") && !strings.Contains(healthyProbe.full, `"gno"`) &&
+			!strings.Contains(healthyProbe.full, "harness"),
+		"%s", firstLine(healthyProbe.Stdout))
 
-	// 2. A revoked grant. The revocation stage leaves the machine restored, so
-	// this mode is produced here on purpose and undone at the end.
-	rep, _ = s.status()
+	truthModeRevokedGrant(s)
+	truthModeServerUnreachable(s)
+	truthModeEngineDown(s)
+	truthModeVaultMissing(s)
+	truthModeGatewayDown(s)
+}
+
+// truthModeRevokedGrant — a grant revoked out from under the machine must show
+// up in `status` because it was reconciled live, not because anything on this
+// machine noticed.
+func truthModeRevokedGrant(s *stage) {
+	rep, _ := s.status()
 	var victim string
 	for _, g := range rep.Grants {
 		if g.State == "active" && g.Harness == "codex" {
 			victim = g.GrantID
 		}
 	}
-	if victim != "" {
-		s.ssh("server: revoke the codex grant (truth-table mode)", 60*time.Second,
-			fmt.Sprintf("%s/bin/homeplane-server admin revoke-grant -state-dir %s %s",
-				serverPrefix(s.env), s.env.serverStateDir, victim))
-		rep, res = s.status()
-		var sawRevoked bool
-		for _, g := range rep.Grants {
-			if g.GrantID == victim && g.State == "revoked" {
-				sawRevoked = true
-			}
+	if victim == "" {
+		s.assert("a grant was available to revoke for the truth table", false, "no active codex grant")
+		return
+	}
+	rev := s.ssh("server: revoke the codex grant (truth-table mode)", 60*time.Second,
+		fmt.Sprintf("%s/bin/homeplane-server admin revoke-grant -state-dir %s %s",
+			serverPrefix(s.env), s.env.serverStateDir, victim))
+	if !s.assert("the truth-table revocation was performed", rev.ExitCode == 0,
+		"exit %d: %s", rev.ExitCode, firstLine(rev.Stdout+rev.Stderr)) {
+		return
+	}
+	rep, res := s.status()
+	var sawRevoked bool
+	for _, g := range rep.Grants {
+		if g.GrantID == victim && g.State == "revoked" {
+			sawRevoked = true
 		}
-		s.assert("status reports a revoked grant truthfully, reconciled live", sawRevoked,
-			"grants %+v (exit %d)", rep.Grants, res.ExitCode)
-		restore := s.agent("homeplane-agent configure-harnesses (undo the truth-table revocation)",
-			5*time.Minute, "configure-harnesses", "-json")
-		s.assert("the machine is restored after the revoked-grant mode", restore.ExitCode == 0,
-			"exit %d%s", restore.ExitCode, tail(restore.Stderr))
 	}
+	s.assert("status reports a revoked grant truthfully, reconciled live", sawRevoked,
+		"grant %s state after revocation (exit %d)", victim, res.ExitCode)
 
-	// 3. Server unreachable. status must say `unknown (server unreachable)` for
-	// grants rather than reporting cached state as live, and must not pretend
-	// the machine is fine.
-	unreachable := s.agent("homeplane-agent status against an unreachable server", 90*time.Second,
-		"status", "-json", "-server", "http://127.0.0.1:9")
-	s.assert("status distinguishes an unreachable server from an active grant",
-		strings.Contains(unreachable.full, "unknown") || strings.Contains(unreachable.full, "unreachable") ||
-			unreachable.ExitCode != 0,
-		"exit %d: %s", unreachable.ExitCode, firstLine(unreachable.Stdout))
+	restore := s.agent("homeplane-agent configure-harnesses (undo the truth-table revocation)",
+		5*time.Minute, "configure-harnesses", "-json")
+	s.assert("the machine is restored after the revoked-grant mode", restore.ExitCode == 0,
+		"exit %d%s", restore.ExitCode, tail(restore.Stderr))
+}
 
-	// 4. The retrieval engine down. A machine-local failure: status degrades and
-	// exits non-zero, and /healthz — which knows nothing about this machine —
-	// must stay green.
-	stop := s.agent("homeplane-agent gno deactivate (machine-local failure mode)", 3*time.Minute,
-		"gno", "deactivate")
-	if stop.ExitCode == 0 {
-		rep, res = s.status()
-		state, detail := s.component(rep, "gno")
-		s.assert("status degrades and exits non-zero when the engine is down",
-			res.ExitCode != 0 && state != "ok", "exit %d, gno %s (%s)", res.ExitCode, state, detail)
-
-		health = s.run("server /healthz while THIS machine is degraded", 30*time.Second,
-			"curl", "-sf", "-m", "20", s.env.serverURL+"/healthz")
-		s.assert("a machine-local failure never reaches the server's /healthz",
-			health.ExitCode == 0 && strings.Contains(health.full, `"status":"ok"`),
-			"curl exit %d: %s", health.ExitCode, firstLine(health.Stdout))
-
-		restart := s.agent("homeplane-agent gno activate (restore)", 20*time.Minute, "gno", "activate")
-		s.assert("the retrieval engine is restored", restart.ExitCode == 0,
-			"exit %d%s", restart.ExitCode, tail(restart.Stderr))
-	} else {
-		s.recordLimitation("the engine-down mode was exercised",
-			"gno deactivate exited "+fmt.Sprint(stop.ExitCode)+"; the mode was not produced, so nothing is claimed for it")
+// truthModeServerUnreachable — the mode is produced by pointing a COPY of this
+// machine's state at an address nothing answers on.
+//
+// A copy, because the alternative is taking the real server away from a machine
+// mid-proof; and a copy of the STATE rather than a flag, because `status` has no
+// flag for this and inventing one would test the flag instead of the machine.
+func truthModeServerUnreachable(s *stage) {
+	dir, err := copyStateDir(s, "unreachable")
+	if err != nil {
+		s.assert("a state copy could be made for the unreachable-server mode", false, "%v", err)
+		return
 	}
+	if err := rewriteState(dir, func(m map[string]any) { m["server_url"] = "http://127.0.0.1:9" }); err != nil {
+		s.assert("the state copy could be pointed at an unreachable server", false, "%v", err)
+		return
+	}
+	res := s.agent("homeplane-agent status against an unreachable server", 2*time.Minute,
+		"status", "-json", "-state-dir", dir)
+	var rep statusReport
+	_ = json.Unmarshal([]byte(res.full), &rep)
+	serverState, serverDetail := s.component(rep, "server")
+	var live, unknown int
+	for _, g := range rep.Grants {
+		switch g.State {
+		case "active", "revoked":
+			live++
+		default:
+			unknown++
+		}
+	}
+	s.assert("an unreachable server is reported as unreachable, and grant state as unknown",
+		res.ExitCode != 0 && serverState != "ok" && live == 0,
+		"exit %d; server=%s (%s); %d live-looking grant(s), %d unknown",
+		res.ExitCode, serverState, firstLine(serverDetail), live, unknown)
+}
 
-	// 5. Vault missing. Pointing detection at a path that is not a vault must be
-	// refused rather than recorded, which is the same truthfulness from the
-	// other side: status never gains a vault the machine does not have.
-	bogus := s.agent("homeplane-agent vault detect on a path that is not a vault", 60*time.Second,
-		"vault", "detect", "-vault-path", "/tmp/homeplane-e2e-not-a-vault")
-	s.assert("a missing vault is refused, not recorded", bogus.ExitCode != 0,
-		"exit %d: %s", bogus.ExitCode, firstLine(bogus.Stderr))
-	rep, _ = s.status()
+// truthModeEngineDown — a machine-local failure, produced for real: the engine
+// is deactivated, `status` must degrade and exit non-zero, and /healthz — which
+// knows nothing about this machine — must stay green.
+func truthModeEngineDown(s *stage) {
+	stop := s.agent("homeplane-agent gno deactivate -execute (machine-local failure mode)", 3*time.Minute,
+		"gno", "deactivate", "-execute")
+	if !s.assert("the retrieval engine was actually deactivated", stop.ExitCode == 0,
+		"exit %d%s", stop.ExitCode, tail(stop.Stderr)) {
+		return
+	}
+	rep, res := s.status()
+	state, detail := s.component(rep, "gno")
+	s.assert("status degrades and exits non-zero when the engine is gone",
+		res.ExitCode != 0 && state != "ok", "exit %d, gno %s (%s)", res.ExitCode, state, firstLine(detail))
+
+	health := s.run("server /healthz while THIS machine is degraded", 30*time.Second,
+		"curl", "-sf", "-m", "20", s.env.serverURL+"/healthz")
+	s.assert("a machine-local failure never reaches the server's /healthz",
+		health.ExitCode == 0 && strings.Contains(health.full, `"status":"ok"`),
+		"curl exit %d: %s", health.ExitCode, firstLine(health.Stdout))
+
+	restart := s.agent("homeplane-agent gno activate (restore)", 20*time.Minute, "gno", "activate")
+	s.assert("the retrieval engine is restored", restart.ExitCode == 0,
+		"exit %d%s", restart.ExitCode, tail(restart.Stderr))
+}
+
+// truthModeVaultMissing — again on a COPY, because the mode under test is "the
+// recorded vault is gone" and the real vault is not something a proof may move.
+func truthModeVaultMissing(s *stage) {
+	dir, err := copyStateDir(s, "vault-missing")
+	if err != nil {
+		s.assert("a state copy could be made for the missing-vault mode", false, "%v", err)
+		return
+	}
+	gone := filepath.Join(dir, "vault-that-is-not-there")
+	if err := rewriteState(dir, func(m map[string]any) { m["vault_path"] = gone }); err != nil {
+		s.assert("the state copy could be pointed at a missing vault", false, "%v", err)
+		return
+	}
+	res := s.agent("homeplane-agent status with the recorded vault missing", 2*time.Minute,
+		"status", "-json", "-state-dir", dir)
+	var rep statusReport
+	_ = json.Unmarshal([]byte(res.full), &rep)
 	state, detail := s.component(rep, "vault")
-	s.assert("the real vault is still what status reports", state == "ok" && strings.Contains(detail, s.env.vaultPath),
-		"vault: %s (%s)", state, detail)
+	s.assert("a vault that is no longer there is named, and the machine exits non-zero",
+		res.ExitCode != 0 && state != "ok",
+		"exit %d; vault=%s (%s)", res.ExitCode, state, firstLine(detail))
+
+	// And the real machine is untouched by any of it.
+	real, _ := s.status()
+	realState, realDetail := s.component(real, "vault")
+	s.assert("the real vault is still what this machine reports",
+		realState == "ok" && strings.Contains(realDetail, s.env.vaultPath),
+		"vault: %s (%s)", realState, firstLine(realDetail))
+}
+
+// truthModeGatewayDown — the server's own degraded mode. `curl -sf` MUST fail
+// (the spec says so: a degraded server answers non-2xx AND names the component),
+// and it is the one mode that has to be produced on the server itself.
+func truthModeGatewayDown(s *stage) {
+	stop := s.ssh("server: stop the composed gateway", 3*time.Minute,
+		"systemctl --user stop homeplane-gateway.service")
+	if !s.assert("the gateway could be stopped for the degraded-server mode", stop.ExitCode == 0,
+		"exit %d: %s", stop.ExitCode, firstLine(stop.Stderr)) {
+		return
+	}
+	defer func() {
+		start := s.ssh("server: start the composed gateway again", 5*time.Minute,
+			"systemctl --user start homeplane-gateway.service")
+		s.assert("the gateway is running again", start.ExitCode == 0,
+			"exit %d: %s", start.ExitCode, firstLine(start.Stderr))
+		// The workload takes a moment to answer; the proof waits for it rather
+		// than leaving the next stage to discover a half-started server.
+		ready := s.ssh("server: wait for the gateway to answer", 5*time.Minute,
+			"for i in $(seq 1 60); do curl -sf http://127.0.0.1:44022/health | grep -q '\"available\":true' && exit 0; sleep 5; done; exit 1")
+		s.assert("the gateway is serving again", ready.ExitCode == 0, "exit %d", ready.ExitCode)
+	}()
+
+	// `curl -sf` fails on a non-2xx, which is exactly the contract: a degraded
+	// server must fail a plain health check rather than answering 200 with a sad
+	// payload.
+	failing := s.run("server /healthz with the gateway down (curl -sf must FAIL)", 60*time.Second,
+		"curl", "-sf", "-m", "20", s.env.serverURL+"/healthz")
+	body := s.run("server /healthz with the gateway down (read the payload)", 60*time.Second,
+		"curl", "-s", "-m", "20", s.env.serverURL+"/healthz")
+	s.assert("a degraded server fails a plain health check AND names the component",
+		failing.ExitCode != 0 && strings.Contains(body.full, health.ComponentGatewayRuntime) &&
+			strings.Contains(body.full, "degraded"),
+		"curl -sf exit %d; payload: %s", failing.ExitCode, firstLine(body.Stdout))
+}
+
+// copyStateDir makes a throwaway copy of this machine's agent state, so a
+// failure mode can be produced without doing anything to the machine itself.
+func copyStateDir(s *stage, name string) (string, error) {
+	s.t.Helper()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	dst := filepath.Join(s.t.TempDir(), name)
+	cp := s.run("copy the agent state for the "+name+" mode", 2*time.Minute,
+		"cp", "-R", filepath.Join(home, ".homeplane"), dst)
+	if cp.ExitCode != 0 {
+		return "", fmt.Errorf("cp exit %d: %s", cp.ExitCode, cp.Stderr)
+	}
+	return dst, nil
+}
+
+// rewriteState edits the copied state file. It is deliberately a plain JSON
+// rewrite: the point is to produce a state a machine could genuinely be in.
+func rewriteState(dir string, edit func(map[string]any)) error {
+	path := filepath.Join(dir, "state.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return err
+	}
+	edit(m)
+	out, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(out, '\n'), 0o600)
 }
 
 // stageAuditReview is the operator's read of the whole run: every step of the

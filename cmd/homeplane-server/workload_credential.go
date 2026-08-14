@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/DanielKillenberger/homeplane/internal/secrets"
 	"github.com/DanielKillenberger/homeplane/internal/server/connectors"
@@ -51,6 +52,11 @@ type workloadDelivery struct {
 	// refresh — through the directory's group.
 	groupReadable bool
 	log           *slog.Logger
+
+	// mu guards the last delivery outcome, which the health probe reads from
+	// another goroutine than the commit hook that writes it.
+	mu      sync.Mutex
+	lastErr error
 }
 
 // newWorkloadDelivery validates the deployment inputs. Both are required
@@ -157,6 +163,12 @@ func (d *workloadDelivery) deliverStored(ctx context.Context) {
 	}
 	for _, provider := range d.engine.Providers() {
 		err := d.deliver(ctx, provider)
+		// A provider with no credential yet is not a delivery fault: it is the
+		// ordinary state of a deployment waiting for its first consent, and
+		// recording it as degraded would make /healthz red on a fresh install.
+		if !errors.Is(err, store.ErrNotFound) {
+			d.record(provider, err)
+		}
 		switch {
 		case err == nil:
 		case errors.Is(err, store.ErrNotFound):
@@ -178,7 +190,9 @@ type workloadDeliveryRef struct{ d *workloadDelivery }
 func (r *workloadDeliveryRef) set(d *workloadDelivery) { r.d = d }
 
 func (r *workloadDeliveryRef) deliver(ctx context.Context, provider string, _ int64) error {
-	return r.d.deliver(ctx, provider)
+	err := r.d.deliver(ctx, provider)
+	r.d.record(provider, err)
+	return err
 }
 
 func (d *workloadDelivery) driverSecret(ctx context.Context, conn connectors.Connector, param string) (string, error) {
@@ -195,4 +209,36 @@ func (d *workloadDelivery) driverSecret(ctx context.Context, conn connectors.Con
 		return "", fmt.Errorf("workload credential delivery: decrypt %s (%s): %w", param, ref, err)
 	}
 	return string(plaintext), nil
+}
+
+// health reports the last delivery outcome.
+//
+// A delivery that failed cannot be allowed to stay a log line. The credential
+// IS stored — so the flow correctly reports success and the store correctly
+// says it holds one — but the connector cannot read it, and every call fails
+// with something that looks like an authorization problem. Without a component
+// saying so, the only signal an operator gets is a connector that stopped
+// working for no visible reason.
+func (d *workloadDelivery) health() error {
+	if d == nil {
+		return nil
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.lastErr
+}
+
+// record stores the outcome of a delivery attempt for the health probe.
+func (d *workloadDelivery) record(provider string, err error) {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if err != nil {
+		d.lastErr = fmt.Errorf("the credential for %q is stored but was not delivered to the connector workload: %w",
+			provider, err)
+		return
+	}
+	d.lastErr = nil
 }

@@ -233,201 +233,262 @@ func stageCalendar(s *stage) {
 	}
 }
 
+// sixOp is one harness's reversible-write proof, in the order R8 states it.
+// Each step is its own method for one reason: the steps have to be able to STOP
+// the sequence, and a 190-line function that "continues to be thorough" after a
+// failed create is how a proof reports six green steps on an event that was
+// never made.
+type sixOp struct {
+	s       *stage
+	h       harnessUnderProof
+	cal     string
+	summary string
+	stamp   string
+	eventID string
+	// armed is the cleanup's own state: set the moment a create is ATTEMPTED,
+	// cleared only once the event is observed absent.
+	armed bool
+}
+
 func runSixOp(s *stage, h harnessUnderProof) {
 	stamp := time.Now().UTC().Format("20060102T150405Z")
-	summary := fmt.Sprintf("homeplane-e2e-%s-%s-%s", stamp, sanitize(h.grantHarness), randomSuffix(s))
-	start := time.Now().UTC().Add(72 * time.Hour).Truncate(time.Hour)
-	end := start.Add(time.Hour)
-	rfc := func(t time.Time) string { return t.Format("2006-01-02T15:04:05Z") }
-	cal := s.env.calendarID
+	op := &sixOp{
+		s: s, h: h, cal: s.env.calendarID, stamp: stamp,
+		summary: fmt.Sprintf("homeplane-e2e-%s-%s-%s", stamp, sanitize(h.grantHarness), randomSuffix(s)),
+	}
+	defer op.cleanup()
 
-	// STEP 0 — isolation. Nothing by this name exists, so nothing pre-existing
-	// can be touched by anything that follows.
-	// The listing has to SUCCEED: a harness that could not call the connector at
-	// all has not established that the name is free, and treating its error text
-	// as "the summary is absent" is how a proof passes its safety check by
-	// failing its first call.
-	isolationSince := time.Now().UTC().Add(-30 * time.Second)
-	before := h.call(s, h.name+" step 0: the name is unused", connectorServer, "get_events", map[string]any{
-		"calendar_id": cal, "query": summary, "max_results": 5, "user_google_email": s.env.account,
-	})
-	// The listing must have REACHED Google, and the server is what says so. A
-	// harness process that exits 0 while its model declined to call the tool
-	// would otherwise satisfy "the summary is absent" by never having looked —
-	// which is the isolation check passing precisely when it did nothing.
-	listed, _ := lastRow(decisionRows(rowsForHarness(
-		s.audit("server audit: the isolation listing", isolationSince), h.grantHarness), "get_events"))
-	if !s.assert(h.name+": the test event's name is unused before the proof starts",
-		listed.Outcome == "allowed" && !strings.Contains(before.text, summary),
-		"audit: outcome=%s | harness said: %s", listed.Outcome, firstLine(before.text)) {
+	if !op.isolated() {
 		return
 	}
+	if !op.create() {
+		return
+	}
+	if !op.readBack() {
+		return
+	}
+	if !op.update() {
+		return
+	}
+	if !op.verifyUpdate() {
+		return
+	}
+	// The denial leg sits between verify and delete deliberately: it needs a
+	// real event to act on, and it must not be what leaves one behind.
+	op.denialLeg()
+	if !op.delete() {
+		return
+	}
+	if op.verifyCleanup() {
+		op.armed = false
+	}
+	op.assertMetadataOnly()
+}
 
-	// The event is deleted no matter how this ends. The cleanup is armed BEFORE
-	// the create, because the step that can fail while the event nevertheless
-	// exists is exactly the one that parses its id.
+// call makes one tool call as this harness and returns the harness's answer
+// together with the SERVER's decision row for it — which is what every
+// assertion below is settled on.
+func (o *sixOp) call(what, tool string, args map[string]any) (harnessOutput, auditRow) {
 	since := time.Now().UTC().Add(-30 * time.Second)
-	var eventID string
-	cleanupArmed := true
-	defer func() {
-		if !cleanupArmed {
-			return
-		}
-		id := eventID
-		if id == "" {
-			found := h.call(s, "CLEANUP: locate the event by its unique name", connectorServer, "get_events",
-				map[string]any{"calendar_id": cal, "query": summary, "max_results": 5,
-					"user_google_email": s.env.account})
-			id = extractEventID(found.text)
-		}
-		if id == "" {
-			// Before shouting, ask the server whether this harness ever got a
-			// create THROUGH. A harness that never reached the connector cannot
-			// have left an event, and "DELETE IT BY HAND" on a calendar where
-			// nothing was ever created is a false alarm that teaches an operator
-			// to ignore the real one.
-			var created bool
-			for _, r := range decisionRows(rowsForHarness(s.audit("CLEANUP: did this harness ever create anything?",
-				since.Add(-5*time.Minute)), h.grantHarness), "manage_event") {
-				if r.Outcome == "allowed" && r.ActionClass == "write" {
-					created = true
-				}
-			}
-			if !created {
-				s.assert(h.name+": no test event was left behind", true,
-					"the server audited no admitted create for this harness; nothing to clean up")
-				return
-			}
-			s.assert(h.name+": the test event was cleaned up", false,
-				"CLEANUP FAILED — an event named %q may exist on calendar %q and could not be located; DELETE IT BY HAND",
-				summary, cal)
-			return
-		}
-		del := h.call(s, "CLEANUP: delete the leftover event", connectorServer, "manage_event", map[string]any{
-			"action": "delete", "event_id": id, "calendar_id": cal, "send_updates": "none",
-			"user_google_email": s.env.account,
-		})
-		after := h.call(s, "CLEANUP: confirm the event is gone", connectorServer, "get_events", map[string]any{
-			"calendar_id": cal, "query": summary, "max_results": 5, "user_google_email": s.env.account,
-		})
-		gone := !strings.Contains(after.text, summary) && !strings.Contains(after.text, id)
-		s.assert(h.name+": the test event was cleaned up", gone,
-			"CLEANUP %s — calendar %q event %q: %s", map[bool]string{true: "ok", false: "INCOMPLETE — DELETE BY HAND"}[gone],
-			cal, id, firstLine(del.text))
-	}()
+	args["user_google_email"] = o.s.env.account
+	out := o.h.call(o.s, o.h.name+" "+what, connectorServer, tool, args)
+	rows := o.s.audit("server audit after "+o.h.name+" "+what, since)
+	row, _ := lastRow(decisionRows(rowsForHarness(rows, o.h.grantHarness), tool))
+	return out, row
+}
 
-	// STEP 1 — create, through the GUARDED path: send_updates:"none" is what a
-	// real caller must pass, because the connector's default emails everyone.
-	create := h.call(s, h.name+" step 1: create", connectorServer, "manage_event", map[string]any{
-		"action": "create", "calendar_id": cal, "summary": summary,
-		"start_time": rfc(start), "end_time": rfc(end),
-		"description":  "v1 — Homeplane end-to-end proof (" + stamp + ")",
-		"send_updates": "none", "user_google_email": s.env.account,
+// isolated is STEP 0: nothing by this name exists, so nothing pre-existing can
+// be touched by anything that follows. The listing must have REACHED Google —
+// a harness whose model declined to call the tool has not established anything,
+// and its error text satisfying "the summary is absent" would be the isolation
+// check passing precisely when it did nothing.
+func (o *sixOp) isolated() bool {
+	out, row := o.call("step 0: the name is unused", "get_events", map[string]any{
+		"calendar_id": o.cal, "query": o.summary, "max_results": 5,
 	})
-	eventID = extractEventID(create.text)
-	rows := s.audit("server audit after step 1", since)
-	row, ok := lastRow(decisionRows(rowsForHarness(rows, h.grantHarness), "manage_event"))
-	if !s.assert(h.name+" step 1: the guarded create is admitted and audited write-class",
-		ok && row.Outcome == "allowed" && row.ActionClass == "write",
-		"audit: outcome=%s class=%s | event id %q | harness said: %s",
-		row.Outcome, row.ActionClass, eventID, firstLine(create.text)) {
-		return
+	return o.s.assert(o.h.name+": the test event's name is unused before the proof starts",
+		row.Outcome == "allowed" && !strings.Contains(out.text, o.summary),
+		"audit: outcome=%s | harness said: %s", row.Outcome, firstLine(out.text))
+}
+
+// create is STEP 1, through the GUARDED path: send_updates:"none" is what a real
+// caller must pass, because the connector's default emails every attendee.
+func (o *sixOp) create() bool {
+	start := time.Now().UTC().Add(72 * time.Hour).Truncate(time.Hour)
+	o.armed = true // before the call, not after: the step that can fail while the event exists is the one that parses its id
+	out, row := o.call("step 1: create", "manage_event", map[string]any{
+		"action": "create", "calendar_id": o.cal, "summary": o.summary,
+		"start_time": rfc3339(start), "end_time": rfc3339(start.Add(time.Hour)),
+		"description":  "v1 — Homeplane end-to-end proof (" + o.stamp + ")",
+		"send_updates": "none",
+	})
+	o.eventID = extractEventID(out.text)
+	if !o.s.assert(o.h.name+" step 1: the guarded create is admitted and audited write-class",
+		row.Outcome == "allowed" && row.ActionClass == "write",
+		"audit: outcome=%s class=%s | harness said: %s", row.Outcome, row.ActionClass, firstLine(out.text)) {
+		return false
 	}
-	if eventID == "" {
-		s.assert(h.name+" step 1: the created event's id is known", false,
-			"the connector answered in prose without an id: %s", firstLine(create.text))
-		return
-	}
+	return o.s.assert(o.h.name+" step 1: the created event's id is known",
+		o.eventID != "", "the connector answered without an id: %s", firstLine(out.text))
+}
 
-	// STEP 2 — read back.
-	since = time.Now().UTC().Add(-5 * time.Second)
-	read := h.call(s, h.name+" step 2: read back", connectorServer, "get_events", map[string]any{
-		"calendar_id": cal, "event_id": eventID, "user_google_email": s.env.account,
+// readBack is STEP 2.
+func (o *sixOp) readBack() bool {
+	out, row := o.call("step 2: read back", "get_events", map[string]any{
+		"calendar_id": o.cal, "event_id": o.eventID,
 	})
-	rows = s.audit("server audit after step 2", since)
-	row, ok = lastRow(decisionRows(rowsForHarness(rows, h.grantHarness), "get_events"))
-	s.assert(h.name+" step 2: the read-back is audited read-class against the event",
-		ok && row.Outcome == "allowed" && row.ActionClass == "read" && row.ArtifactID == eventID,
-		"audit: class=%s artifact=%s | harness said: %s", row.ActionClass, row.ArtifactID, firstLine(read.text))
+	return o.s.assert(o.h.name+" step 2: the read-back is audited read-class against the event",
+		row.Outcome == "allowed" && row.ActionClass == "read" && row.ArtifactID == o.eventID &&
+			strings.Contains(out.text, o.summary),
+		"audit: class=%s artifact=%s | harness said: %s", row.ActionClass, row.ArtifactID, firstLine(out.text))
+}
 
-	// STEP 3 — update.
-	since = time.Now().UTC().Add(-5 * time.Second)
-	update := h.call(s, h.name+" step 3: update", connectorServer, "manage_event", map[string]any{
-		"action": "update", "event_id": eventID, "calendar_id": cal,
-		"description":  "v2 — updated by the Homeplane end-to-end proof (" + stamp + ")",
-		"send_updates": "none", "user_google_email": s.env.account,
+// update is STEP 3.
+func (o *sixOp) update() bool {
+	out, row := o.call("step 3: update", "manage_event", map[string]any{
+		"action": "update", "event_id": o.eventID, "calendar_id": o.cal,
+		"description":  "v2 — updated by the Homeplane end-to-end proof (" + o.stamp + ")",
+		"send_updates": "none",
 	})
-	rows = s.audit("server audit after step 3", since)
-	row, ok = lastRow(decisionRows(rowsForHarness(rows, h.grantHarness), "manage_event"))
-	s.assert(h.name+" step 3: the update is audited write-class against the event",
-		ok && row.Outcome == "allowed" && row.ActionClass == "write" && row.ArtifactID == eventID,
-		"audit: class=%s artifact=%s | harness said: %s", row.ActionClass, row.ArtifactID, firstLine(update.text))
+	return o.s.assert(o.h.name+" step 3: the update is audited write-class against the event",
+		row.Outcome == "allowed" && row.ActionClass == "write" && row.ArtifactID == o.eventID,
+		"audit: class=%s artifact=%s | harness said: %s", row.ActionClass, row.ArtifactID, firstLine(out.text))
+}
 
-	// STEP 4 — verify the update landed at the provider, not just in the answer.
-	since = time.Now().UTC().Add(-5 * time.Second)
-	verify := h.call(s, h.name+" step 4: verify the update", connectorServer, "get_events", map[string]any{
-		"calendar_id": cal, "event_id": eventID, "detailed": true, "user_google_email": s.env.account,
+// verifyUpdate is STEP 4 — the update landed AT GOOGLE, not merely in an answer.
+func (o *sixOp) verifyUpdate() bool {
+	out, row := o.call("step 4: verify the update", "get_events", map[string]any{
+		"calendar_id": o.cal, "event_id": o.eventID, "detailed": true,
 	})
-	s.assert(h.name+" step 4: the update is visible on the event at Google",
-		strings.Contains(verify.text, "v2"), "%s", firstLine(verify.text))
+	return o.s.assert(o.h.name+" step 4: the update is visible on the event at Google",
+		row.Outcome == "allowed" && row.ActionClass == "read" && strings.Contains(out.text, "v2"),
+		"audit: class=%s artifact=%s | harness said: %s", row.ActionClass, row.ArtifactID, firstLine(out.text))
+}
 
-	// THE DENIAL LEG (inherited from .12). The same tool, the same event, one
-	// argument removed: without send_updates:"none" the call asks to notify
-	// every attendee, which is send authority no skeleton harness holds. A guard
-	// only ever observed permitting is not a guard anyone has watched refuse.
-	since = time.Now().UTC().Add(-5 * time.Second)
-	denied := h.call(s, h.name+" denial leg: update WITHOUT send_updates", connectorServer, "manage_event",
-		map[string]any{
-			"action": "update", "event_id": eventID, "calendar_id": cal,
-			"description": "this call must never reach Google", "user_google_email": s.env.account,
-		})
-	rows = s.audit("server audit after the denial leg", since)
-	row, ok = lastRow(decisionRows(rowsForHarness(rows, h.grantHarness), "manage_event"))
-	s.assert(h.name+": an unguarded manage_event is refused as capability_missing",
-		ok && row.Outcome == "denied" && strings.Contains(row.Reason, "capability_missing"),
+// denialLeg is the item inherited from .12: the same tool, the same event, one
+// argument removed. Without send_updates:"none" the call asks to notify every
+// attendee, which is send authority no skeleton harness holds. A guard only ever
+// observed permitting is not a guard anyone has watched refuse.
+func (o *sixOp) denialLeg() {
+	out, row := o.call("denial leg: update WITHOUT send_updates", "manage_event", map[string]any{
+		"action": "update", "event_id": o.eventID, "calendar_id": o.cal,
+		"description": "this call must never reach Google",
+	})
+	o.s.assert(o.h.name+": an unguarded manage_event is refused as capability_missing",
+		row.Outcome == "denied" && strings.Contains(row.Reason, "capability_missing"),
 		"audit: event=%s outcome=%s reason=%s required=%s | harness said: %s",
-		row.Event, row.Outcome, row.Reason, row.Detail["required_capability"], firstLine(denied.text))
+		row.Event, row.Outcome, row.Reason, row.Detail["required_capability"], firstLine(out.text))
+}
 
-	// STEP 5 — delete, through the same tool, resolved to the delete class.
-	since = time.Now().UTC().Add(-5 * time.Second)
-	del := h.call(s, h.name+" step 5: delete", connectorServer, "manage_event", map[string]any{
-		"action": "delete", "event_id": eventID, "calendar_id": cal, "send_updates": "none",
-		"user_google_email": s.env.account,
+// delete is STEP 5, through the same tool, resolved to the delete class.
+func (o *sixOp) delete() bool {
+	out, row := o.call("step 5: delete", "manage_event", map[string]any{
+		"action": "delete", "event_id": o.eventID, "calendar_id": o.cal, "send_updates": "none",
 	})
-	rows = s.audit("server audit after step 5", since)
-	row, ok = lastRow(decisionRows(rowsForHarness(rows, h.grantHarness), "manage_event"))
-	s.assert(h.name+" step 5: the delete is audited delete-class against the event",
-		ok && row.Outcome == "allowed" && row.ActionClass == "delete" && row.ArtifactID == eventID,
-		"audit: class=%s artifact=%s | harness said: %s", row.ActionClass, row.ArtifactID, firstLine(del.text))
+	return o.s.assert(o.h.name+" step 5: the delete is audited delete-class against the event",
+		row.Outcome == "allowed" && row.ActionClass == "delete" && row.ArtifactID == o.eventID,
+		"audit: class=%s artifact=%s | harness said: %s", row.ActionClass, row.ArtifactID, firstLine(out.text))
+}
 
-	// STEP 6 — verify cleanup. The delete's ANSWER is not the proof; the
-	// after-listing is, and only that disarms the cleanup.
-	after := h.call(s, h.name+" step 6: verify cleanup", connectorServer, "get_events", map[string]any{
-		"calendar_id": cal, "query": summary, "max_results": 5, "user_google_email": s.env.account,
+// verifyCleanup is STEP 6, and it is two observations rather than one.
+//
+// The delete's ANSWER is not the proof, and neither is "the text does not
+// mention it" — an error saying the server is unavailable contains neither the
+// id nor the summary, and would disarm the cleanup on a calendar that still has
+// the event. So both calls must be ADMITTED by the server (the audit says so),
+// a direct get must show the event gone or cancelled, and a summary-filtered
+// listing must show nothing of ours.
+func (o *sixOp) verifyCleanup() bool {
+	direct, directRow := o.call("step 6a: get the deleted event directly", "get_events", map[string]any{
+		"calendar_id": o.cal, "event_id": o.eventID,
 	})
-	gone := !strings.Contains(after.text, summary) && !strings.Contains(after.text, eventID)
-	if s.assert(h.name+" step 6: the event is absent from the after-listing",
-		gone, "%s", firstLine(after.text)) {
-		cleanupArmed = false
-	}
+	gone := directRow.Outcome == "allowed" &&
+		(strings.Contains(strings.ToLower(direct.text), "cancelled") ||
+			strings.Contains(strings.ToLower(direct.text), "not found") ||
+			strings.Contains(strings.ToLower(direct.text), "no events") ||
+			!strings.Contains(direct.text, o.summary))
+	ok := o.s.assert(o.h.name+" step 6: a direct get shows the event cancelled or gone",
+		gone, "audit: outcome=%s | harness said: %s", directRow.Outcome, firstLine(direct.text))
 
-	// Metadata only: the event's summary passed through the broker on four
-	// calls, and may appear in no audit row.
-	all := s.audit("server audit: metadata-only spot check", since.Add(-10*time.Minute))
+	listing, listRow := o.call("step 6b: the summary-filtered listing", "get_events", map[string]any{
+		"calendar_id": o.cal, "query": o.summary, "max_results": 5,
+	})
+	absent := listRow.Outcome == "allowed" &&
+		!strings.Contains(listing.text, o.summary) && !strings.Contains(listing.text, o.eventID)
+	return o.s.assert(o.h.name+" step 6: the after-listing shows no non-cancelled match",
+		absent, "audit: outcome=%s | harness said: %s", listRow.Outcome, firstLine(listing.text)) && ok
+}
+
+// assertMetadataOnly checks THIS run's rows: the event summary passed through
+// the broker on four calls and may appear in none of them.
+func (o *sixOp) assertMetadataOnly() {
+	rows := o.s.audit("server audit: metadata-only spot check",
+		time.Now().UTC().Add(-20*time.Minute))
 	leaked := ""
-	for _, r := range all {
-		if strings.Contains(r.ArtifactID, summary) {
+	for _, r := range rows {
+		if strings.Contains(r.ArtifactID, o.summary) {
 			leaked = "artifact_id"
 		}
 		for k, v := range r.Detail {
-			if strings.Contains(v, summary) {
+			if strings.Contains(v, o.summary) {
 				leaked = "detail." + k
 			}
 		}
 	}
-	s.assert(h.name+": no audit row carries the event's summary (metadata only)",
-		leaked == "", "checked %d rows; leak in %q", len(all), leaked)
+	o.s.assert(o.h.name+": no audit row carries the event's summary (metadata only)",
+		leaked == "", "checked %d rows from this run; leak in %q", len(rows), leaked)
 }
+
+// cleanup deletes the event no matter how the sequence ended, and refuses to
+// shout about a leftover it can prove was never created.
+func (o *sixOp) cleanup() {
+	if !o.armed {
+		return
+	}
+	id := o.eventID
+	if id == "" {
+		found, _ := o.call("CLEANUP: locate the event by its unique name", "get_events", map[string]any{
+			"calendar_id": o.cal, "query": o.summary, "max_results": 5,
+		})
+		id = extractEventID(found.text)
+	}
+	if id == "" {
+		// Before shouting, ask the server whether this harness ever got a create
+		// THROUGH. A harness that never reached the connector cannot have left an
+		// event, and "DELETE IT BY HAND" on a calendar where nothing was created
+		// is a false alarm that teaches an operator to ignore the real one.
+		var created bool
+		for _, r := range decisionRows(rowsForHarness(o.s.audit(
+			"CLEANUP: did this harness ever create anything?",
+			time.Now().UTC().Add(-30*time.Minute)), o.h.grantHarness), "manage_event") {
+			if r.Outcome == "allowed" && r.ActionClass == "write" {
+				created = true
+			}
+		}
+		if !created {
+			o.s.assert(o.h.name+": no test event was left behind", true,
+				"the server audited no admitted create for this harness; nothing to clean up")
+			return
+		}
+		o.s.assert(o.h.name+": the test event was cleaned up", false,
+			"CLEANUP FAILED — an event named %q may exist on calendar %q and could not be located; DELETE IT BY HAND",
+			o.summary, o.cal)
+		return
+	}
+	del, _ := o.call("CLEANUP: delete the leftover event", "manage_event", map[string]any{
+		"action": "delete", "event_id": id, "calendar_id": o.cal, "send_updates": "none",
+	})
+	after, afterRow := o.call("CLEANUP: confirm the event is gone", "get_events", map[string]any{
+		"calendar_id": o.cal, "query": o.summary, "max_results": 5,
+	})
+	gone := afterRow.Outcome == "allowed" &&
+		!strings.Contains(after.text, o.summary) && !strings.Contains(after.text, id)
+	o.s.assert(o.h.name+": the test event was cleaned up", gone,
+		"CLEANUP %s — calendar %q event %q: %s",
+		map[bool]string{true: "ok", false: "INCOMPLETE — DELETE BY HAND"}[gone], o.cal, id, firstLine(del.text))
+}
+
+func rfc3339(t time.Time) string { return t.Format("2006-01-02T15:04:05Z") }
 
 // --- R9: revocation asymmetry ------------------------------------------------
 
@@ -486,7 +547,7 @@ func stageRevocation(s *stage) {
 		}
 	}
 	s.assert("the revoked harness is refused within seconds, and its grant admits nothing after",
-		refused && admittedAfter == 0 && elapsed < 5*time.Minute,
+		refused && admittedAfter == 0 && elapsed < 90*time.Second,
 		"refusal audited=%v, %d call(s) admitted on the revoked grant after revocation, %s elapsed | harness said: %s",
 		refused, admittedAfter, elapsed.Round(time.Second), firstLine(failing.text))
 
@@ -522,21 +583,86 @@ func stageRevocation(s *stage) {
 	s.assert("revoking an unknown grant is an error, not a silent success", unknown.ExitCode != 0,
 		"exit %d: %s", unknown.ExitCode, firstLine(unknown.Stderr))
 
-	// The MACHINE path, and the restore: re-running configure-harnesses mints a
-	// fresh grant and rewrites the config — which is also how the machine is
+	// The MACHINE-AUTHENTICATED path, which R9 names alongside the operator's.
+	// It is the API a machine uses to revoke its own grant, and its error
+	// contract is an HTTP status — so the proof reads the status rather than a
+	// shell exit code, which cannot tell 404 from anything else.
+	machineRevocation(s, codexGrant)
+
+	// The restore: re-running configure-harnesses mints a fresh grant for BOTH
+	// harnesses and rewrites their configs — which is also how the machine is
 	// left working when the proof ends.
 	restore := s.agent("homeplane-agent configure-harnesses (restore the revoked harness)", 5*time.Minute,
 		"configure-harnesses", "-json")
 	s.assert("the revoked harness recovers by re-running configure-harnesses", restore.ExitCode == 0,
 		"exit %d%s", restore.ExitCode, tail(restore.Stderr))
 	rep, _ = s.status()
-	var restored bool
+	active := map[string]string{}
 	for _, g := range rep.Grants {
-		if g.Harness == "claude-code" && g.State == "active" && g.GrantID != claudeGrant {
-			restored = true
+		if g.State == "active" {
+			active[g.Harness] = g.GrantID
 		}
 	}
-	s.assert("the restored harness holds a NEW active grant", restored, "grants: %+v", rep.Grants)
+	s.assert("both revoked harnesses hold a NEW active grant",
+		active["claude-code"] != "" && active["claude-code"] != claudeGrant &&
+			active["codex"] != "" && active["codex"] != codexGrant,
+		"claude-code %s (was %s), codex %s (was %s)",
+		active["claude-code"], claudeGrant, active["codex"], codexGrant)
+}
+
+// machineRevocation exercises `DELETE /grants/{id}` with the machine's own
+// credential: the path a machine takes to drop a grant without an operator, and
+// the one whose errors are HTTP statuses.
+//
+// The credential is read from this machine's own 0600 state file, which is where
+// the agent keeps it and the only place it exists. Nothing is written back.
+func machineRevocation(s *stage, grantID string) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		s.assert("the machine credential could be located", false, "%v", err)
+		return
+	}
+	credPath := filepath.Join(home, ".homeplane", "machine.cred")
+	if info, statErr := os.Stat(credPath); statErr != nil {
+		s.assert("the machine credential could be located", false, "%v", statErr)
+		return
+	} else if perm := info.Mode().Perm(); perm != 0o600 {
+		s.assert("the machine credential is 0600", false, "%s has mode %o", credPath, perm)
+	}
+	raw, err := os.ReadFile(credPath)
+	if err != nil {
+		s.assert("the machine credential could be read", false, "%v", err)
+		return
+	}
+	credential := strings.TrimSpace(string(raw))
+
+	// curl writes the status code and nothing else, so the credential never
+	// reaches a recorded command line: it goes in a header file curl reads.
+	headerFile := filepath.Join(s.t.TempDir(), "auth")
+	if err := os.WriteFile(headerFile, []byte("Authorization: Bearer "+credential+"\n"), 0o600); err != nil {
+		s.assert("the machine credential could be staged for the request", false, "%v", err)
+		return
+	}
+
+	del := s.run("machine: DELETE /grants/"+grantID, 60*time.Second,
+		"curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-m", "20",
+		"-X", "DELETE", "-H", "@"+headerFile, s.env.serverURL+"/grants/"+grantID)
+	s.assert("a machine can revoke its own grant over the API",
+		strings.TrimSpace(del.full) == "204" || strings.TrimSpace(del.full) == "200",
+		"HTTP %s", strings.TrimSpace(del.full))
+
+	repeat := s.run("machine: DELETE the same grant again", 60*time.Second,
+		"curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-m", "20",
+		"-X", "DELETE", "-H", "@"+headerFile, s.env.serverURL+"/grants/"+grantID)
+	s.assert("repeat revocation over the API is idempotent, not an error",
+		strings.HasPrefix(strings.TrimSpace(repeat.full), "2"),
+		"HTTP %s", strings.TrimSpace(repeat.full))
+
+	missing := s.run("machine: DELETE a grant that does not exist", 60*time.Second,
+		"curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-m", "20",
+		"-X", "DELETE", "-H", "@"+headerFile, s.env.serverURL+"/grants/g-does-not-exist")
+	s.assert("an unknown grant is 404 over the API", strings.TrimSpace(missing.full) == "404",
+		"HTTP %s", strings.TrimSpace(missing.full))
 }
 
 // --- helpers -----------------------------------------------------------------

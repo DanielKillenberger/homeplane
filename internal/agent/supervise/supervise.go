@@ -478,13 +478,31 @@ func (i Installer) Activate(u Unit, uid string) ([]Command, error) {
 	if i.Runner == nil {
 		return cmds, nil
 	}
+	if err := i.RunCommands(cmds); err != nil {
+		return cmds, err
+	}
+	return cmds, nil
+}
+
+// RunCommands executes a command sequence, honoring Optional.
+//
+// Every caller that runs one of this package's command lists must go through
+// here. Running them by hand is how an Optional step becomes fatal: the launchd
+// bootout that makes a start idempotent fails on a job that is not loaded —
+// which, after a quiesce, is exactly the normal case — and a hand-rolled loop
+// would report a successful restart as a failure, or worse, stop before the
+// bootstrap and leave the engine down.
+func (i Installer) RunCommands(cmds []Command) error {
+	if i.Runner == nil {
+		return nil
+	}
 	for _, c := range cmds {
 		if err := i.Runner(c.Name, c.Args...); err != nil {
 			if c.Optional {
 				continue
 			}
-			return cmds, fmt.Errorf("supervise: %s: %w", c, err)
+			return fmt.Errorf("supervise: %s: %w", c, err)
 		}
 	}
-	return cmds, nil
+	return nil
 }

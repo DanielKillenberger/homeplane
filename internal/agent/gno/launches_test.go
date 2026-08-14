@@ -69,3 +69,52 @@ func TestStdioCrashIsStillAFailure(t *testing.T) {
 		t.Fatalf("ledger = %+v, want one failed launch", ledger.Launches)
 	}
 }
+
+// TestStdioKillWithoutACancelledContextIsAFailure. An out-of-memory kill arrives
+// as a bare SIGKILL, exactly like a client ending a session — so the signal
+// number alone cannot tell them apart. What can is whether THIS process was
+// asked to stop: a client ends the session by signalling the wrapper, and the
+// child dies as a consequence. Without that, an unexplained kill is a failure,
+// because recording a killed engine as a healthy session is how status reports
+// a crash as a success.
+func TestStdioKillWithoutACancelledContextIsAFailure(t *testing.T) {
+	state := t.TempDir()
+	err := RunStdioEndpoint(context.Background(), StdioOptions{
+		StateDir: state,
+		Command:  "/bin/sh",
+		// Kill ourselves the way an OOM killer would: no cancellation, no
+		// polite signal.
+		Args: []string{"-c", "kill -KILL $$"},
+	})
+	if err == nil {
+		t.Fatal("a bare SIGKILL with no cancellation was reported as a successful session")
+	}
+	ledger, loadErr := LoadLaunchLedger(state)
+	if loadErr != nil {
+		t.Fatalf("LoadLaunchLedger: %v", loadErr)
+	}
+	if len(ledger.Launches) != 1 || ledger.Launches[0].OK {
+		t.Fatalf("ledger = %+v, want one failed launch", ledger.Launches)
+	}
+}
+
+// TestStdioPoliteSignalIsAClosedSession — the other side: SIGTERM to the child
+// is nobody's accident.
+func TestStdioPoliteSignalIsAClosedSession(t *testing.T) {
+	state := t.TempDir()
+	err := RunStdioEndpoint(context.Background(), StdioOptions{
+		StateDir: state,
+		Command:  "/bin/sh",
+		Args:     []string{"-c", "kill -TERM $$"},
+	})
+	if err != nil {
+		t.Fatalf("a SIGTERM'd session reported an error: %v", err)
+	}
+	ledger, loadErr := LoadLaunchLedger(state)
+	if loadErr != nil {
+		t.Fatalf("LoadLaunchLedger: %v", loadErr)
+	}
+	if len(ledger.Launches) != 1 || !ledger.Launches[0].OK {
+		t.Fatalf("ledger = %+v, want one closed session", ledger.Launches)
+	}
+}

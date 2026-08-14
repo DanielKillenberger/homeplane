@@ -304,15 +304,17 @@ degraded, because an index nobody is updating is not a current index.
 	// nothing to do with the actual cause. The unit is started again by stage 3,
 	// and on any failure in between by the resume below — a failed activation
 	// must not leave a machine with its engine stopped.
-	// A holder stranded by a previously killed engine blocks `gno setup` exactly
-	// as it blocks the daemon, and reports it as a permissions problem. Clearing
-	// it here is what makes activation work on a machine whose engine was killed
-	// rather than stopped.
-	if res, rErr := gno.ReclaimResidentRuntime(ctx, cli.Dirs.Data, 3*time.Second); rErr == nil &&
-		(res.Cleared() || res.Detail != "") {
-		fmt.Fprintln(stdout, "homeplane-agent: "+res.Summary())
-	}
-
+	// STAGE 0 — quiesce. Re-activating a machine that is ALREADY supervised has
+	// to stop the running engine first: it holds the index open, and `gno setup`
+	// against a locked database fails with a message about permissions that has
+	// nothing to do with the actual cause. The unit is started again by stage 3,
+	// and on any failure in between by the resume below — a failed activation
+	// must not leave a machine with its engine stopped.
+	//
+	// The stranded-holder reclaim lives INSIDE the quiesce, after the supervisor
+	// has stopped the engine. Doing it before would kill the live engine's own
+	// lock holder out from under it on the ordinary re-activation path: a holder
+	// is only stranded once nothing owns it.
 	resume := func() {}
 	if prev, loadErr := gno.LoadConfig(dir); loadErr == nil && prev.UnitLabel != "" {
 		quiesce := supervise.Installer{Platform: platform, Dir: units, Runner: supervisorRunner(stdout, stderr)}
@@ -329,6 +331,10 @@ degraded, because an index nobody is updating is not a current index.
 				}
 			}
 		}
+	} else if res, rErr := gno.ReclaimResidentRuntime(ctx, cli.Dirs.Data, 3*time.Second); rErr == nil && res.Cleared() {
+		// No unit to quiesce — nothing of ours is running, so a holder here
+		// belongs to an engine that is already gone.
+		fmt.Fprintln(stdout, "homeplane-agent: "+res.Summary())
 	}
 
 	// STAGE 1 — prepare: every refusal that must precede supervision.

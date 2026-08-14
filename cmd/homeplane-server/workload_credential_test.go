@@ -344,3 +344,71 @@ func TestWorkloadDeliveryWritesTheClientConfiguration(t *testing.T) {
 	}
 	assertMode(t, filepath.Join(dir, "client_secret.json"), 0o640)
 }
+
+// TestWorkloadDeliveryFailureIsVisibleToHealth. A credential that is stored and
+// undeliverable is the worst shape of failure: the flow correctly reports
+// success, the store correctly says it holds one, and every call from every
+// machine fails with something that looks like an authorization problem. The
+// fault has to be visible where an operator already looks.
+func TestWorkloadDeliveryFailureIsVisibleToHealth(t *testing.T) {
+	cred := credflow.Credential{Provider: "google", Access: "a", Refresh: "r"}
+	keyring, reader, engine := deliveryFixture(t, cred)
+	delete(reader.byRef, "google/client-secret") // make delivery fail
+
+	d, err := newWorkloadDelivery(fakeCredentialSource{cred: cred}, reader, keyring, engine,
+		filepath.Join(t.TempDir(), "creds"), "person@example.com", false, nil)
+	if err != nil {
+		t.Fatalf("newWorkloadDelivery: %v", err)
+	}
+	if err := d.health(); err != nil {
+		t.Fatalf("health before any delivery = %v, want ok", err)
+	}
+
+	ref := &workloadDeliveryRef{}
+	ref.set(d)
+	if err := ref.deliver(context.Background(), "google", 1); err == nil {
+		t.Fatal("delivery succeeded without the client secret")
+	}
+	healthErr := d.health()
+	if healthErr == nil {
+		t.Fatal("a failed delivery left the health component green")
+	}
+	if !strings.Contains(healthErr.Error(), "stored but was not delivered") {
+		t.Errorf("health detail %q does not say what actually happened", healthErr)
+	}
+
+	// …and a later success clears it: an operator who fixed the deployment must
+	// see the component go green without restarting the server.
+	reader.byRef["google/client-secret"] = mustSeal(t, keyring, "client-secret-value")
+	if err := ref.deliver(context.Background(), "google", 2); err != nil {
+		t.Fatalf("delivery after the fix: %v", err)
+	}
+	if err := d.health(); err != nil {
+		t.Errorf("health after a successful delivery = %v, want ok", err)
+	}
+}
+
+func mustSeal(t *testing.T, keyring *secrets.Keyring, value string) []byte {
+	t.Helper()
+	ciphertext, err := keyring.Encrypt([]byte(value))
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	return ciphertext
+}
+
+// TestWorkloadDeliveryHealthIgnoresAnAbsentCredential: a fresh deployment has no
+// credential yet, and a red /healthz on a correct install teaches operators to
+// ignore the light.
+func TestWorkloadDeliveryHealthIgnoresAnAbsentCredential(t *testing.T) {
+	keyring, reader, engine := deliveryFixture(t, credflow.Credential{})
+	d, err := newWorkloadDelivery(fakeCredentialSource{err: store.ErrNotFound}, reader, keyring, engine,
+		filepath.Join(t.TempDir(), "creds"), "person@example.com", false, nil)
+	if err != nil {
+		t.Fatalf("newWorkloadDelivery: %v", err)
+	}
+	d.deliverStored(context.Background())
+	if err := d.health(); err != nil {
+		t.Errorf("health with no credential stored = %v, want ok", err)
+	}
+}

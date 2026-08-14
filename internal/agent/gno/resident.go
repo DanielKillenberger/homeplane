@@ -81,6 +81,13 @@ func (r ReclaimResult) Summary() string {
 
 // ReclaimResidentRuntime clears a stranded holder of the index's resident lock.
 //
+// CALLER CONTRACT: the engine must already be stopped. This function decides
+// whether a holder is stranded from OWNERSHIP of the directory, not from
+// liveness of an engine it cannot see — so calling it while the supervised
+// engine is running would kill that engine's own holder out from under it. Every
+// caller either has just quiesced the supervisor, or is the supervised process
+// itself before it starts its child.
+//
 // It is a no-op when the lock file does not exist, when nothing holds it, or
 // when the only holder is this process's own child. `grace` bounds how long a
 // holder gets to exit after SIGTERM before it is killed.

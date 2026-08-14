@@ -222,19 +222,20 @@ func RunStdioEndpoint(ctx context.Context, opts StdioOptions) error {
 		if errors.As(err, &exitErr) {
 			code = exitErr.ExitCode()
 		}
-		// A session the CLIENT closed is not a failed launch. MCP clients end a
-		// stdio session by signalling the server — Claude Code and Codex both
-		// SIGKILL it when the session ends — so counting that as a failure makes
-		// every ordinary harness session degrade the component, and `status`
-		// starts reporting a working endpoint as broken. That is the opposite of
-		// what R4 asks this ledger for.
+		// A session the CLIENT closed is not a failed launch, and the honest way
+		// to know that is to ask whether WE were asked to stop rather than to
+		// read tea leaves in a signal number. An MCP client ends a stdio session
+		// by signalling this wrapper; the wrapper's context is cancelled, and
+		// the child is killed as a consequence. That case is unambiguous.
 		//
-		// A crash still counts: the signals that mean "the process died badly"
-		// (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE) are failures, and so is any
-		// ordinary non-zero exit.
-		if sig, ok := terminationSignal(err); ok {
-			record(Launch{OK: true, PID: pid, ExitCode: 0,
-				Detail: "session closed by the client (" + sig.String() + ")"})
+		// Without a cancelled context the child was signalled by someone else,
+		// and only the signals that exist to ASK a process to stop
+		// (SIGTERM/INT/HUP/PIPE) are read as a close. A bare SIGKILL is NOT — an
+		// out-of-memory kill arrives exactly that way, and recording a killed
+		// engine as a healthy session is how `status` would report a launch that
+		// crashed as one that worked.
+		if closed, why := sessionClosed(ctx, err); closed {
+			record(Launch{OK: true, PID: pid, ExitCode: 0, Detail: why})
 			return nil
 		}
 		record(Launch{OK: false, PID: pid, ExitCode: code, Detail: firstLine(err.Error())})
@@ -244,8 +245,35 @@ func RunStdioEndpoint(ctx context.Context, opts StdioOptions) error {
 	return nil
 }
 
-// terminationSignal reports the signal a process was ended BY, when that signal
-// means an orderly teardown rather than a crash.
+// sessionClosed reports whether a launch ENDED because the session ended, and
+// says how it knows. Anything else — a crash signal, a bare kill nobody asked
+// for, an ordinary non-zero exit — is a failure the ledger must keep.
+func sessionClosed(ctx context.Context, err error) (bool, string) {
+	sig, signalled := terminationSignal(err)
+	if ctx.Err() != nil {
+		// We were asked to stop; the child died as a consequence.
+		if signalled {
+			return true, "session closed by the client (" + sig.String() + ")"
+		}
+		return true, "session closed by the client"
+	}
+	if !signalled {
+		return false, ""
+	}
+	switch sig {
+	case syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGPIPE:
+		// Signals that exist to ask a process to stop, sent to the child
+		// directly. Nothing sends these by accident.
+		return true, "session ended by " + sig.String()
+	default:
+		// SIGKILL included: an out-of-memory kill is indistinguishable from a
+		// deliberate one, and the safe reading of an unexplained kill is that
+		// something went wrong.
+		return false, ""
+	}
+}
+
+// terminationSignal reports the signal a process was ended by, if any.
 func terminationSignal(err error) (syscall.Signal, bool) {
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
@@ -255,12 +283,7 @@ func terminationSignal(err error) (syscall.Signal, bool) {
 	if !ok || !status.Signaled() {
 		return 0, false
 	}
-	switch sig := status.Signal(); sig {
-	case syscall.SIGTERM, syscall.SIGKILL, syscall.SIGINT, syscall.SIGHUP, syscall.SIGPIPE:
-		return sig, true
-	default:
-		return sig, false
-	}
+	return status.Signal(), true
 }
 
 // Client identifies the harness that launched the endpoint, when it says so.

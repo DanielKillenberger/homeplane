@@ -108,6 +108,7 @@ token, the WhoIs machine binding and the manifest apply.`)
 	// credentials against: without one there is no provider to name, and a
 	// route that can only ever answer "unknown provider" is worse than no route.
 	var broker *credflow.Service
+	var delivery *workloadDelivery
 	if f.manifestPath != "" {
 		manifest, err := connectors.LoadFile(f.manifestPath)
 		if err != nil {
@@ -121,10 +122,10 @@ token, the WhoIs machine binding and the manifest apply.`)
 		// commit, and it holds a pointer to the broker that is filled in below —
 		// the two are genuinely mutually dependent: the broker owns the stored
 		// credential, delivery owns where it has to land.
-		delivery := &workloadDeliveryRef{}
+		deliveryRef := &workloadDeliveryRef{}
 		broker, err = credflow.New(engine, st, keyring, st, credflow.Config{
 			Logger:      log,
-			OnCommitted: delivery.deliver,
+			OnCommitted: deliveryRef.deliver,
 		})
 		if err != nil {
 			return fmt.Errorf("credential broker: %w", err)
@@ -133,7 +134,8 @@ token, the WhoIs machine binding and the manifest apply.`)
 		if err != nil {
 			return err
 		}
-		delivery.set(d)
+		deliveryRef.set(d)
+		delivery = d
 		// A restart re-materializes whatever is already stored, so the workload's
 		// credential directory converges on the store rather than on whoever last
 		// ran a consent flow.
@@ -172,12 +174,22 @@ token, the WhoIs machine binding and the manifest apply.`)
 		return fmt.Errorf("tsnet local client: %w", err)
 	}
 
-	checker := health.New(
-		health.Component{Name: health.ComponentStore, Probe: health.StoreProbe(st)},
-		health.Component{Name: health.ComponentCredentialStore, Probe: health.CredentialStoreProbe(keyPath)},
-		health.Component{Name: health.ComponentTsnet, Probe: tsnetProbe(localClient)},
-		health.Component{Name: health.ComponentGatewayRuntime, Probe: health.GatewayProbe(f.gatewayURL, f.gatewayProbe)},
-	)
+	components := []health.Component{
+		{Name: health.ComponentStore, Probe: health.StoreProbe(st)},
+		{Name: health.ComponentCredentialStore, Probe: health.CredentialStoreProbe(keyPath)},
+		{Name: health.ComponentTsnet, Probe: tsnetProbe(localClient)},
+		{Name: health.ComponentGatewayRuntime, Probe: health.GatewayProbe(f.gatewayURL, f.gatewayProbe)},
+	}
+	// A credential that is stored and undeliverable looks, from every machine,
+	// like an authorization problem with no cause. The component makes the real
+	// fault visible where an operator already looks.
+	if delivery != nil {
+		components = append(components, health.Component{
+			Name:  health.ComponentWorkloadCredential,
+			Probe: func(context.Context) error { return delivery.health() },
+		})
+	}
+	checker := health.New(components...)
 
 	// The edge configuration is resolved BEFORE the control plane is built:
 	// the endpoint URL handed to harnesses with every grant has to be the URL
