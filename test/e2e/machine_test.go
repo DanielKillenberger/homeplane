@@ -350,6 +350,13 @@ func stageGNORetrieval(s *stage) {
 		"Call exactly one search tool, then reply with the first result's file path and nothing else."
 
 	out := s.claude("Claude Code → local retrieval engine", prompt, "mcp__gno")
+	// One resident runtime per index means the NEXT harness cannot open its own
+	// stdio session until this one's server has actually gone. The previous
+	// client's process outlives its turn by a moment, and without waiting the
+	// second harness gets "Search failed" from a lock it will hold a second
+	// later — a flake with a real cause, which is the same D8 exclusivity the
+	// gno stage records.
+	s.waitForEngineRelease()
 	s.assert("Claude Code retrieves real vault content through the local engine",
 		out.ok && looksLikeVaultHit(out.text, s.env.vaultPath),
 		"%s", firstLine(out.text))
@@ -363,6 +370,18 @@ func stageGNORetrieval(s *stage) {
 // looksLikeVaultHit is deliberately weak about FORM and strict about SOURCE: a
 // harness may phrase an answer any way it likes, but a path inside the vault
 // cannot be produced without having read the vault.
+// waitForEngineRelease blocks until nothing holds the engine's resident-runtime
+// lock, so consecutive harness sessions do not collide on it.
+func (s *stage) waitForEngineRelease() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	lock := filepath.Join(home, ".homeplane", "gno", "data", ".resident-owner.lock")
+	s.run("wait for the previous harness session's engine to exit", 2*time.Minute, "sh", "-c",
+		"for i in $(seq 1 60); do pgrep -f "+lock+" >/dev/null 2>&1 || exit 0; sleep 1; done; exit 0")
+}
+
 func looksLikeVaultHit(text, vault string) bool {
 	if text == "" {
 		return false
