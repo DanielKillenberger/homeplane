@@ -86,7 +86,7 @@ func TestWorkloadDeliveryWritesTheConnectorsCredentialFile(t *testing.T) {
 	expires := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
 	cred := credflow.Credential{
 		Provider: "google", Access: "access-token", Refresh: "refresh-token",
-		Scope: "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/calendar.events",
+		Scope:     "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/calendar.events",
 		ExpiresAt: expires,
 	}
 	keyring, reader, engine := deliveryFixture(t, cred)
