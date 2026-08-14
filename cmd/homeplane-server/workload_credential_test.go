@@ -297,3 +297,46 @@ func TestWorkloadDeliveryTightensAWorldAccessibleDirectory(t *testing.T) {
 	}
 	assertMode(t, dir, 0o700)
 }
+
+// TestWorkloadDeliveryWritesTheClientConfiguration. The delivered user
+// credential carries the client id and secret, but the connector resolves its
+// OAuth CLIENT separately and refuses to refresh without it — so everything
+// works until the first access token expires an hour later, and then every
+// write fails with "OAuth client credentials not found". The e2e proof found
+// this exactly one hour into a run.
+func TestWorkloadDeliveryWritesTheClientConfiguration(t *testing.T) {
+	cred := credflow.Credential{Provider: "google", Access: "a", Refresh: "r"}
+	keyring, reader, engine := deliveryFixture(t, cred)
+	dir := filepath.Join(t.TempDir(), "workload-creds")
+
+	d, err := newWorkloadDelivery(fakeCredentialSource{cred: cred}, reader, keyring, engine,
+		dir, "person@example.com", true, nil)
+	if err != nil {
+		t.Fatalf("newWorkloadDelivery: %v", err)
+	}
+	if err := d.deliver(context.Background(), "google"); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, "client_secret.json"))
+	if err != nil {
+		t.Fatalf("the connector's client configuration is missing: %v", err)
+	}
+	var file struct {
+		Installed struct {
+			ClientID     string `json:"client_id"`
+			ClientSecret string `json:"client_secret"`
+			TokenURI     string `json:"token_uri"`
+		} `json:"installed"`
+	}
+	if err := json.Unmarshal(raw, &file); err != nil {
+		t.Fatalf("decode the client configuration: %v", err)
+	}
+	if file.Installed.ClientID != "client-id-value" || file.Installed.ClientSecret != "client-secret-value" {
+		t.Errorf("client configuration = %+v, want the values from the store", file.Installed)
+	}
+	if file.Installed.TokenURI != "https://oauth2.googleapis.com/token" {
+		t.Errorf("token_uri = %q, want the manifest's token endpoint", file.Installed.TokenURI)
+	}
+	assertMode(t, filepath.Join(dir, "client_secret.json"), 0o640)
+}

@@ -64,6 +64,9 @@ type Credential struct {
 	// connector needs to perform that refresh.
 	ClientID     string
 	ClientSecret string
+	// AuthURI is the provider's authorization endpoint. It is written into the
+	// client configuration for completeness; nothing here performs a consent.
+	AuthURI string
 	// Scopes is the granted scope set. It is written truthfully: the connector
 	// refuses tools whose scope it does not hold, and that check is worth
 	// keeping honest even though the provider enforces the same thing.
@@ -99,6 +102,66 @@ type options struct{ fileMode os.FileMode }
 // group the deployment pointed at the connector.
 func WithGroupReadable() Option {
 	return func(o *options) { o.fileMode = 0o640 }
+}
+
+// ClientFileName is the file a Google connector reads its OAuth CLIENT
+// configuration from, pointed at by GOOGLE_CLIENT_SECRET_PATH.
+const ClientFileName = "client_secret.json"
+
+// MaterializeClient writes the OAuth CLIENT configuration the connector needs to
+// REFRESH an access token, and returns the path it wrote (empty when the format
+// needs no such file).
+//
+// It exists because of a failure that only appears an hour in: the delivered
+// user credential carries the client id and secret, but the pinned connector
+// resolves its client configuration separately — from GOOGLE_CLIENT_SECRET_PATH
+// or an env pair — and refuses the refresh without it. Everything works until
+// the first access token expires, and then every write fails with "OAuth client
+// credentials not found". The env pair would put a secret in a unit file and in
+// `ps`; a file in the same 0700 directory as the credential keeps it where the
+// rest of the custody chain already is.
+func MaterializeClient(format, dir string, c Credential, opts ...Option) (string, error) {
+	o := options{fileMode: FileMode}
+	for _, apply := range opts {
+		apply(&o)
+	}
+	switch format {
+	case connectors.FormatGoogleOAuthUserFile:
+		if c.ClientID == "" || c.ClientSecret == "" {
+			return "", fmt.Errorf("workloadcred: the connector needs its OAuth client to refresh, and none was given")
+		}
+		body, err := json.Marshal(googleClientFile{Installed: googleInstalledClient{
+			ClientID:     c.ClientID,
+			ClientSecret: c.ClientSecret,
+			AuthURI:      c.AuthURI,
+			TokenURI:     c.TokenURI,
+			RedirectURIs: []string{"http://localhost"},
+		}})
+		if err != nil {
+			return "", fmt.Errorf("workloadcred: encode the client configuration: %w", err)
+		}
+		path := filepath.Join(dir, ClientFileName)
+		if err := writeSecretFile(dir, path, body, o.fileMode); err != nil {
+			return "", err
+		}
+		return path, nil
+	default:
+		return "", nil
+	}
+}
+
+// googleClientFile is Google's installed-application client JSON, which is what
+// the connector's own loader expects.
+type googleClientFile struct {
+	Installed googleInstalledClient `json:"installed"`
+}
+
+type googleInstalledClient struct {
+	ClientID     string   `json:"client_id"`
+	ClientSecret string   `json:"client_secret"`
+	AuthURI      string   `json:"auth_uri,omitempty"`
+	TokenURI     string   `json:"token_uri,omitempty"`
+	RedirectURIs []string `json:"redirect_uris,omitempty"`
 }
 
 // Materialize writes the credential in the named format and returns the path it

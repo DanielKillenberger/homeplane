@@ -118,14 +118,29 @@ func (d *workloadDelivery) deliver(ctx context.Context, provider string) error {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Scopes:       strings.Fields(cred.Scope),
+		AuthURI:      conn.Credential.Params["auth_endpoint"],
 		ExpiresAt:    cred.ExpiresAt,
+	}, opts...)
+	if err != nil {
+		return fmt.Errorf("workload credential delivery: %w", err)
+	}
+
+	// The connector resolves its OAuth CLIENT separately from the user
+	// credential, and refuses to refresh without it — a failure that only
+	// appears once the first access token expires.
+	clientPath, err := workloadcred.MaterializeClient(conn.Delivery.Format, d.dir, workloadcred.Credential{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		TokenURI:     conn.Credential.Params["token_endpoint"],
+		AuthURI:      conn.Credential.Params["auth_endpoint"],
 	}, opts...)
 	if err != nil {
 		return fmt.Errorf("workload credential delivery: %w", err)
 	}
 	// The path is logged; nothing about the credential's contents is.
 	d.log.Info("delivered the provider credential to the connector workload",
-		"provider", provider, "generation", generation, "path", path, "account", d.account)
+		"provider", provider, "generation", generation, "path", path, "account", d.account,
+		"client_config", clientPath)
 	return nil
 }
 
