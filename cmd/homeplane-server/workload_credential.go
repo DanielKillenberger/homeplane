@@ -46,8 +46,9 @@ type workloadDelivery struct {
 	// their tool arguments — because the credential file is looked up by that
 	// name and a git-tracked manifest has no business carrying it.
 	account string
-	// groupReadable delivers the credential 0640 so the connector's own
-	// containerized identity can read it through the directory's group.
+	// groupReadable delivers the credential 0660 so the connector's own
+	// containerized identity can read it — and rewrite it on every token
+	// refresh — through the directory's group.
 	groupReadable bool
 	log           *slog.Logger
 }
@@ -109,7 +110,7 @@ func (d *workloadDelivery) deliver(ctx context.Context, provider string) error {
 
 	var opts []workloadcred.Option
 	if d.groupReadable {
-		opts = append(opts, workloadcred.WithGroupReadable())
+		opts = append(opts, workloadcred.WithGroupAccess())
 	}
 	path, err := workloadcred.Materialize(conn.Delivery.Format, d.dir, d.account, workloadcred.Credential{
 		AccessToken:  cred.Access,

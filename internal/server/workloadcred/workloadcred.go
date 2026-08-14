@@ -18,8 +18,9 @@
 //   - The written file is 0600 inside a 0700 directory, created with those
 //     modes rather than chmodded afterwards, so the credential is never briefly
 //     world-readable (the same trap the store hit with SQLite's WAL sidecars).
-//     WithGroupReadable widens the file to 0640 for a deployment whose connector
-//     runs as its own uid and reads through a group; `other` is never granted,
+//     WithGroupAccess widens the file to 0660 for a deployment whose connector
+//     runs as its own uid and reads — and rewrites, on every token refresh — the
+//     credential through a group; `other` is never granted,
 //     and an existing directory that IS accessible to other is refused rather
 //     than written into.
 //   - The write is atomic: a temp file in the destination directory, then a
@@ -87,21 +88,29 @@ type Option func(*options)
 
 type options struct{ fileMode os.FileMode }
 
-// WithGroupReadable writes the credential 0640 instead of 0600.
+// WithGroupAccess writes the credential 0660 instead of 0600, and the client
+// configuration 0640.
 //
 // It exists for one real deployment shape and is deliberately narrow. A
 // containerized connector runs as its own uid, which under rootless Podman is a
 // SUBORDINATE uid of the server's user — so a 0600 file the server owns is
 // unreadable by the very workload it is delivered for, and the container cannot
 // be made to run as the server's user. The deployment answers that by making the
-// credential directory setgid to the workload's own group; this makes the file
-// readable through that group and nothing else.
+// credential directory setgid to the workload's own group.
 //
-// It is not a general relaxation: `other` stays 0 either way, and the directory
-// remains 0700/2770 — the file is readable by the server's user and by the one
-// group the deployment pointed at the connector.
-func WithGroupReadable() Option {
-	return func(o *options) { o.fileMode = 0o640 }
+// WRITE, not just read, and that is the part that was learned the hard way: the
+// connector refreshes the access token itself and PERSISTS the result. A
+// credential it can read and not rewrite works for exactly one token lifetime,
+// and then the connector reports that the user must authenticate again — with
+// the refresh having succeeded moments earlier. The credential's lifecycle after
+// delivery belongs to the connector, so the connector's own group can write it.
+//
+// It is not a general relaxation: `other` stays 0, the directory remains
+// 0700/2770, and the group is the one identity the deployment pointed at this
+// connector. The client CONFIGURATION stays read-only to that group — nothing
+// refreshes Homeplane's own OAuth client.
+func WithGroupAccess() Option {
+	return func(o *options) { o.fileMode = 0o660 }
 }
 
 // ClientFileName is the file a Google connector reads its OAuth CLIENT
@@ -124,6 +133,11 @@ func MaterializeClient(format, dir string, c Credential, opts ...Option) (string
 	o := options{fileMode: FileMode}
 	for _, apply := range opts {
 		apply(&o)
+	}
+	// The connector never rewrites its client configuration, so it is delivered
+	// read-only to the group even when the credential beside it is writable.
+	if o.fileMode&0o060 != 0 {
+		o.fileMode = 0o640
 	}
 	switch format {
 	case connectors.FormatGoogleOAuthUserFile:

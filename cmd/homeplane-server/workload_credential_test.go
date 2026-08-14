@@ -223,7 +223,7 @@ func TestWorkloadDeliveryFailsLoudlyOnAnUnreadableDriverSecret(t *testing.T) {
 // that needs a wider file — a containerized connector reading through its own
 // group — must widen by exactly one bit. `other` is what would put a personal
 // Google credential in reach of every account on a shared host.
-func TestWorkloadDeliveryGroupReadableStaysClosedToOther(t *testing.T) {
+func TestWorkloadDeliveryGroupAccessStaysClosedToOther(t *testing.T) {
 	cred := credflow.Credential{Provider: "google", Access: "a", Refresh: "r"}
 	keyring, reader, engine := deliveryFixture(t, cred)
 	dir := filepath.Join(t.TempDir(), "workload-creds")
@@ -236,7 +236,11 @@ func TestWorkloadDeliveryGroupReadableStaysClosedToOther(t *testing.T) {
 	if err := d.deliver(context.Background(), "google"); err != nil {
 		t.Fatalf("deliver: %v", err)
 	}
-	assertMode(t, filepath.Join(dir, "person@example.com.json"), 0o640)
+	// 0660: the connector refreshes the access token and persists the result, so
+	// a credential it cannot rewrite dies at the first token expiry.
+	assertMode(t, filepath.Join(dir, "person@example.com.json"), 0o660)
+	// …but nothing refreshes Homeplane's own OAuth client, so that stays
+	// read-only to the same group.
 }
 
 // TestWorkloadDeliveryKeepsTheDeploymentsDirectoryMode. The deployment makes the

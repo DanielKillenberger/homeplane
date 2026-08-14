@@ -62,8 +62,9 @@ func runServe(args []string) error {
 	fs.StringVar(&f.credAccount, "workload-credential-account", "",
 		"the account brokered credentials belong to (the connector looks its credential up by that name)")
 	fs.BoolVar(&f.credGroup, "workload-credential-group-readable", false,
-		"write the delivered credential 0640 instead of 0600, for a connector that reads it through the "+
-			"group its container runs as (the directory must be setgid to that group; `other` is never granted)")
+		"write the delivered credential 0660 instead of 0600, for a connector that reads and refreshes it "+
+			"through the group its container runs as (the directory must be setgid to that group; "+
+			"`other` is never granted, and the client configuration stays read-only)")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "homeplane-server serve — run the control plane over tsnet\n\n")
 		fs.PrintDefaults()
