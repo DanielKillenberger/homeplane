@@ -18,3 +18,7 @@ spike/edge-proxy/edge-proxy
 
 # staged release artifacts (rebuildable via scripts/stage-release.sh)
 /dist/
+
+# Python bytecode from scripts/
+__pycache__/
+*.pyc
