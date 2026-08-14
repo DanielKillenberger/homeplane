@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-08-14T20:30:47.358903Z",
+  "depends_on": [
+    "fn-3-add-grok-as-a-third-harness.2"
+  ],
+  "id": "fn-3-add-grok-as-a-third-harness.3",
+  "priority": null,
+  "spec": "fn-3-add-grok-as-a-third-harness",
+  "spec_path": ".flow/tasks/fn-3-add-grok-as-a-third-harness.3.md",
+  "status": "todo",
+  "title": "Live e2e proof, evidence + gate, docs delta",
+  "updated_at": "2026-08-14T20:30:47.358903Z"
+}

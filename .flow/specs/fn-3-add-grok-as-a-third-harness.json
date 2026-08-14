@@ -1,0 +1,117 @@
+{
+  "branch_name": "fn-3-add-grok-as-a-third-harness",
+  "completion_review_status": "unknown",
+  "completion_reviewed_at": null,
+  "created_at": "2026-08-14T20:25:47.854857Z",
+  "default_impl": null,
+  "default_review": null,
+  "default_sync": null,
+  "depends_on_epics": [
+    "fn-1-homeplane-walking-skeleton-install"
+  ],
+  "id": "fn-3-add-grok-as-a-third-harness",
+  "impl_review_rounds": {},
+  "next_task": 1,
+  "plan_review_rounds": 0,
+  "plan_review_status": "ship",
+  "plan_reviewed_at": "2026-08-14T20:45:46.643405Z",
+  "ready": true,
+  "review_attempts": [
+    {
+      "artifact_sha256": "e28e134385cec4f99c00459c69088570374553cdd65f7b032a5a07712013504f",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "21f6282de46542079ed19cbba404e15ad31adfad",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "2052bc908638cc22bb9d57f21f1ae61e1d47e27b87faf0d1deebd3953027a275",
+      "reservation_id": "b289d64878bb4e8da41fa75a6251762e",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-14T20:41:16.985130Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "59a22079b00157f038412b54ddc87c7ec2788ba45b638e925dd1c2053b830946",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "21f6282de46542079ed19cbba404e15ad31adfad",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "b52c4d99d4d7b58cb867101f868aa409705c1bc18ba461543f718d03a60b3ad0",
+      "reservation_id": "299c8210134343148a8d7db11e62e67f",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-14T20:44:20.035872Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "9757c0c48c04f9423b7934cffe0b09c6414d9fc39150af3c2e56adb7be3880a8",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "21f6282de46542079ed19cbba404e15ad31adfad",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "967741581c609eff26ab537be3bba90a2f922146fd53e79fba32085c77c37005",
+      "reservation_id": "b0894e256f704e03b00b19e6f44090cc",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-14T20:45:46.640534Z",
+      "verdict": "SHIP"
+    }
+  ],
+  "review_hash_epoch": {
+    "plan": 1,
+    "plan#completion": 0
+  },
+  "review_pending_rounds": {},
+  "review_reservations": {},
+  "review_transport_failures": {
+    "plan": 0
+  },
+  "spec_path": ".flow/specs/fn-3-add-grok-as-a-third-harness.md",
+  "status": "open",
+  "title": "Add grok as a third harness",
+  "tracker": {
+    "baseHashFlow": null,
+    "baseHashTracker": null,
+    "depRelations": [],
+    "id": null,
+    "identifier": null,
+    "lastSyncedAt": null,
+    "mergeBaseFlow": null,
+    "mergeBaseTracker": null,
+    "url": null
+  },
+  "updated_at": "2026-08-14T20:45:58.193891Z"
+}
