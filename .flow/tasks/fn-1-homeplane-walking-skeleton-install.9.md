@@ -27,6 +27,7 @@ The skills layer: discover Daniel-authored skills in the vault (canonical source
 - `internal/agent/harness/` config writer + backup plumbing (from .6)
 - Vault layout + skills area (with Daniel / D15)
 - Claude Code skills/plugin external-directory docs; Codex instruction-surface docs (D14)
+- GNO's own agent-skill installer (`gno mcp install --target claude-code|codex|…`; docs at https://gno.sh/docs/skills) — .11 delivered GNO with this native install path; check whether it covers part of D14's per-harness linking matrix before building a fully custom adapter for skills that pass through GNO <!-- Updated by plan-sync: fn-1.11 confirmed GNO ships native per-client skill/MCP installers relevant to D14 -->
 
 ## Acceptance
 - [ ] D14 matrix + D15 profile format recorded; spec updated (D14/D15 → resolved)

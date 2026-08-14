@@ -17,8 +17,8 @@ Detect installed harnesses (Claude Code, Codex per D1) and configure each with (
 
 ## Investigation targets
 **Required:**
-- Endpoint descriptor from .11 (GNO transport)
-- `internal/server/` grant API from .2 (superseding lifecycle); connector endpoint shape from .3
+- Endpoint descriptor from .11 (GNO transport) — .11 shipped it: descriptor published LAST after transactional install (artifactSnapshot rollback across re-activation), so .6 must read a fully-installed descriptor, never a partial one
+- `internal/server/` grant API from .2 (superseding lifecycle); connector endpoint shape from .3, but the actual wire endpoint is served by .16's streamable-HTTP edge — `-connector-endpoint-url` must match the edge's mount path (`-connector-edge-path`) or grant issuance is refused, and calls must be qualified `provider__tool` through .16's router when a bare tool name is ambiguous across connectors; read .16's done summary before wiring the server MCP entry <!-- Updated by plan-sync: fn-1.16 built the actual edge (endpoint-URL/mount-path agreement, provider__tool qualification) that .3's original design only sketched -->
 - Claude Code MCP config docs (scopes); Codex config reference (verify inline bearer support: https://developers.openai.com/codex/config-reference/)
 **Optional:**
 - Go TOML libraries with comment/format round-trip

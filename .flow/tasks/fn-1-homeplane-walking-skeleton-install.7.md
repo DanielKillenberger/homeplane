@@ -28,7 +28,7 @@ Deterministic, scripted e2e proof of the walking skeleton on a real machine + re
 - [ ] Revocation asymmetry demonstrated and audited (both paths); revoked state visible in agent status; repeat-revoke idempotent
 - [ ] Status/healthz truth-table (demo-path modes) passes with the machine/server split honored
 - [ ] `go build ./... && go test ./...` green
-- [ ] Inherited from .12 (Daniel-authorized deferral 2026-08-14): the guarded Calendar mutation path (send_updates:"none" + connector.send gating) is proven LIVE against real Google as part of this task's six-op run — including one denied manage_event call WITHOUT send_updates:"none" audited as capability_missing
+- [ ] Inherited from .12 (Daniel-authorized deferral 2026-08-14): the guarded Calendar mutation path (send_updates:"none" + connector.send gating) is proven LIVE against real Google as part of this task's six-op run — including one denied manage_event call WITHOUT send_updates:"none" (or RSVP) audited as capability_missing <!-- Updated by plan-sync: fn-1.12 used a "(or RSVP)" denial path (rsvp is unclassified and denied per .12's done summary) not present in the acceptance item as inherited here -->
 
 ## Done summary
 TBD
