@@ -476,8 +476,12 @@ func stageRevocation(s *stage) {
 			refused = true
 		}
 		// The property that matters is not only that something was refused: it
-		// is that the revoked grant admitted NOTHING afterwards.
-		if r.GrantID == claudeGrant && r.Outcome == "allowed" && r.TS.After(revoked.UTC()) {
+		// is that the revoked grant admitted no CALL afterwards. Lifecycle rows
+		// about the grant — the revocation itself is an allowed operator action
+		// carrying that grant id — are not calls, and counting them would make
+		// this assertion fail on its own success.
+		if r.Event == "connector_tool_call" && r.GrantID == claudeGrant &&
+			r.Outcome == "allowed" && r.TS.After(revoked.UTC()) {
 			admittedAfter++
 		}
 	}

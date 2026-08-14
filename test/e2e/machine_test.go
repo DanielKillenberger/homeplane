@@ -112,18 +112,33 @@ func stageEnrol(s *stage) {
 	s.assert("re-enrolment preserves the machine identity", rep2.MachineID == first,
 		"machine_id before %s, after %s", first, rep2.MachineID)
 
-	rows := s.audit("server audit: enrolment rows", since)
-	var enrolments int
+	// What the server records depends on whether this machine had ever enrolled:
+	// the first time it is an `enrolment`, and every later run is a
+	// `credential_rotation` on the SAME machine record — which is R2's actual
+	// claim. Demanding an `enrolment` row would make the assertion pass exactly
+	// once in a machine's lifetime and fail on every re-run of the proof.
+	rows := s.audit("server audit: the enrolment record", since)
+	var recorded int
+	var other []string
 	for _, r := range rows {
-		if r.Event == "enrolment" && r.AuthMachineID == first {
-			enrolments++
-			s.assert("the enrolment is attributed to the observed tailnet node",
-				r.ObservedNodeName != "" && r.ActorKind == "machine",
-				"observed %s (%s), actor %s", r.ObservedNodeName, r.ObservedNodeID, r.ActorKind)
-			break
+		switch r.Event {
+		case "enrolment", "credential_rotation":
+			if r.AuthMachineID != first {
+				other = append(other, r.AuthMachineID)
+				continue
+			}
+			if recorded == 0 {
+				s.assert("the enrolment is attributed to the observed tailnet node",
+					r.ObservedNodeName != "" && r.ActorKind == "machine",
+					"%s: observed %s (%s), actor %s", r.Event, r.ObservedNodeName, r.ObservedNodeID, r.ActorKind)
+			}
+			recorded++
 		}
 	}
-	s.assert("the server recorded the enrolment", enrolments > 0, "%d enrolment row(s) for %s", enrolments, first)
+	s.assert("the server recorded the enrolment and the rotation", recorded > 0,
+		"%d enrolment/rotation row(s) for %s", recorded, first)
+	s.assert("re-enrolment created no second machine identity", len(other) == 0,
+		"other machine ids in the same window: %v", other)
 }
 
 // stageVault — R3. Detection only. Sync ACTIVATION is its own stage because it
