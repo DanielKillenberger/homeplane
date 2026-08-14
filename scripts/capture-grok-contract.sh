@@ -129,7 +129,20 @@ mkdir -p "$PROBE_CWD"
 #
 # Its output is deliberately NOT committed — it is machine-specific, and the
 # contract has to stay machine-independent. Only its verdict matters.
-real_leader_out="$(perl -e 'alarm shift; exec @ARGV' 30 "$GROK_BIN" leader list 2>&1)" || true
+real_leader_rc=0
+real_leader_out="$(perl -e 'alarm shift; exec @ARGV' 30 "$GROK_BIN" leader list 2>&1)" || real_leader_rc=$?
+if [ "$real_leader_rc" -eq 142 ]; then
+  echo "capture-grok-contract.sh: 'grok leader list' TIMED OUT in the real context." >&2
+  echo "Refusing to capture: the leader state is unknown, and an unknown leader state" >&2
+  echo "cannot support the fresh-process contract." >&2
+  exit 1
+fi
+if [ "$real_leader_rc" -ne 0 ]; then
+  echo "capture-grok-contract.sh: 'grok leader list' exited $real_leader_rc in the real context." >&2
+  printf '%s\n' "$real_leader_out" >&2
+  echo "Refusing to capture: the leader check did not complete." >&2
+  exit 1
+fi
 case "$real_leader_out" in
   *"No leader candidates found"*) ;;
   *)
@@ -324,11 +337,32 @@ expect_rc() {
   sealed_entries="$(find "$GROK_DIR" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)"
   echo "${sealed_entries:-(empty)}"
   echo
+  # R1 rests on this state being EMPTY, not merely on the commands succeeding:
+  # detection must read "binary present, no config file" as DETECTED, and the
+  # decision record quotes `[]` specifically. A malformed or non-empty answer
+  # would otherwise be committed under this heading unchallenged.
+  [ ! -e "$CONFIG" ] \
+    || fail "the never-launched probe is not being run against a never-launched home: $CONFIG already exists"
+
   echo "=== never-launched: grok mcp list --json ==="
-  grok_probe 30 mcp list --json; expect_ok "never-launched mcp list --json"
+  nl_json="$(grok_probe 30 mcp list --json)"; expect_ok "never-launched mcp list --json"
+  printf '%s\n' "$nl_json"
+  printf '%s' "$nl_json" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if d != []:
+    sys.exit("expected [] from a never-launched home, got %r" % (d,))
+' || fail "a never-launched home did not report an empty server list"
   echo
   echo "=== never-launched: grok mcp list ==="
-  grok_probe 30 mcp list; expect_ok "never-launched mcp list"
+  nl_plain="$(grok_probe 30 mcp list)"; expect_ok "never-launched mcp list"
+  printf '%s\n' "$nl_plain"
+  printf '%s\n' "$nl_plain" | grep -q 'No MCP servers configured' \
+    || fail "a never-launched home did not report the no-servers-configured state"
+  # A read must not have CREATED the config: "the first write creates the file"
+  # is what the writer in task .2 is built against.
+  [ ! -e "$CONFIG" ] \
+    || fail "reading from a never-launched home CREATED $CONFIG: reads are not side-effect free"
   echo
 
   # The single quotes below are load-bearing: `${HOMEPLANE_GROK_TOKEN}` and

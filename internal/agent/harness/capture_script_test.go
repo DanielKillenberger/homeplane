@@ -315,7 +315,13 @@ if [ "$1" = mcp ]; then
           exit 0 ;;
       esac
       # Names only; enough for the relocation gate's positive sentinels.
-      grep '^#ENTRY ' "$GROK_HOME/.entries" 2>/dev/null | sed 's/^#ENTRY /  /'
+      names="$(grep '^#ENTRY ' "$GROK_HOME/.entries" 2>/dev/null | sed 's/^#ENTRY /  /')"
+      if [ -z "$names" ]; then
+        # Real grok says this, and the never-launched assertion looks for it.
+        echo "No MCP servers configured. Run 'grok mcp add --help' to get started."
+      else
+        printf '%s\n' "$names"
+      fi
       exit 0 ;;
     remove) echo "No MCP server named 'x'"; exit 1 ;;
     enable) echo "No MCP server named 'x'"; exit 1 ;;
@@ -354,12 +360,62 @@ func TestTheCaptureSucceedsAgainstAGrokThatBehavesAsRecorded(t *testing.T) {
 	}
 }
 
+// The real-context leader check must COMPLETE, not merely print the right
+// words on its way out. A `leader list` that emits the sentinel and then times
+// out leaves the leader state unknown — and an unknown leader state cannot
+// support the fresh-process contract any more than a known-bad one can.
+func TestTheCaptureFailsWhenTheRealLeaderCheckDoesNotComplete(t *testing.T) {
+	for _, tc := range []struct{ name, exit, want string }{
+		{"times out after printing the sentinel", "142", "TIMED OUT"},
+		{"exits non-zero after printing the sentinel", "3", "exited 3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := wellBehavedStub(`
+if [ "$1" = leader ]; then
+  echo "No leader candidates found."
+  exit ` + tc.exit + `
+fi
+`)
+			out, err := runCapture(t, stubGrok(t, stub))
+			if err == nil {
+				t.Fatalf("the capture SUCCEEDED though the leader check never completed;\noutput:\n%s", out)
+			}
+			if !strings.Contains(out, tc.want) {
+				t.Errorf("expected %q in the diagnosis; output:\n%s", tc.want, out)
+			}
+		})
+	}
+}
+
+// A never-launched home must actually be EMPTY. R1 rests on that state, and
+// the decision record quotes `[]` specifically — so a malformed or non-empty
+// answer must break the capture rather than be committed under the heading.
+func TestTheCaptureFailsWhenTheNeverLaunchedStateIsNotEmpty(t *testing.T) {
+	stub := wellBehavedStub(`
+if [ "$1" = mcp ] && [ "$2" = list ] && [ ! -f "$GROK_HOME/.entries" ]; then
+  case " $* " in
+    *" --json "*) echo '[{"name":"leftover","enabled":true}]'; exit 0 ;;
+  esac
+fi
+`)
+	out, err := runCapture(t, stubGrok(t, stub))
+	if err == nil {
+		t.Fatalf("the capture SUCCEEDED with a non-empty never-launched home;\noutput:\n%s", out)
+	}
+	if !strings.Contains(out, "empty server list") {
+		t.Errorf("the capture failed but not with a never-launched diagnosis; output:\n%s", out)
+	}
+}
+
 // "Entries land enabled, so no `grok mcp enable` step is needed" is a
 // conclusion task .2's writer depends on. A release that started writing
 // enabled=false must break this capture, not slip past it.
 func TestTheCaptureFailsWhenAnAddedEntryIsNotEnabled(t *testing.T) {
+	// Scoped to AFTER the first add, so the never-launched assertion (which
+	// requires an empty list) still sees an empty home and the failure this
+	// asserts is the enabled check itself.
 	stub := wellBehavedStub(`
-if [ "$1" = mcp ] && [ "$2" = list ]; then
+if [ "$1" = mcp ] && [ "$2" = list ] && [ -f "$GROK_HOME/.entries" ]; then
   case " $* " in
     *" --json "*)
       echo '[{"name":"homeplane-edge","url":"https://edge.example.invalid/mcp","enabled":false},{"name":"staleness-probe","enabled":true},{"name":"expand-probe","enabled":true}]'
