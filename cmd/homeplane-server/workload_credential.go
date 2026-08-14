@@ -46,14 +46,17 @@ type workloadDelivery struct {
 	// their tool arguments — because the credential file is looked up by that
 	// name and a git-tracked manifest has no business carrying it.
 	account string
-	log     *slog.Logger
+	// groupReadable delivers the credential 0640 so the connector's own
+	// containerized identity can read it through the directory's group.
+	groupReadable bool
+	log           *slog.Logger
 }
 
 // newWorkloadDelivery validates the deployment inputs. Both are required
 // together: a directory without an account cannot name a file, and an account
 // without a directory has nowhere to write.
 func newWorkloadDelivery(source credentialSource, sec secretReader, keyring *secrets.Keyring,
-	engine *connectors.Engine, dir, account string, log *slog.Logger) (*workloadDelivery, error) {
+	engine *connectors.Engine, dir, account string, groupReadable bool, log *slog.Logger) (*workloadDelivery, error) {
 	dir, account = strings.TrimSpace(dir), strings.TrimSpace(account)
 	switch {
 	case dir == "" && account == "":
@@ -70,7 +73,7 @@ func newWorkloadDelivery(source credentialSource, sec secretReader, keyring *sec
 		log = slog.Default()
 	}
 	return &workloadDelivery{source: source, secrets: sec, keyring: keyring,
-		engine: engine, dir: dir, account: account, log: log}, nil
+		engine: engine, dir: dir, account: account, groupReadable: groupReadable, log: log}, nil
 }
 
 // deliver writes the provider's stored credential into the workload directory.
@@ -104,6 +107,10 @@ func (d *workloadDelivery) deliver(ctx context.Context, provider string) error {
 		return err
 	}
 
+	var opts []workloadcred.Option
+	if d.groupReadable {
+		opts = append(opts, workloadcred.WithGroupReadable())
+	}
 	path, err := workloadcred.Materialize(conn.Delivery.Format, d.dir, d.account, workloadcred.Credential{
 		AccessToken:  cred.Access,
 		RefreshToken: cred.Refresh,
@@ -112,7 +119,7 @@ func (d *workloadDelivery) deliver(ctx context.Context, provider string) error {
 		ClientSecret: clientSecret,
 		Scopes:       strings.Fields(cred.Scope),
 		ExpiresAt:    cred.ExpiresAt,
-	})
+	}, opts...)
 	if err != nil {
 		return fmt.Errorf("workload credential delivery: %w", err)
 	}

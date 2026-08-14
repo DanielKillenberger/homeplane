@@ -42,6 +42,7 @@ type serveFlags struct {
 	gatewayProbe time.Duration
 	credDir      string
 	credAccount  string
+	credGroup    bool
 }
 
 func runServe(args []string) error {
@@ -60,6 +61,9 @@ func runServe(args []string) error {
 		"server-local directory the connector workload mounts; brokered credentials are materialized here")
 	fs.StringVar(&f.credAccount, "workload-credential-account", "",
 		"the account brokered credentials belong to (the connector looks its credential up by that name)")
+	fs.BoolVar(&f.credGroup, "workload-credential-group-readable", false,
+		"write the delivered credential 0640 instead of 0600, for a connector that reads it through the "+
+			"group its container runs as (the directory must be setgid to that group; `other` is never granted)")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "homeplane-server serve — run the control plane over tsnet\n\n")
 		fs.PrintDefaults()
@@ -124,7 +128,7 @@ token, the WhoIs machine binding and the manifest apply.`)
 		if err != nil {
 			return fmt.Errorf("credential broker: %w", err)
 		}
-		d, err := newWorkloadDelivery(broker, st, keyring, engine, f.credDir, f.credAccount, log)
+		d, err := newWorkloadDelivery(broker, st, keyring, engine, f.credDir, f.credAccount, f.credGroup, log)
 		if err != nil {
 			return err
 		}

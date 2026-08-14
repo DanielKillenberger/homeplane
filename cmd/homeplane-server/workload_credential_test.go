@@ -93,7 +93,7 @@ func TestWorkloadDeliveryWritesTheConnectorsCredentialFile(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "workload-creds")
 
 	d, err := newWorkloadDelivery(fakeCredentialSource{cred: cred, gen: 3}, reader, keyring, engine,
-		dir, "person@example.com", nil)
+		dir, "person@example.com", false, nil)
 	if err != nil {
 		t.Fatalf("newWorkloadDelivery: %v", err)
 	}
@@ -154,14 +154,14 @@ func TestWorkloadDeliveryRefusesHalfAConfiguration(t *testing.T) {
 	keyring, reader, engine := deliveryFixture(t, credflow.Credential{})
 	src := fakeCredentialSource{}
 
-	if _, err := newWorkloadDelivery(src, reader, keyring, engine, t.TempDir(), "", nil); err == nil {
+	if _, err := newWorkloadDelivery(src, reader, keyring, engine, t.TempDir(), "", false, nil); err == nil {
 		t.Error("a credential directory with no account was accepted")
 	}
-	if _, err := newWorkloadDelivery(src, reader, keyring, engine, "", "person@example.com", nil); err == nil {
+	if _, err := newWorkloadDelivery(src, reader, keyring, engine, "", "person@example.com", false, nil); err == nil {
 		t.Error("an account with no credential directory was accepted")
 	}
 	// Neither is the ordinary case of a deployment that does not deliver.
-	d, err := newWorkloadDelivery(src, reader, keyring, engine, "", "", nil)
+	d, err := newWorkloadDelivery(src, reader, keyring, engine, "", "", false, nil)
 	if err != nil {
 		t.Fatalf("an unconfigured delivery is not an error: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestWorkloadDeliveryRefusesHalfAConfiguration(t *testing.T) {
 func TestWorkloadDeliveryReportsAnAbsentCredential(t *testing.T) {
 	keyring, reader, engine := deliveryFixture(t, credflow.Credential{})
 	d, err := newWorkloadDelivery(fakeCredentialSource{err: store.ErrNotFound}, reader, keyring, engine,
-		t.TempDir(), "person@example.com", nil)
+		t.TempDir(), "person@example.com", false, nil)
 	if err != nil {
 		t.Fatalf("newWorkloadDelivery: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestWorkloadDeliveryFailsLoudlyOnAnUnreadableDriverSecret(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "workload-creds")
 
 	d, err := newWorkloadDelivery(fakeCredentialSource{cred: cred}, reader, keyring, engine,
-		dir, "person@example.com", nil)
+		dir, "person@example.com", false, nil)
 	if err != nil {
 		t.Fatalf("newWorkloadDelivery: %v", err)
 	}
@@ -217,4 +217,83 @@ func TestWorkloadDeliveryFailsLoudlyOnAnUnreadableDriverSecret(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(dir, "person@example.com.json")); statErr == nil {
 		t.Error("a credential file was written despite the failure")
 	}
+}
+
+// TestWorkloadDeliveryGroupReadableStaysClosedToOther. The one deployment shape
+// that needs a wider file — a containerized connector reading through its own
+// group — must widen by exactly one bit. `other` is what would put a personal
+// Google credential in reach of every account on a shared host.
+func TestWorkloadDeliveryGroupReadableStaysClosedToOther(t *testing.T) {
+	cred := credflow.Credential{Provider: "google", Access: "a", Refresh: "r"}
+	keyring, reader, engine := deliveryFixture(t, cred)
+	dir := filepath.Join(t.TempDir(), "workload-creds")
+
+	d, err := newWorkloadDelivery(fakeCredentialSource{cred: cred}, reader, keyring, engine,
+		dir, "person@example.com", true, nil)
+	if err != nil {
+		t.Fatalf("newWorkloadDelivery: %v", err)
+	}
+	if err := d.deliver(context.Background(), "google"); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	assertMode(t, filepath.Join(dir, "person@example.com.json"), 0o640)
+}
+
+// TestWorkloadDeliveryKeepsTheDeploymentsDirectoryMode. The deployment makes the
+// credential directory setgid to the workload's group so the connector can read
+// through it; a delivery that reset the directory to 0700 would undo that on the
+// next consent and leave a workload that cannot read the credential it was just
+// handed.
+func TestWorkloadDeliveryKeepsTheDeploymentsDirectoryMode(t *testing.T) {
+	cred := credflow.Credential{Provider: "google", Access: "a", Refresh: "r"}
+	keyring, reader, engine := deliveryFixture(t, cred)
+	dir := filepath.Join(t.TempDir(), "workload-creds")
+	if err := os.Mkdir(dir, 0o770); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(dir, os.ModeSetgid|0o770); err != nil {
+		t.Fatalf("chmod setgid: %v", err)
+	}
+	before, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+
+	d, err := newWorkloadDelivery(fakeCredentialSource{cred: cred}, reader, keyring, engine,
+		dir, "person@example.com", true, nil)
+	if err != nil {
+		t.Fatalf("newWorkloadDelivery: %v", err)
+	}
+	if err := d.deliver(context.Background(), "google"); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	after, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if after.Mode() != before.Mode() {
+		t.Errorf("the credential directory's mode changed from %v to %v", before.Mode(), after.Mode())
+	}
+}
+
+// TestWorkloadDeliveryTightensAWorldAccessibleDirectory. Whatever the deployment
+// does with the group, a directory `other` can enter is not one a personal
+// credential may sit in — so it is closed before the credential lands, not after.
+func TestWorkloadDeliveryTightensAWorldAccessibleDirectory(t *testing.T) {
+	cred := credflow.Credential{Provider: "google", Access: "a", Refresh: "r"}
+	keyring, reader, engine := deliveryFixture(t, cred)
+	dir := filepath.Join(t.TempDir(), "workload-creds")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	d, err := newWorkloadDelivery(fakeCredentialSource{cred: cred}, reader, keyring, engine,
+		dir, "person@example.com", false, nil)
+	if err != nil {
+		t.Fatalf("newWorkloadDelivery: %v", err)
+	}
+	if err := d.deliver(context.Background(), "google"); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	assertMode(t, dir, 0o700)
 }

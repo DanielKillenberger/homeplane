@@ -77,8 +77,14 @@ if command -v loginctl >/dev/null 2>&1; then
   fi
 fi
 
-command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1 \
-  || die "no container runtime: ToolHive needs Docker or Podman to run connector workloads"
+if command -v podman >/dev/null 2>&1; then
+  CONTAINER_RUNTIME=podman
+elif command -v docker >/dev/null 2>&1; then
+  CONTAINER_RUNTIME=docker
+else
+  die "no container runtime: ToolHive needs Docker or Podman to run connector workloads"
+fi
+readonly CONTAINER_RUNTIME
 
 # ToolHive discovers a rootless Podman socket at \$XDG_RUNTIME_DIR/podman/podman.sock.
 # Two things go wrong here in practice, and both are silent:
@@ -143,6 +149,13 @@ esac
 # account cannot name a file the connector will ever look for.
 : "${HOMEPLANE_WORKLOAD_CREDENTIAL_DIR:=}"
 : "${HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT:=}"
+# The gid the connector's container runs as, in CONTAINER terms (e.g. 999 for a
+# workload whose image adds an unprivileged appuser). Under rootless Podman that
+# gid maps to a SUBORDINATE gid on the host, so a 0600 file this user owns is
+# unreadable by the workload it is delivered for. Setting this makes the
+# credential directory setgid to that mapped group and the credential file 0640 —
+# readable by this user and by the connector's own identity, and by nothing else.
+: "${HOMEPLANE_WORKLOAD_CREDENTIAL_GID:=}"
 if [[ -n "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR" && -z "$HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT" ]] \
   || [[ -z "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR" && -n "$HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT" ]]; then
   die "HOMEPLANE_WORKLOAD_CREDENTIAL_DIR and HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT must be set together"
@@ -150,6 +163,9 @@ fi
 if [[ -n "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR" ]]; then
   WORKLOAD_CRED_FLAGS="-workload-credential-dir $HOMEPLANE_WORKLOAD_CREDENTIAL_DIR"
   WORKLOAD_CRED_FLAGS+=" -workload-credential-account $HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT"
+  if [[ -n "$HOMEPLANE_WORKLOAD_CREDENTIAL_GID" ]]; then
+    WORKLOAD_CRED_FLAGS+=" -workload-credential-group-readable"
+  fi
 else
   WORKLOAD_CRED_FLAGS=""
 fi
@@ -323,6 +339,19 @@ run chmod 700 "$STATE_DIR"
 if [[ -n "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR" ]]; then
   run mkdir -p "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR"
   run chmod 700 "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR"
+  if [[ -n "$HOMEPLANE_WORKLOAD_CREDENTIAL_GID" ]]; then
+    [[ "$CONTAINER_RUNTIME" == podman ]] \
+      || die "HOMEPLANE_WORKLOAD_CREDENTIAL_GID is a rootless-Podman mapping; unset it on a $CONTAINER_RUNTIME host"
+    # Both steps run INSIDE the user namespace, because neither is possible
+    # outside it: this user does not belong to the subordinate group, and Linux
+    # drops the setgid bit when a non-member chmods such a directory.
+    #
+    # `podman unshare` maps this user to root in its own namespace, where the
+    # container's gid is an ordinary group — so the mapping podman itself uses is
+    # the one applied, rather than a number computed from /etc/subgid.
+    run "$CONTAINER_RUNTIME" unshare chgrp "$HOMEPLANE_WORKLOAD_CREDENTIAL_GID" "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR"
+    run "$CONTAINER_RUNTIME" unshare chmod 2770 "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR"
+  fi
 fi
 
 # install(1) writes through a temporary and renames, so a running server is

@@ -18,6 +18,10 @@
 //   - The written file is 0600 inside a 0700 directory, created with those
 //     modes rather than chmodded afterwards, so the credential is never briefly
 //     world-readable (the same trap the store hit with SQLite's WAL sidecars).
+//     WithGroupReadable widens the file to 0640 for a deployment whose connector
+//     runs as its own uid and reads through a group; `other` is never granted,
+//     and an existing directory that IS accessible to other is refused rather
+//     than written into.
 //   - The write is atomic: a temp file in the destination directory, then a
 //     rename. A workload reading the directory concurrently sees either the old
 //     credential or the new one, never a half-written one — which matters
@@ -75,6 +79,28 @@ const (
 	FileMode os.FileMode = 0o600
 )
 
+// Option adjusts how the credential file is written.
+type Option func(*options)
+
+type options struct{ fileMode os.FileMode }
+
+// WithGroupReadable writes the credential 0640 instead of 0600.
+//
+// It exists for one real deployment shape and is deliberately narrow. A
+// containerized connector runs as its own uid, which under rootless Podman is a
+// SUBORDINATE uid of the server's user — so a 0600 file the server owns is
+// unreadable by the very workload it is delivered for, and the container cannot
+// be made to run as the server's user. The deployment answers that by making the
+// credential directory setgid to the workload's own group; this makes the file
+// readable through that group and nothing else.
+//
+// It is not a general relaxation: `other` stays 0 either way, and the directory
+// remains 0700/2770 — the file is readable by the server's user and by the one
+// group the deployment pointed at the connector.
+func WithGroupReadable() Option {
+	return func(o *options) { o.fileMode = 0o640 }
+}
+
 // Materialize writes the credential in the named format and returns the path it
 // wrote. `dir` is the destination the workload mounts and `account` identifies
 // whose credential this is (for a Google connector, the Google account address).
@@ -82,10 +108,14 @@ const (
 // Both are DEPLOYMENT inputs, not manifest fields: which directory a workload
 // mounts and which account was granted are facts about a running system, and a
 // git-tracked manifest should carry neither.
-func Materialize(format, dir, account string, c Credential) (string, error) {
+func Materialize(format, dir, account string, c Credential, opts ...Option) (string, error) {
+	o := options{fileMode: FileMode}
+	for _, apply := range opts {
+		apply(&o)
+	}
 	switch format {
 	case connectors.FormatGoogleOAuthUserFile:
-		return writeGoogleOAuthUserFile(dir, account, c)
+		return writeGoogleOAuthUserFile(dir, account, c, o)
 	default:
 		return "", fmt.Errorf("%w: %q (this build writes: %s)",
 			ErrUnsupportedFormat, format, strings.Join(connectors.KnownDeliveryFormats(), ", "))
@@ -109,7 +139,7 @@ type googleOAuthUserFile struct {
 	Expiry *string `json:"expiry"`
 }
 
-func writeGoogleOAuthUserFile(dir, account string, c Credential) (string, error) {
+func writeGoogleOAuthUserFile(dir, account string, c Credential, o options) (string, error) {
 	name, err := googleAccountFilename(account)
 	if err != nil {
 		return "", err
@@ -138,7 +168,7 @@ func writeGoogleOAuthUserFile(dir, account string, c Credential) (string, error)
 		return "", fmt.Errorf("workloadcred: encode credential: %w", err)
 	}
 	path := filepath.Join(dir, name)
-	if err := writeSecretFile(dir, path, body); err != nil {
+	if err := writeSecretFile(dir, path, body, o.fileMode); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -177,14 +207,31 @@ func googleAccountFilename(account string) (string, error) {
 
 // writeSecretFile creates the directory and replaces the file atomically, with
 // both created at their final modes.
-func writeSecretFile(dir, path string, body []byte) error {
-	if err := os.MkdirAll(dir, DirMode); err != nil {
-		return fmt.Errorf("workloadcred: create credential dir: %w", err)
-	}
-	// MkdirAll respects the umask and skips existing directories, so the mode is
-	// asserted rather than assumed.
-	if err := os.Chmod(dir, DirMode); err != nil {
-		return fmt.Errorf("workloadcred: tighten credential dir: %w", err)
+func writeSecretFile(dir, path string, body []byte, mode os.FileMode) error {
+	info, statErr := os.Stat(dir)
+	switch {
+	case statErr == nil && info.IsDir():
+		// An existing directory is tightened only where it is actually open.
+		// A deployment may have given it group ownership and the setgid bit so
+		// the connector's own containerized identity can read the credential;
+		// resetting it to 0700 unconditionally would silently undo that on the
+		// next delivery and leave a workload unable to read a credential it was
+		// just handed. What must hold either way is that `other` has nothing.
+		if perm := info.Mode().Perm(); perm&0o007 != 0 {
+			if err := os.Chmod(dir, DirMode); err != nil {
+				return fmt.Errorf("workloadcred: tighten credential dir: %w", err)
+			}
+		}
+	case statErr != nil && !os.IsNotExist(statErr):
+		return fmt.Errorf("workloadcred: credential dir: %w", statErr)
+	default:
+		if err := os.MkdirAll(dir, DirMode); err != nil {
+			return fmt.Errorf("workloadcred: create credential dir: %w", err)
+		}
+		// MkdirAll respects the umask, so the mode is asserted rather than assumed.
+		if err := os.Chmod(dir, DirMode); err != nil {
+			return fmt.Errorf("workloadcred: tighten credential dir: %w", err)
+		}
 	}
 
 	tmp, err := os.CreateTemp(dir, ".credential-*.tmp")
@@ -194,7 +241,14 @@ func writeSecretFile(dir, path string, body []byte) error {
 	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }() // no-op once the rename succeeded
 
-	if err := tmp.Chmod(FileMode); err != nil {
+	// The mode is asserted here, on the temp file, so the credential is never
+	// briefly more permissive than its final mode — the rename publishes a file
+	// that has had exactly these bits since it was created.
+	if mode&0o007 != 0 {
+		_ = tmp.Close()
+		return fmt.Errorf("workloadcred: refusing to write a credential readable by other (%o)", mode)
+	}
+	if err := tmp.Chmod(mode); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("workloadcred: tighten temp credential: %w", err)
 	}
