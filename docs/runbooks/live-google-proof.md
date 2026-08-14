@@ -44,13 +44,29 @@ result and leaves `homeplane.db` behind.
 
 Then split the downloaded client JSON into two 0600 files and import them:
 
+Pass the downloaded client JSON's path explicitly — `open()` does not expand a
+glob, and a wildcard here fails on a literal filename before anything is
+imported:
+
 ```bash
+CLIENT_JSON=~/Downloads/client_secret_1234-abcd.apps.googleusercontent.com.json
+
 TMPD=$(mktemp -d); chmod 700 "$TMPD"
-python3 - "$TMPD" <<'PY'
+python3 - "$TMPD" "$CLIENT_JSON" <<'PY'
 import json, os, sys
-d = json.load(open(os.path.expanduser('~/Downloads/client_secret_*.json')))['installed']
+
+tmp, pattern = sys.argv[1], os.path.expanduser(sys.argv[2])
+# Tolerate a glob, but never guess between two clients: importing the wrong
+# OAuth app produces a consent screen that works and a connector that cannot
+# refresh.
+import glob
+matches = glob.glob(pattern) if any(c in pattern for c in '*?[') else [pattern]
+if len(matches) != 1:
+    raise SystemExit(f'need exactly one client JSON, {len(matches)} matched {pattern!r}: {matches}')
+
+d = json.load(open(matches[0]))['installed']
 for name, key in (('id', 'client_id'), ('secret', 'client_secret')):
-    fd = os.open(os.path.join(sys.argv[1], name), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = os.open(os.path.join(tmp, name), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w') as f:
         f.write(d[key])
 PY
@@ -150,20 +166,43 @@ The four tests are:
 |---|---|
 | `TestLiveGoogleDriveReadThroughTheEdge` | a real Drive read reaches Google through the edge, audited read-class |
 | `TestLiveGoogleDriveWriteIsRefused` | `create_drive_file` refused by the manifest before the gateway, audited as an `excluded_tool` policy violation (D18) |
-| `TestLiveGoogleCalendarSixOp` | create → read back → update → verify → delete → verify cleanup on an isolated `homeplane-test-<timestamp>` event, with the delete audited delete-class |
+| `TestLiveGoogleCalendarSixOp` | create → read back → update → verify → delete → verify cleanup on an isolated `homeplane-test-<ts>-<machine>-<harness>-<random>` event, with the delete audited delete-class |
 | `TestLiveGoogleRevokedGrantIsRefusedImmediately` | a revoked grant is 401 on the next call, in well under a second |
 
 The Calendar test checks that its event does not already exist before creating
-it, and deletes it from a `t.Cleanup` armed BEFORE the create call and disarmed
-only once the delete is verified. If the event's id could not be parsed out of
-the connector's prose, the cleanup locates the event by its unique summary
-instead; only if that also fails does it print
-`CLEANUP FAILED — DELETE THIS EVENT BY HAND` with the calendar and event id.
+it, and deletes it from a `t.Cleanup` armed BEFORE the create call. The cleanup
+is disarmed only once step 6's after-listing shows neither the event id nor the
+summary — a provider answering "deleted" has reported an intention, not a state,
+so the retry stays armed until absence is observed. If the event's id could not
+be parsed out of the connector's prose, the cleanup locates the event by its
+unique summary instead; the cleanup then re-queries after its own delete and
+prints `CLEANUP FAILED` / `CLEANUP INCOMPLETE` with the calendar and event id if
+anything of ours remains.
 
-Last full run: 2026-08-14, all four green against real Google — a real Drive
-search and a 118 KB document read, a Drive write refused at the manifest, the
-six-op on `homeplane-test-20260813T230933Z` (created, read, updated, verified,
-deleted, verified gone), and a revoked grant refused 2 ms after revocation.
+**Every Calendar write passes `send_updates: "none"`.** The connector defaults it
+to `"all"`, which emails every attendee, and the manifest guards that as
+`connector.send` — which no harness holds. A call omitting it is refused before
+it reaches Google (see `docs/decisions/d18-google-scopes.md`), so the proof uses
+the same explicit form a real caller must.
+
+### Evidence
+
+Each live run is recorded in `test/evidence/<task-id>.live.json` and embedded
+into the task's evidence artifact by `scripts/emit-evidence.sh`. Update it when
+you re-run: the artifact is the acceptance record, and an unrecorded live run
+proves nothing to anyone reading later.
+
+Last full run: 2026-08-14 — all four green against real Google, recorded in
+`test/evidence/fn-1-homeplane-walking-skeleton-install.12.live.json` with the
+commands, timestamps, redacted environment, commit and per-assertion results.
+
+**That run predates the `send_updates` guard**, and the file says so
+(`attests_to_current_manifest: false`). Its Calendar legs called `manage_event`
+without `send_updates`, which the current manifest refuses; the Drive, consent,
+custody and revocation legs are unaffected because none of them touches
+`manage_event`. Re-run the Calendar legs and replace the file before treating it
+as evidence for the guarded manifest — the `manifest_revision` field is what a
+later reader checks to know which manifest a run actually attests to.
 
 ## 5. Tear down
 
@@ -177,6 +216,10 @@ the proof is finished: https://myaccount.google.com/permissions.
 
 ## Known limitations, recorded rather than hidden
 
+- **The Calendar legs must be re-run after any manifest change that alters what
+  a call must send.** The evidence file records the manifest revision each run
+  attests to; the send_updates guard, for instance, changes the arguments a
+  legitimate caller has to pass.
 - **The create step's artifact id is `unknown`.** workspace-mcp returns prose,
   and the manifest's artifact extractor addresses JSON, so the created event's
   id cannot be extracted declaratively. That row carries an args digest instead;

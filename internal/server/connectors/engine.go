@@ -104,6 +104,10 @@ type Decision struct {
 	// ExclusionReason is the manifest's recorded reason when Reason is
 	// ReasonExcludedTool.
 	ExclusionReason string
+	// GuardReason is the manifest's recorded reason when the missing capability
+	// was demanded by an ArgumentGuard rather than by the action class. It tells
+	// the caller what the call was asking for, not just what it lacked.
+	GuardReason string
 }
 
 // PolicyViolation reports whether the refusal is a manifest-level violation
@@ -230,6 +234,25 @@ func (e *Engine) Authorize(req Request) Decision {
 		}
 	}
 
+	// Guards run AFTER the class check and can only add requirements. An
+	// argument that asks the tool to do something its class does not describe —
+	// notifying every attendee of an event, say — has to be authorized as that
+	// something, or the class becomes a way to launder authority.
+	for _, guard := range mapping.Guards {
+		if !guard.Applies(req.Args) || req.Caller.hasCapability(guard.Capability) {
+			continue
+		}
+		return Decision{
+			Reason:      ReasonCapabilityMissing,
+			ActionClass: class,
+			// The capability reported is the one the call actually lacks, which
+			// is what makes the audit row say why it was refused.
+			RequiredCapability: guard.Capability,
+			Mapping:            mapping,
+			GuardReason:        guard.Reason,
+		}
+	}
+
 	return Decision{
 		Allowed:            true,
 		ActionClass:        class,
@@ -253,6 +276,10 @@ func (d Decision) DeniedError(req Request) error {
 		return fmt.Errorf("%w: tool %q does not say which action it performs, so the connector manifest "+
 			"cannot classify the call", ErrDenied, req.Tool)
 	case ReasonCapabilityMissing:
+		if d.GuardReason != "" {
+			return fmt.Errorf("%w: tool %q requires capability %q for this call: %s",
+				ErrDenied, req.Tool, d.RequiredCapability, d.GuardReason)
+		}
 		return fmt.Errorf("%w: tool %q is %s-class and requires capability %q",
 			ErrDenied, req.Tool, d.ActionClass, d.RequiredCapability)
 	case ReasonUnauthenticated:

@@ -175,10 +175,10 @@ func TestShippedGoogleCalendarActionClasses(t *testing.T) {
 	}{
 		{"create", ActionWrite},
 		{"update", ActionWrite},
-		{"rsvp", ActionWrite},
 		{"delete", ActionDelete},
 	} {
-		args := `{"user_google_email":"u@example.test","action":"` + tc.action + `","event_id":"ev-1"}`
+		args := `{"user_google_email":"u@example.test","action":"` + tc.action +
+			`","event_id":"ev-1","send_updates":"none"}`
 		d := e.Authorize(req(googleProvider, "manage_event", args, fullCaller()))
 		if !d.Allowed {
 			t.Fatalf("manage_event %s denied for a full grant: %+v", tc.action, d)
@@ -196,11 +196,11 @@ func TestShippedGoogleCalendarActionClasses(t *testing.T) {
 	if d := e.Authorize(req(googleProvider, "get_events", `{"user_google_email":"u@example.test","event_id":"ev-1"}`, readOnlyCaller())); !d.Allowed || d.ActionClass != ActionRead {
 		t.Errorf("get_events under a read grant: %+v, want an allowed read", d)
 	}
-	create := `{"user_google_email":"u@example.test","action":"create","summary":"x"}`
+	create := `{"user_google_email":"u@example.test","action":"create","summary":"x","send_updates":"none"}`
 	if d := e.Authorize(req(googleProvider, "manage_event", create, readWriteCaller())); !d.Allowed {
 		t.Errorf("manage_event create under a read+write grant: %+v, want allowed", d)
 	}
-	del := `{"user_google_email":"u@example.test","action":"delete","event_id":"ev-1"}`
+	del := `{"user_google_email":"u@example.test","action":"delete","event_id":"ev-1","send_updates":"none"}`
 	d := e.Authorize(req(googleProvider, "manage_event", del, readWriteCaller()))
 	if d.Allowed {
 		t.Fatal("a read+write grant deleted a calendar event")
@@ -217,6 +217,10 @@ func TestShippedGoogleUnclassifiableCallIsRefused(t *testing.T) {
 	e := shippedGoogleEngine(t)
 	for name, args := range map[string]string{
 		"unknown action": `{"user_google_email":"u@example.test","action":"purge_everything"}`,
+		// RSVP is deliberately not a declared case: responding to an invitation
+		// messages the organizer, and the connector gives no way to do it
+		// silently. It therefore classifies as nothing and is refused.
+		"rsvp":           `{"user_google_email":"u@example.test","action":"rsvp","event_id":"ev-1","response":"accepted"}`,
 		"no action":      `{"user_google_email":"u@example.test","summary":"x"}`,
 		"non-scalar":     `{"user_google_email":"u@example.test","action":{"nested":"delete"}}`,
 		"malformed args": `not json`,
@@ -251,10 +255,10 @@ func TestShippedGoogleAuditRowsCarryTheResolvedClass(t *testing.T) {
 		id    string
 	}{
 		{"get_drive_file_content", `{"user_google_email":"u@example.test","file_id":"drive-file-1"}`, ActionRead, "drive-file-1"},
-		{"manage_event", `{"user_google_email":"u@example.test","action":"create","summary":"` + secret + `"}`, ActionWrite, ArtifactUnknown},
+		{"manage_event", `{"user_google_email":"u@example.test","action":"create","summary":"` + secret + `","send_updates":"none"}`, ActionWrite, ArtifactUnknown},
 		{"get_events", `{"user_google_email":"u@example.test","event_id":"ev-77"}`, ActionRead, "ev-77"},
-		{"manage_event", `{"user_google_email":"u@example.test","action":"update","event_id":"ev-77","summary":"` + secret + `"}`, ActionWrite, "ev-77"},
-		{"manage_event", `{"user_google_email":"u@example.test","action":"delete","event_id":"ev-77"}`, ActionDelete, "ev-77"},
+		{"manage_event", `{"user_google_email":"u@example.test","action":"update","event_id":"ev-77","summary":"` + secret + `","send_updates":"none"}`, ActionWrite, "ev-77"},
+		{"manage_event", `{"user_google_email":"u@example.test","action":"delete","event_id":"ev-77","send_updates":"none"}`, ActionDelete, "ev-77"},
 	}
 	for _, c := range calls {
 		if _, err := b.Invoke(ctx, req(googleProvider, c.tool, c.args, fullCaller())); err != nil {
@@ -362,5 +366,148 @@ func TestResolveActionClassIsTotal(t *testing.T) {
 	}
 	if class, ok := sel.ResolveActionClass(json.RawMessage(`{"action":"go"}`)); !ok || class != ActionWrite {
 		t.Fatalf("resolved (%q,%v), want (write,true)", class, ok)
+	}
+}
+
+// TestShippedGoogleNotifyingCalendarCallsNeedSendAuthority is the guard the
+// action class alone could not express.
+//
+// `manage_event` defaults `send_updates` to "all", so a create, update or
+// delete on an event with attendees emails every one of them. That is send
+// authority arriving through a write- or delete-classified tool, and no harness
+// policy grants connector.send — so these calls must be refused however much
+// write and delete authority the grant carries.
+func TestShippedGoogleNotifyingCalendarCallsNeedSendAuthority(t *testing.T) {
+	e := shippedGoogleEngine(t)
+
+	for name, args := range map[string]string{
+		// The connector's default: omitted means everyone is notified.
+		"send_updates omitted": `{"user_google_email":"u@example.test","action":"create","summary":"x","attendees":["a@example.test"]}`,
+		"send_updates all":     `{"user_google_email":"u@example.test","action":"update","event_id":"ev-1","send_updates":"all"}`,
+		"externalOnly":         `{"user_google_email":"u@example.test","action":"delete","event_id":"ev-1","send_updates":"externalOnly"}`,
+		// Anything the guard cannot read as one of its safe values applies.
+		"non-scalar":  `{"user_google_email":"u@example.test","action":"create","send_updates":["none"]}`,
+		"unlisted":    `{"user_google_email":"u@example.test","action":"create","send_updates":"NONE"}`,
+		"null":        `{"user_google_email":"u@example.test","action":"create","send_updates":null}`,
+		"empty value": `{"user_google_email":"u@example.test","action":"create","send_updates":""}`,
+	} {
+		d := e.Authorize(req(googleProvider, "manage_event", args, fullCaller()))
+		if d.Allowed {
+			t.Errorf("%s: a notifying calendar call was authorized without send authority", name)
+			continue
+		}
+		if d.Reason != ReasonCapabilityMissing || d.RequiredCapability != policy.ConnectorSend {
+			t.Errorf("%s: %+v, want capability_missing on connector.send", name, d)
+		}
+		if d.GuardReason == "" {
+			t.Errorf("%s: the refusal records no reason, so the caller cannot tell why", name)
+		}
+		// The class is still the truth about what the call would have done.
+		if d.ActionClass == ActionUnknown {
+			t.Errorf("%s: action class %q, want the resolved class", name, d.ActionClass)
+		}
+	}
+
+	// The safe value is the whole point: silent operations still work.
+	for _, action := range []string{"create", "update", "delete"} {
+		args := `{"user_google_email":"u@example.test","action":"` + action + `","event_id":"ev-1","send_updates":"none"}`
+		if d := e.Authorize(req(googleProvider, "manage_event", args, fullCaller())); !d.Allowed {
+			t.Errorf("silent %s was refused: %+v", action, d)
+		}
+	}
+}
+
+// TestShippedGoogleGuardIsACapabilityCheckNotABan — a grant that DID carry
+// connector.send would be allowed to notify. The guard raises the bar; it does
+// not hard-code a refusal, which is what keeps it a policy statement rather
+// than a special case for one connector.
+func TestShippedGoogleGuardIsACapabilityCheckNotABan(t *testing.T) {
+	sender := machineCaller(policy.ConnectorRead, policy.ConnectorWrite,
+		policy.ConnectorDelete, policy.ConnectorSend)
+	args := `{"user_google_email":"u@example.test","action":"create","summary":"x","send_updates":"all"}`
+	d := shippedGoogleEngine(t).Authorize(req(googleProvider, "manage_event", args, sender))
+	if !d.Allowed {
+		t.Fatalf("a grant holding connector.send was refused: %+v", d)
+	}
+	if d.ActionClass != ActionWrite {
+		t.Errorf("action class %q, want write: the guard adds a requirement, it does not restate the class", d.ActionClass)
+	}
+}
+
+// TestShippedGoogleNotifyingRefusalIsAudited — the refusal has to leave a
+// record naming the authority the call was reaching for.
+func TestShippedGoogleNotifyingRefusalIsAudited(t *testing.T) {
+	sink := &recordingSink{}
+	b := NewBroker(shippedGoogleEngine(t), newStubRuntime(), sink)
+
+	_, err := b.Invoke(context.Background(), req(googleProvider, "manage_event",
+		`{"user_google_email":"u@example.test","action":"delete","event_id":"ev-9"}`, fullCaller()))
+	if err == nil {
+		t.Fatal("a notifying delete was forwarded")
+	}
+	if !strings.Contains(err.Error(), "send_updates") {
+		t.Errorf("the caller-facing error does not say what was wrong: %v", err)
+	}
+	row := sink.only(t)
+	if row.Outcome != store.OutcomeDenied || row.Reason != ReasonCapabilityMissing {
+		t.Fatalf("row = %+v, want a capability_missing denial", row)
+	}
+	if row.Detail["required_capability"] != string(policy.ConnectorSend) {
+		t.Errorf("audited required_capability %q, want %q",
+			row.Detail["required_capability"], policy.ConnectorSend)
+	}
+	if row.ActionClass != string(ActionDelete) {
+		t.Errorf("audited action class %q, want delete", row.ActionClass)
+	}
+	if row.ArtifactID != "ev-9" {
+		t.Errorf("audited artifact %q, want ev-9", row.ArtifactID)
+	}
+}
+
+// TestArgumentGuardSchemaRefusals — a guard is an authorization input, so a
+// malformed one is refused at load time rather than silently ignored.
+func TestArgumentGuardSchemaRefusals(t *testing.T) {
+	base := func(guard string) string {
+		return `{"version":1,"connectors":[{
+			"provider":"guarded","credential_ref":"guarded/session",
+			"credential_acquisition":{"driver":"oauth2-authcode","params":{
+				"auth_endpoint":"https://auth.test/authorize","token_endpoint":"https://auth.test/token",
+				"client_id_ref":"guarded/client-id","client_secret_ref":"guarded/client-secret"},"scopes":["s"]},
+			"mcp_server":{"name":"guarded","transport":"stdio","source":"stub://in-process"},
+			"tools":[{"tool":"t","action_class":"write","capability_guards":[` + guard + `]}]}]}`
+	}
+	for name, guard := range map[string]string{
+		"bad pointer":        `{"pointer":"notice","unless_in":["none"],"capability":"connector.send","reason":"r"}`,
+		"unknown capability": `{"pointer":"$.notify","unless_in":["none"],"capability":"connector.everything","reason":"r"}`,
+		"no safe values":     `{"pointer":"$.notify","unless_in":[],"capability":"connector.send","reason":"r"}`,
+		"empty safe value":   `{"pointer":"$.notify","unless_in":[""],"capability":"connector.send","reason":"r"}`,
+		"no reason":          `{"pointer":"$.notify","unless_in":["none"],"capability":"connector.send","reason":"  "}`,
+	} {
+		if _, err := Parse([]byte(base(guard))); err == nil {
+			t.Errorf("%s: accepted, want a refusal", name)
+		}
+	}
+	if _, err := Parse([]byte(base(`{"pointer":"$.notify","unless_in":["none"],"capability":"connector.send","reason":"notifies people"}`))); err != nil {
+		t.Fatalf("a well-formed guard was refused: %v", err)
+	}
+}
+
+// TestArgumentGuardAppliesIsTotal — Applies runs on caller-supplied bytes on
+// every call, and every unreadable answer must land on the safe side.
+func TestArgumentGuardAppliesIsTotal(t *testing.T) {
+	g := ArgumentGuard{Pointer: "$.send_updates", UnlessIn: []string{"none", "quiet"},
+		Capability: policy.ConnectorSend, Reason: "notifies attendees"}
+	for _, args := range []string{
+		"", "null", "[]", "not json", `{}`, `{"send_updates":"all"}`,
+		`{"send_updates":null}`, `{"send_updates":{"mode":"none"}}`, `{"send_updates":123}`,
+	} {
+		if !g.Applies(json.RawMessage(args)) {
+			t.Errorf("args %q did not apply the guard; doubt must fall on the safe side", args)
+		}
+	}
+	for _, args := range []string{`{"send_updates":"none"}`, `{"send_updates":"quiet"}`} {
+		if g.Applies(json.RawMessage(args)) {
+			t.Errorf("args %q applied the guard despite naming a safe value", args)
+		}
 	}
 }

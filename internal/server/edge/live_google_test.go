@@ -33,8 +33,11 @@ package edge
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -405,8 +408,14 @@ func TestLiveGoogleDriveWriteIsRefused(t *testing.T) {
 func TestLiveGoogleCalendarSixOp(t *testing.T) {
 	h := newLiveHarness(t)
 
+	// The summary is the only handle the cleanup has if the event id cannot be
+	// parsed, so it has to be unique against every OTHER run — including one
+	// starting in the same second on another machine. Timestamp for a human
+	// reading the calendar, machine and harness for provenance, and 64 bits of
+	// CSPRNG so two runs cannot collide by construction.
 	stamp := time.Now().UTC().Format("20060102T150405Z")
-	summary := "homeplane-test-" + stamp
+	summary := fmt.Sprintf("homeplane-test-%s-%s-%s-%s",
+		stamp, sanitizeForSummary(nodeA.NodeName), sanitizeForSummary(policy.HarnessClaudeCode), randomSuffix(t))
 	start := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Hour)
 	end := start.Add(time.Hour)
 	rfc := func(tm time.Time) string { return tm.Format("2006-01-02T15:04:05Z") }
@@ -441,12 +450,21 @@ func TestLiveGoogleCalendarSixOp(t *testing.T) {
 			return
 		}
 		res, text := h.call("manage_event", map[string]any{
-			"action": "delete", "event_id": id, "calendar_id": h.env.calendar,
+			"action": "delete", "event_id": id, "calendar_id": h.env.calendar, "send_updates": "none",
 		})
 		_, failed := toolText(res)
 		if res.status != http.StatusOK || res.rpc.Error != nil || failed {
 			t.Errorf("CLEANUP FAILED — DELETE THIS EVENT BY HAND: calendar %q event %q (%s)",
 				h.env.calendar, id, strings.TrimSpace(text))
+			return
+		}
+		// A provider that ANSWERS "deleted" has not proved the artifact is gone.
+		// The cleanup re-queries and reports whatever remains, because the only
+		// acceptable end state for this test is a calendar with nothing of ours
+		// on it.
+		if remainder := h.remainingEvent(summary, id); remainder != "" {
+			t.Errorf("CLEANUP INCOMPLETE — DELETE THIS BY HAND: calendar %q still lists %s",
+				h.env.calendar, remainder)
 		}
 	})
 
@@ -458,6 +476,10 @@ func TestLiveGoogleCalendarSixOp(t *testing.T) {
 		"action": "create", "calendar_id": h.env.calendar, "summary": summary,
 		"start_time": rfc(start), "end_time": rfc(end),
 		"description": "v1 created by the Homeplane live connector proof (" + stamp + ")",
+		// No attendees are involved, but the manifest guard requires this
+		// explicitly: the connector's default notifies everyone, and the proof
+		// must exercise the path a real caller has to take.
+		"send_updates": "none",
 	})
 	eventID = extractEventID(text)
 	if eventID == "" {
@@ -481,7 +503,8 @@ func TestLiveGoogleCalendarSixOp(t *testing.T) {
 	// STEP 3 — update.
 	text = h.mustCall("manage_event", map[string]any{
 		"action": "update", "event_id": eventID, "calendar_id": h.env.calendar,
-		"description": "v2 updated by the Homeplane live connector proof (" + stamp + ")",
+		"description":  "v2 updated by the Homeplane live connector proof (" + stamp + ")",
+		"send_updates": "none",
 	})
 	t.Logf("STEP 3 update: ok (%s)", firstLine(text))
 	if row := h.lastToolRow("manage_event"); row.ActionClass != string(connectors.ActionWrite) || row.ArtifactID != eventID {
@@ -499,7 +522,7 @@ func TestLiveGoogleCalendarSixOp(t *testing.T) {
 
 	// STEP 5 — delete, through the SAME tool, resolved to the delete class.
 	text = h.mustCall("manage_event", map[string]any{
-		"action": "delete", "event_id": eventID, "calendar_id": h.env.calendar,
+		"action": "delete", "event_id": eventID, "calendar_id": h.env.calendar, "send_updates": "none",
 	})
 	t.Logf("STEP 5 delete: ok (%s)", firstLine(text))
 	deleteRow := h.lastToolRow("manage_event")
@@ -510,16 +533,19 @@ func TestLiveGoogleCalendarSixOp(t *testing.T) {
 		t.Errorf("the delete audited artifact %q, want %q", deleteRow.ArtifactID, eventID)
 	}
 	deleted := eventID
-	cleanupNeeded = false // step 5 deleted it; the cleanup has nothing left to do
 
-	// STEP 6 — verify cleanup: the event is gone from the calendar's listing.
+	// STEP 6 — verify cleanup. The delete RESPONSE is not the proof; the
+	// after-listing is, and it must show neither the id nor the summary. Only
+	// once that holds is the cleanup disarmed — a "deleted" answer followed by
+	// an event that is still there has to leave the retry armed.
 	after := h.mustCall("get_events", map[string]any{
 		"calendar_id": h.env.calendar, "query": summary, "max_results": 5,
 	})
-	if strings.Contains(after, deleted) {
+	if strings.Contains(after, deleted) || strings.Contains(after, summary) {
 		t.Fatalf("the deleted event %s is still listed:\n%s", deleted, after)
 	}
-	t.Logf("STEP 6 verify cleanup: %s is gone", deleted)
+	cleanupNeeded = false // proven absent, not merely reported deleted
+	t.Logf("STEP 6 verify cleanup: %s is gone from the after-listing", deleted)
 
 	// The whole sequence, metadata only: the event summary passed through the
 	// broker on four calls and may appear in no audit row.
@@ -633,6 +659,52 @@ func (h *liveHarness) findEventBySummary(summary string) string {
 		return ""
 	}
 	return extractEventID(text)
+}
+
+// remainingEvent reports what the calendar still lists for this proof's event,
+// or "" when nothing of ours is left. It is the cleanup's own verification: a
+// provider that answers "deleted" has reported an intention, not a state.
+func (h *liveHarness) remainingEvent(summary, id string) string {
+	h.t.Helper()
+	_, text := h.call("get_events", map[string]any{
+		"calendar_id": h.env.calendar, "query": summary, "max_results": 5,
+	})
+	switch {
+	case strings.Contains(text, id):
+		return "event " + id
+	case strings.Contains(text, summary):
+		return "an event named " + summary
+	default:
+		return ""
+	}
+}
+
+// randomSuffix is 64 bits of CSPRNG, so two runs cannot pick the same summary.
+func randomSuffix(t *testing.T) string {
+	t.Helper()
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		t.Fatalf("generate a unique test-event suffix: %v", err)
+	}
+	return hex.EncodeToString(buf[:])
+}
+
+// sanitizeForSummary keeps the provenance parts of a summary to characters that
+// survive a round trip through a calendar and a text search.
+func sanitizeForSummary(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + 32)
+		}
+	}
+	if b.Len() == 0 {
+		return "unknown"
+	}
+	return b.String()
 }
 
 // firstLine keeps a log line readable when a connector answers with prose.

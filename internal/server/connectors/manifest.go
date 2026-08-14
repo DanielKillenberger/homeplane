@@ -226,6 +226,93 @@ type ToolMapping struct {
 	// be read. Absent means the audit row records a digest of the request
 	// arguments and artifact id `unknown`.
 	ArtifactID *Extractor `json:"artifact_id,omitempty"`
+	// Guards declare capabilities a call needs IN ADDITION to its action
+	// class's, based on what its arguments ask the tool to do (see
+	// ArgumentGuard).
+	Guards []ArgumentGuard `json:"capability_guards,omitempty"`
+}
+
+// ArgumentGuard requires an EXTRA capability when a request argument shows the
+// call will do something its action class does not describe.
+//
+// The case that forced it is real and was missed by the action class alone: the
+// pinned Google connector's `manage_event` takes a `send_updates` argument that
+// defaults to "all", so creating, updating or deleting an event with attendees
+// emails every one of them. That is send authority — reaching third parties —
+// arriving through a tool classified `write` or `delete`. Without a guard, a
+// grant holding only connector.write can notify a room full of people, and the
+// audit row would call it a write.
+//
+// Two properties make this safe to express declaratively:
+//
+//   - A guard can only ever ADD a requirement. There is no form that removes or
+//     lowers one, so no manifest edit can weaken a call through this field.
+//   - It fires on doubt. The argument being absent, non-scalar, or carrying an
+//     unlisted value all mean the guard applies — which is the direction that
+//     matters, because the connector's DEFAULT (send to everyone) is exactly
+//     the omitted case.
+type ArgumentGuard struct {
+	// Pointer addresses the request argument that decides, in the same
+	// JSONPath-style subset extractors use (`$.send_updates`).
+	Pointer string `json:"pointer"`
+	// UnlessIn lists the values that make the guard NOT apply — the safe
+	// values. Anything else, including nothing at all, requires the capability.
+	UnlessIn []string `json:"unless_in"`
+	// Capability is what the call additionally requires when the guard fires.
+	Capability policy.Capability `json:"capability"`
+	// Reason explains the authority in operator terms. It is shown to a caller
+	// whose call is refused, so a denial says what the call was actually asking
+	// for rather than only which capability was missing.
+	Reason string `json:"reason"`
+}
+
+// Applies reports whether the guard's extra capability is required for a call
+// carrying these arguments. It is total: anything it cannot read safely means
+// the guard applies.
+func (g ArgumentGuard) Applies(args json.RawMessage) bool {
+	value, ok := Extract(Extractor{Source: FromRequest, Pointer: g.Pointer}, args)
+	if !ok {
+		return true
+	}
+	for _, safe := range g.UnlessIn {
+		if value == safe {
+			return false
+		}
+	}
+	return true
+}
+
+func (g ArgumentGuard) validate(provider, tool string) error {
+	if _, err := parsePointer(g.Pointer); err != nil {
+		return fmt.Errorf("%w: connector %q: tool %q capability_guard pointer: %v",
+			ErrInvalidManifest, provider, tool, err)
+	}
+	if !knownCapabilities[g.Capability] {
+		return fmt.Errorf("%w: connector %q: tool %q capability_guard requires unknown capability %q",
+			ErrInvalidManifest, provider, tool, g.Capability)
+	}
+	// A guard with no safe values can never be satisfied, which is an exclusion
+	// written in the wrong place: say so with `excluded_tools`, where the reason
+	// is recorded and the denial is audited as the deliberate exclusion it is.
+	if len(g.UnlessIn) == 0 {
+		return fmt.Errorf("%w: connector %q: tool %q capability_guard lists no safe values; "+
+			"exclude the tool instead", ErrInvalidManifest, provider, tool)
+	}
+	for _, v := range g.UnlessIn {
+		if strings.TrimSpace(v) == "" {
+			return fmt.Errorf("%w: connector %q: tool %q capability_guard has an empty safe value",
+				ErrInvalidManifest, provider, tool)
+		}
+		if len(v) > MaxIdentifierLen {
+			return fmt.Errorf("%w: connector %q: tool %q capability_guard safe value is %d bytes, the limit is %d",
+				ErrInvalidManifest, provider, tool, len(v), MaxIdentifierLen)
+		}
+	}
+	if strings.TrimSpace(g.Reason) == "" {
+		return fmt.Errorf("%w: connector %q: tool %q capability_guard needs a reason",
+			ErrInvalidManifest, provider, tool)
+	}
+	return nil
 }
 
 // ActionSelector classifies a POLYMORPHIC tool — one whose effect is chosen by
@@ -498,6 +585,11 @@ func (c Connector) validate() error {
 func (t ToolMapping) validate(provider string) error {
 	if err := validateToolName(provider, t.Tool); err != nil {
 		return err
+	}
+	for _, g := range t.Guards {
+		if err := g.validate(provider, t.Tool); err != nil {
+			return err
+		}
 	}
 	if t.ActionSelector != nil {
 		return t.validateSelector(provider)
