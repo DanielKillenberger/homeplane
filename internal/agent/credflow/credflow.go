@@ -75,6 +75,16 @@ type Result struct {
 // Succeeded reports whether the credential was stored server-side.
 func (r Result) Succeeded() bool { return r.State == "completed" }
 
+// Ready reports whether the credential is stored AND usable.
+//
+// The two are not the same, and conflating them is what makes a client report a
+// clean success on a deployment that cannot make a single call: a completed flow
+// carrying a diagnostic means the credential was stored and the connector could
+// not be given it. Re-authorizing would change nothing, so this is a distinct
+// answer from both success and failure, and the caller has to be able to tell
+// them apart.
+func (r Result) Ready() bool { return r.Succeeded() && r.ErrorCode == "" }
+
 // AddCredentials runs the flow to a terminal state.
 //
 // A non-nil error means the flow could not be run (unreachable server, refused

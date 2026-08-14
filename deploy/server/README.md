@@ -221,8 +221,14 @@ ever server-side:
 
 Delivery happens on startup for whatever is already stored, and from a commit
 hook that runs BEFORE `add-credentials` reports success — so a client that polls
-its way to `completed` and immediately makes a call finds a deployment that is
-ready.
+its way to a clean `completed` finds a deployment that is ready.
+
+When delivery FAILS the credential is still stored (re-authorizing would change
+nothing), and the outcome says so: the flow completes carrying a
+`delivery_failed` diagnostic, `add-credentials` prints "the credential is NOT
+usable yet" and exits non-zero, and `/healthz` reports the `workload_credential`
+component degraded until a later delivery succeeds. Storage and readiness are
+different claims, and the deployment reports them separately.
 
 **Why the gid setting exists.** Rootless Podman maps the container's uid/gid to
 a SUBORDINATE id of this user, so a 0600 file the server owns is unreadable by

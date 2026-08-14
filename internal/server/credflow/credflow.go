@@ -94,6 +94,12 @@ const (
 	CodeExchangeFailed = "exchange_failed"
 	// CodeStoreFailed — tokens were obtained but could not be stored.
 	CodeStoreFailed = "store_failed"
+	// CodeDeliveryFailed — the credential IS stored, and the deployment could
+	// not hand it to the connector that has to use it. It is deliberately not a
+	// failure of the FLOW: re-running consent would change nothing, and telling
+	// a human to authorize again for a credential the server already holds is
+	// the one answer that is both wrong and expensive.
+	CodeDeliveryFailed = "delivery_failed"
 	// CodeConcurrentReplacement — another flow committed this provider's
 	// credential first; this one wrote nothing.
 	CodeConcurrentReplacement = "concurrent_replacement"
@@ -770,18 +776,27 @@ func (s *Service) exchangeAndStore(ctx context.Context, f *flow, code string) {
 	// Delivery happens before the flow is reported completed: the agent polls
 	// until terminal and a caller that sees `completed` may make a connector
 	// call in the next second.
+	var deliveryFault *Diagnostic
 	if s.cfg.OnCommitted != nil {
 		if err := s.cfg.OnCommitted(ctx, provider, generation); err != nil {
-			// The credential IS stored. Reporting anything but success here
-			// would contradict the store, so the failure is loud rather than
-			// terminal — a connector that cannot read its credential is an
-			// operational fault an operator fixes, not a credential to discard.
+			// The credential IS stored, so the flow completes: re-running consent
+			// would change nothing. But it is NOT ready, and this flow's whole
+			// contract is that a client which polls its way to `completed` can
+			// use the credential next — so the outcome carries the fault, and
+			// the client reports it instead of a clean success.
 			s.log.Error("the credential was stored but could not be delivered to the connector workload",
 				"provider", provider, "generation", generation, "error", err)
+			deliveryFault = &Diagnostic{
+				ErrorCode: CodeDeliveryFailed,
+				Message: "the credential is stored on the server, but the connector could not be given it — " +
+					"do NOT authorize again; the server's operator must fix the delivery " +
+					"(the workload_credential component on /healthz names the fault)",
+				Retryable: false,
+			}
 		}
 	}
 
-	s.complete(f, generation)
+	s.complete(f, generation, deliveryFault)
 }
 
 // complete records the flow's one success transition.
@@ -796,7 +811,7 @@ func (s *Service) exchangeAndStore(ctx context.Context, f *flow, code string) {
 // wrong. Since a relayed flow is excluded from consent-window expiry, nothing
 // else can end it; if that ever changes, this logs loudly rather than papering
 // over a credential whose recorded outcome disagrees with the store.
-func (s *Service) complete(f *flow, generation int64) {
+func (s *Service) complete(f *flow, generation int64, fault *Diagnostic) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if f.state.Terminal() {
@@ -805,9 +820,17 @@ func (s *Service) complete(f *flow, generation int64) {
 		return
 	}
 	f.state = StateCompleted
-	f.diag = nil
+	// A completed flow normally carries no diagnostic. It carries one when the
+	// credential is stored and NOT usable yet, which is a different thing from
+	// both success and failure and has to be sayable.
+	f.diag = fault
 	f.decided = nil
 	f.terminalAt = s.cfg.Now().UTC()
+	if fault != nil {
+		s.log.Warn("credential stored but not delivered", "provider", f.provider, "flow_id", f.id,
+			"generation", generation, "error_code", fault.ErrorCode)
+		return
+	}
 	s.log.Info("credential stored", "provider", f.provider, "flow_id", f.id, "generation", generation)
 }
 

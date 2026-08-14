@@ -711,6 +711,60 @@ func TestCommitHookRunsBeforeTheFlowReportsCompleted(t *testing.T) {
 	}
 }
 
+// TestCommitHookFailureIsVisibleInTheFlowsOutcome. The credential IS stored, so
+// the flow completes and no human is sent back through a consent screen. But
+// this flow's whole contract is that a client which polls its way to
+// `completed` can use the credential next — so a delivery that failed has to
+// travel with the outcome, or `add-credentials` reports a clean success on a
+// deployment that cannot make a single call.
+func TestCommitHookFailureIsVisibleInTheFlowsOutcome(t *testing.T) {
+	p := newFakeProvider(t, "google")
+	h := newHarness(t, harnessOptions{
+		providers: []*fakeProvider{p},
+		onCommitted: func(context.Context, string, int64) error {
+			return errors.New("the workload's credential directory is not writable")
+		},
+	})
+
+	_, terminal := h.runFlow(machineA, p, false)
+	if got := terminal.str("state"); got != string(credflow.StateCompleted) {
+		t.Fatalf("flow state %q, want completed: the credential IS stored", got)
+	}
+	diag := terminal.diagnostic()
+	if diag == nil || diag["error_code"] != credflow.CodeDeliveryFailed {
+		t.Fatalf("completed flow carries diagnostic %v, want %q", diag, credflow.CodeDeliveryFailed)
+	}
+	// Re-authorizing would change nothing, so the fault must not invite a retry.
+	if retryable, _ := diag["retryable"].(bool); retryable {
+		t.Error("a delivery fault was reported as retryable; consent is not what is broken")
+	}
+	// …and it must not leak what actually broke on the server.
+	if msg, _ := diag["message"].(string); strings.Contains(msg, "not writable") {
+		t.Errorf("the diagnostic repeats the server's internal error: %q", msg)
+	}
+	cred, _, err := h.credential("google")
+	if err != nil || cred.Access == "" {
+		t.Fatalf("credential after a failed delivery: %v (access %q)", err, cred.Access)
+	}
+}
+
+// TestSuccessfulDeliveryLeavesACleanOutcome — the ordinary case must stay clean,
+// or the signal above means nothing.
+func TestSuccessfulDeliveryLeavesACleanOutcome(t *testing.T) {
+	p := newFakeProvider(t, "google")
+	h := newHarness(t, harnessOptions{
+		providers:   []*fakeProvider{p},
+		onCommitted: func(context.Context, string, int64) error { return nil },
+	})
+	_, terminal := h.runFlow(machineA, p, false)
+	if got := terminal.str("state"); got != string(credflow.StateCompleted) {
+		t.Fatalf("flow state %q, want completed", got)
+	}
+	if diag := terminal.diagnostic(); diag != nil {
+		t.Errorf("a successful delivery left a diagnostic: %v", diag)
+	}
+}
+
 // TestCommitHookFailureDoesNotUnstoreTheCredential. The provider has already
 // issued the credential; a delivery fault is an operational problem an operator
 // fixes, and reporting the flow as failed would contradict the store — the

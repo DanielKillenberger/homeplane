@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/DanielKillenberger/homeplane/internal/agent"
+
+	"github.com/DanielKillenberger/homeplane/internal/agent/credflow"
 )
 
 // The flow itself is proven end to end in internal/agent/credflow. These cases
@@ -58,5 +60,34 @@ func TestAddCredentialsAgainstAServerWithoutTheBrokerFailsClearly(t *testing.T) 
 	}
 	if !strings.Contains(res.stderr, "server refused the request") {
 		t.Errorf("stderr does not report the server's refusal: %q", res.stderr)
+	}
+}
+
+// TestAddCredentialsReportsStoredButUndeliverable. The credential is stored, so
+// nobody should be sent back through a consent screen — and it is not usable, so
+// nobody should be told this worked. The command has to say both, and exit
+// non-zero, because a caller that sees success is entitled to assume the next
+// connector call will work.
+func TestAddCredentialsReportsStoredButUndeliverable(t *testing.T) {
+	res := credflow.Result{
+		Provider:  "google",
+		State:     "completed",
+		ErrorCode: "delivery_failed",
+		Message:   "the credential is stored on the server, but the connector could not be given it",
+	}
+	if res.Succeeded() != true {
+		t.Fatal("a stored credential must still count as stored")
+	}
+	if res.Ready() {
+		t.Fatal("a credential the connector cannot read was reported as ready")
+	}
+
+	clean := credflow.Result{Provider: "google", State: "completed"}
+	if !clean.Ready() {
+		t.Fatal("an ordinary success was not reported as ready")
+	}
+	denied := credflow.Result{Provider: "google", State: "denied", ErrorCode: "provider_denied"}
+	if denied.Succeeded() || denied.Ready() {
+		t.Fatal("a denied flow was reported as stored or ready")
 	}
 }

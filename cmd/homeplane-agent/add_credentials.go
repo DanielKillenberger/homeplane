@@ -153,10 +153,19 @@ stored: a declined, expired, or failed flow leaves it exactly as it was.
 			fmt.Fprintln(stderr, "homeplane-agent add-credentials: "+err.Error())
 			return 1
 		}
-	} else if result.Succeeded() {
+	} else if result.Ready() {
 		fmt.Fprintf(stdout, "stored a %s credential on %s; every enrolled machine's grants can use it now.\n",
 			result.Provider, client.BaseURL())
 		fmt.Fprintln(stdout, "no provider token was written to this machine.")
+	} else if result.Succeeded() {
+		// Stored, and not usable. Saying "success" here would send the operator
+		// looking for an authorization problem that does not exist; saying
+		// "failed" would send them back through a consent screen for a
+		// credential the server already holds.
+		fmt.Fprintf(stdout, "stored a %s credential on %s.\n", result.Provider, client.BaseURL())
+		fmt.Fprintln(stdout, "no provider token was written to this machine.")
+		fmt.Fprintf(stderr, "\nthe credential is NOT usable yet (%s): %s\n", result.ErrorCode, result.Message)
+		fmt.Fprintln(stderr, "do NOT run add-credentials again — the credential is stored; this is a server-side fault.")
 	} else {
 		fmt.Fprintf(stderr, "add-credentials for %s ended as %s (%s): %s\n",
 			result.Provider, result.State, result.ErrorCode, result.Message)
@@ -164,7 +173,10 @@ stored: a declined, expired, or failed flow leaves it exactly as it was.
 			fmt.Fprintln(stderr, "nothing was changed on the server; re-run this command to try again.")
 		}
 	}
-	if !result.Succeeded() {
+	// Stored-but-undeliverable exits non-zero too: a caller that polls its way
+	// to `completed` is entitled to assume the next connector call will work,
+	// and this is exactly the case where it will not.
+	if !result.Ready() {
 		return 1
 	}
 	return 0

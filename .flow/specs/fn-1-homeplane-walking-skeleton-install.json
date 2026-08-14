@@ -16,7 +16,7 @@
     "fn-1-homeplane-walking-skeleton-install.3": 1,
     "fn-1-homeplane-walking-skeleton-install.4": 1,
     "fn-1-homeplane-walking-skeleton-install.6": 0,
-    "fn-1-homeplane-walking-skeleton-install.7": 1,
+    "fn-1-homeplane-walking-skeleton-install.7": 2,
     "fn-1-homeplane-walking-skeleton-install.8": 0,
     "fn-1-homeplane-walking-skeleton-install.9": 0
   },
@@ -4343,6 +4343,101 @@
       "task": "fn-1-homeplane-walking-skeleton-install.7",
       "timestamp": "2026-08-14T15:03:35.574032Z",
       "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "aa4cfa36f14b2bcbe04160138b6d3c732d2eb4900c079c3d27feb6c947429f3b",
+      "backend": "codex",
+      "counter_kind": "impl",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "not_applicable"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-00562afc8551e10fef59b0c239fef313",
+            "classification": "introduced",
+            "findingId": "finding-00562afc8551e10fef59b0c239fef313",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-53ca005b742791c79fa1c3ac9be8595c",
+            "classification": "introduced",
+            "findingId": "finding-53ca005b742791c79fa1c3ac9be8595c",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-22d267c387f47121da387afc810acd3b",
+            "classification": "introduced",
+            "findingId": "finding-22d267c387f47121da387afc810acd3b",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-59ca137acddffe0a8d56ce87fe63d1de",
+            "classification": "introduced",
+            "findingId": "finding-59ca137acddffe0a8d56ce87fe63d1de",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-400e811ee47fd904bff5d47793f6b855",
+            "classification": "introduced",
+            "findingId": "finding-400e811ee47fd904bff5d47793f6b855",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-9f210349c70d96697c8accb35bf7a682",
+            "classification": "introduced",
+            "findingId": "finding-9f210349c70d96697c8accb35bf7a682",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-33394dfc986d18a608bf644a99612d20",
+            "classification": "introduced",
+            "findingId": "finding-33394dfc986d18a608bf644a99612d20",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-fdad8d0a72074fbb7ef7094ecc0096d0",
+            "classification": "introduced",
+            "findingId": "finding-fdad8d0a72074fbb7ef7094ecc0096d0",
+            "firstSeenThisRound": false,
+            "severity": "P2",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "implementation"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "ebffe8fe48072b09826c8a05cde787760bab7111",
+      "kind": "impl",
+      "outcome": "verdict",
+      "output_sha256": "7578fbc3389091d6bb91b4ff6f563b2cc1b08fb8315beae82cb640231e640b05",
+      "reservation_id": "270eb2105a6d4c488c7202f4ee822e8d",
+      "round_consumed": true,
+      "scope": "impl:fn-1-homeplane-walking-skeleton-install.7",
+      "superseded_by": null,
+      "task": "fn-1-homeplane-walking-skeleton-install.7",
+      "timestamp": "2026-08-14T16:29:15.030525Z",
+      "verdict": "NEEDS_WORK"
     }
   ],
   "review_hash_epoch": {
@@ -4393,5 +4488,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-08-14T15:03:35.588290Z"
+  "updated_at": "2026-08-14T16:29:15.035132Z"
 }
