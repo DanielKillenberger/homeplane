@@ -1,7 +1,7 @@
 {
   "branch_name": "fn-1-homeplane-walking-skeleton-install",
-  "completion_review_status": "needs_work",
-  "completion_reviewed_at": "2026-08-14T17:47:03.982504Z",
+  "completion_review_status": "ship",
+  "completion_reviewed_at": "2026-08-14T20:04:09.756926Z",
   "created_at": "2026-08-13T13:14:26.640058Z",
   "default_impl": null,
   "default_review": null,
@@ -22,7 +22,7 @@
     "fn-1-homeplane-walking-skeleton-install.9": 0
   },
   "next_task": 1,
-  "plan_review_rounds": 1,
+  "plan_review_rounds": 0,
   "plan_review_status": "ship",
   "plan_reviewed_at": "2026-08-13T15:55:53.104081Z",
   "review_attempts": [
@@ -4669,6 +4669,30 @@
       "task": null,
       "timestamp": "2026-08-14T17:47:03.967381Z",
       "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "667b3e0a5da7b4e48b278c029c894d9901eb7d60501c17c2d588d3281986671e",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "forced": false,
+      "hash_epoch": 7,
+      "head_sha": "800712293d0444d091de66725b762c8f09923074",
+      "kind": "completion",
+      "outcome": "verdict",
+      "output_sha256": "551542aee09abbd0f07f6dd96d6f92edfb7b37057faa4c430f47998f2abcc7ee",
+      "reservation_id": "63d3b1bb792943f4a58219049460b1de",
+      "round_consumed": true,
+      "scope": "completion",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-14T20:04:09.751490Z",
+      "verdict": "SHIP"
     }
   ],
   "review_hash_epoch": {
@@ -4681,7 +4705,7 @@
     "impl:fn-1-homeplane-walking-skeleton-install.8": 1,
     "impl:fn-1-homeplane-walking-skeleton-install.9": 1,
     "plan": 8,
-    "plan#completion": 7
+    "plan#completion": 8
   },
   "review_pending_rounds": {
     "impl:fn-1-homeplane-walking-skeleton-install.16": 1
@@ -4723,5 +4747,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-08-14T17:47:03.986948Z"
+  "updated_at": "2026-08-14T20:04:09.757604Z"
 }
