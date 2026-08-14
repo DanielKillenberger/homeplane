@@ -45,7 +45,7 @@ Active tracks served by this plan:
 
 All three decisions below were **resolved by task .1** against the real installed
 `grok 1.0.3` on this machine. Full evidence and reasoning:
-[`docs/decisions/fn3-grok-surfaces.md`](docs/decisions/fn3-grok-surfaces.md);
+[`docs/decisions/fn3-grok-surfaces.md`](../../docs/decisions/fn3-grok-surfaces.md);
 captured surface: `internal/agent/harness/testdata/grok-1.0.3-contract.txt`.
 
 - **D1 (fn-3) — grok's skills discovery convention: RESOLVED — native-link; symlinks followed; the frontmatter `name` wins, directory name is the fallback.** grok sits on the **Codex** side of the D14 split, so `RuleNameMismatch` applies unchanged and needs no grok-specific logic. Skills root is `~/.grok/skills/` (currently empty), relocated by `GROK_HOME`. Discovery is fresh per process — no restart step. Proven by linking three disposable skills as symlinks into a sealed home and enumerating them with `grok inspect`: a skill linked as `directory-beta-name` with frontmatter `name: frontmatter-beta-name` was reported as `frontmatter-beta-name`; one with no `name` was reported by its directory name.
