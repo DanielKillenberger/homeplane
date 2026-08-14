@@ -67,6 +67,7 @@ func TestEndToEndProof(t *testing.T) {
 	runStage(t, e, rec, "install", stageInstall)
 	runStage(t, e, rec, "enrol", stageEnrol)
 	runStage(t, e, rec, "vault", stageVault)
+	runStage(t, e, rec, "vault-sync", stageVaultSync)
 	runStage(t, e, rec, "gno", stageGNO)
 	runStage(t, e, rec, "skills", stageSkills)
 	runStage(t, e, rec, "harnesses", stageHarnesses)

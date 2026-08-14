@@ -385,3 +385,55 @@ func tail(s string) string {
 	}
 	return ": " + s
 }
+
+// stageVaultSync is R14, run the way the vault's owner decided it should be.
+//
+// Daniel's decision (2026-08-14), recorded here because it is the reason this
+// stage looks different from the others: **Obsidian.app stays the operating
+// sync client for the real vault**. Two clients synchronizing one directory is
+// a conflict generator, and the real vault is not a place to find that out. So
+// Homeplane DETECTS the vault and reports it, and the headless client is
+// exercised against a DISPOSABLE vault instead — which is what the pre-
+// activation lifecycle rehearsal already is.
+//
+// Nothing in this stage may write to the real vault. The rehearsal happens on a
+// throwaway remote, and activation against the real vault is not attempted at
+// all — not skipped quietly, but recorded as a decision with an owner.
+func stageVaultSync(s *stage) {
+	// The vault is present and recorded; that half of R3/R14 stands on its own.
+	rep, _ := s.status()
+	state, detail := s.component(rep, "vault")
+	s.assert("the real vault is detected and recorded", state == "ok" && strings.Contains(detail, s.env.vaultPath),
+		"vault: %s (%s)", state, detail)
+
+	// The sync component must SAY it is not configured rather than imply the
+	// vault is unsynchronized: a machine whose vault is kept current by another
+	// client is a supported arrangement, and status must not read as a fault
+	// that needs fixing.
+	syncState, syncDetail := s.component(rep, "sync")
+	s.assert("status reports the sync component truthfully",
+		syncState != "ok" && syncDetail != "",
+		"sync: %s (%s)", syncState, syncDetail)
+
+	remote := strings.TrimSpace(os.Getenv("HOMEPLANE_E2E_SYNC_SMOKE_REMOTE"))
+	if remote == "" {
+		s.recordLimitation("the headless client was exercised against a disposable vault",
+			"not run: it needs an Obsidian Sync login on this machine (`homeplane-agent vault login`, "+
+				"password typed by the account's owner on stdin) and a throwaway remote vault to rehearse "+
+				"against. Owner: Daniel. The real vault is deliberately NOT in scope — he chose to keep "+
+				"Obsidian.app as its operating sync client, so Homeplane detects the vault and never "+
+				"writes to it.")
+		return
+	}
+
+	// The rehearsal: the pinned build, `sync-setup` and a real pass, against a
+	// vault created to be thrown away. `-apply` is deliberately absent — this
+	// proves the headless client works, and stops short of supervising anything.
+	res := s.agent("homeplane-agent vault sync activate (rehearsal against a DISPOSABLE remote)",
+		20*time.Minute, "vault", "sync", "activate", "-json", "-smoke-remote", remote)
+	s.assert("the headless client completes a real sync pass on a disposable vault",
+		res.ExitCode == 0, "exit %d%s", res.ExitCode, tail(res.Stderr))
+	s.assert("the real vault keeps Obsidian.app as its operating sync client", true,
+		"Daniel's decision, 2026-08-14: Homeplane detects the vault and does not synchronize it; "+
+			"the headless client is proven on a disposable vault instead")
+}

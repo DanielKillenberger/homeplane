@@ -547,6 +547,14 @@ func runVaultSyncActivate(ctx context.Context, args []string, stdout, stderr io.
 		unitDir = f.set.String("unit-dir", "", "where to write the supervision unit (default: the platform's user unit directory)")
 		apply   = f.set.Bool("apply", false, "also load the unit into launchd/systemd (default: install the file only)")
 		asJSON  = f.set.Bool("json", false, "print the activation record as JSON")
+		// The DISPOSABLE remote the pre-activation rehearsal runs against. With
+		// it, the rehearsal is the real lifecycle — `sync-setup` and a genuine
+		// pass on the pinned build — instead of the unauthenticated contract
+		// check, and only then has anything proven that this build can sync at
+		// all before it is pointed at a vault that matters.
+		smokeRemote = f.set.String("smoke-remote", "",
+			"name of a DISPOSABLE remote vault to rehearse the full sync lifecycle against "+
+				"(create one for the purpose; its contents are not preserved)")
 	)
 	f.set.Usage = func() {
 		fmt.Fprint(f.set.Output(), `homeplane-agent vault sync activate — safely turn on continuous sync
@@ -558,6 +566,12 @@ snapshotted before the first sync either way.
 
 Without -apply the unit file is installed but NOT loaded — status reports that
 as degraded, because a vault that is not syncing is not a vault that is synced.
+
+The rehearsal that precedes everything runs against a DISPOSABLE vault. Without
+-smoke-remote it is an unauthenticated CONTRACT check (the build must refuse an
+unconfigured directory the way upstream does); with -smoke-remote it is the full
+authenticated lifecycle against the throwaway remote you name — which is the
+only version that proves this build can actually sync.
 
 `)
 		f.set.PrintDefaults()
@@ -580,10 +594,11 @@ as degraded, because a vault that is not syncing is not a vault that is synced.
 
 	// STAGE 1 — prepare: every refusal that must precede supervision.
 	prepared, err := vault.Prepare(ctx, vault.PrepareOptions{
-		StateDir:  in.stateDir,
-		VaultPath: in.vaultPath,
-		CLI:       in.cli,
-		Secrets:   in.secrets,
+		StateDir:         in.stateDir,
+		VaultPath:        in.vaultPath,
+		CLI:              in.cli,
+		Secrets:          in.secrets,
+		SmokeRemoteVault: strings.TrimSpace(*smokeRemote),
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, "homeplane-agent: "+vault.Redact(err.Error(), in.secrets.AuthToken, in.secrets.E2EPassword))
