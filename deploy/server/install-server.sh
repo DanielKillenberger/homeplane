@@ -124,6 +124,35 @@ source "$CONFIG"
 : "${HOMEPLANE_GATEWAY_PORT:?server.env must set HOMEPLANE_GATEWAY_PORT}"
 : "${HOMEPLANE_GATEWAY_WORKLOAD:?server.env must set HOMEPLANE_GATEWAY_WORKLOAD}"
 : "${HOMEPLANE_GATEWAY_NAME:=homeplane-gateway}"
+# The connector's own requirements: extra `thv run` flags, and the workload's
+# own argv after `--`. Both default to empty, which is exactly the D6-spike
+# shape (a workload that needs neither).
+: "${HOMEPLANE_GATEWAY_RUN_ARGS:=}"
+: "${HOMEPLANE_GATEWAY_WORKLOAD_ARGS:=}"
+# The isolation guarantee is a flag, and a later flag wins. Config that repeats
+# --host or --proxy-port would move the workload proxy off loopback — where
+# another tailnet node could reach it directly, bypassing the grant token, the
+# machine binding and the manifest — from a file that reads like tuning. It is
+# refused rather than merged.
+case " $HOMEPLANE_GATEWAY_RUN_ARGS " in
+  *" --host "*|*" --host="*|*" --proxy-port "*|*" --proxy-port="*|*" --foreground "*)
+    die "HOMEPLANE_GATEWAY_RUN_ARGS may not set --host, --proxy-port or --foreground: the unit pins them, and re-declaring them would move the gateway off loopback" ;;
+esac
+# Where the server materializes a brokered provider credential for the workload
+# to read, and whose credential it is. Both or neither: a directory with no
+# account cannot name a file the connector will ever look for.
+: "${HOMEPLANE_WORKLOAD_CREDENTIAL_DIR:=}"
+: "${HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT:=}"
+if [[ -n "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR" && -z "$HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT" ]] \
+  || [[ -z "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR" && -n "$HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT" ]]; then
+  die "HOMEPLANE_WORKLOAD_CREDENTIAL_DIR and HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT must be set together"
+fi
+if [[ -n "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR" ]]; then
+  WORKLOAD_CRED_FLAGS="-workload-credential-dir $HOMEPLANE_WORKLOAD_CREDENTIAL_DIR"
+  WORKLOAD_CRED_FLAGS+=" -workload-credential-account $HOMEPLANE_WORKLOAD_CREDENTIAL_ACCOUNT"
+else
+  WORKLOAD_CRED_FLAGS=""
+fi
 
 # The endpoint URL handed to every harness has to name the port the control
 # plane actually listens on, or grants point somewhere nothing answers. It is
@@ -258,6 +287,9 @@ render_unit() {
       -e "s#@GATEWAY_PORT@#$HOMEPLANE_GATEWAY_PORT#g" \
       -e "s#@GATEWAY_WORKLOAD@#$HOMEPLANE_GATEWAY_WORKLOAD#g" \
       -e "s#@GATEWAY_NAME@#$HOMEPLANE_GATEWAY_NAME#g" \
+      -e "s#@GATEWAY_RUN_ARGS@#$HOMEPLANE_GATEWAY_RUN_ARGS#g" \
+      -e "s#@GATEWAY_WORKLOAD_ARGS@#$HOMEPLANE_GATEWAY_WORKLOAD_ARGS#g" \
+      -e "s#@WORKLOAD_CRED_FLAGS@#$WORKLOAD_CRED_FLAGS#g" \
       "$src" > "$dst"
 }
 
@@ -283,6 +315,15 @@ run mkdir -p "$BIN_DIR" "$ETC_DIR" "$UNIT_DIR"
 # tsnet node identity.
 run mkdir -p "$STATE_DIR"
 run chmod 700 "$STATE_DIR"
+
+# The workload's credential directory is created here, at 0700, rather than by
+# whoever writes into it first: the gateway unit mounts it, so a directory that
+# does not exist yet is created by the container runtime — owned by root and
+# world-readable — and the credential would land in it.
+if [[ -n "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR" ]]; then
+  run mkdir -p "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR"
+  run chmod 700 "$HOMEPLANE_WORKLOAD_CREDENTIAL_DIR"
+fi
 
 # install(1) writes through a temporary and renames, so a running server is
 # never reading a half-written binary; the unit restart below picks up the new

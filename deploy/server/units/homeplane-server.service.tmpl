@@ -23,7 +23,7 @@ ExecStart=@PREFIX@/bin/homeplane-server serve \
     -connector-endpoint-url @ENDPOINT_URL@ \
     -connector-manifest @PREFIX@/etc/manifest.json \
     -gateway-mcp-url http://127.0.0.1:@GATEWAY_PORT@/mcp \
-    -gateway-health-url http://127.0.0.1:@GATEWAY_PORT@/health
+    -gateway-health-url http://127.0.0.1:@GATEWAY_PORT@/health @WORKLOAD_CRED_FLAGS@
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=30s

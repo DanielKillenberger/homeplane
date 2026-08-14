@@ -214,6 +214,17 @@ type Config struct {
 	Now func() time.Time
 	// Logger receives operational logs. It never receives credential material.
 	Logger *slog.Logger
+	// OnCommitted runs after a credential has been durably stored and BEFORE
+	// the flow is reported completed, so a client that polls its way to
+	// `completed` and immediately makes a connector call finds a deployment
+	// that is actually ready.
+	//
+	// It is where a deployment materializes the credential into the shape its
+	// connector workload reads (internal/server/workloadcred). It is deliberately
+	// advisory: the store is the authority for R13's claim, so an error here is
+	// logged loudly and does not un-store a credential the provider has already
+	// issued — nothing could put that genie back.
+	OnCommitted func(ctx context.Context, provider string, generation int64) error
 }
 
 // Defaults for Config.
@@ -754,6 +765,20 @@ func (s *Service) exchangeAndStore(ctx context.Context, f *flow, code string) {
 		s.log.Error("store credential", "provider", provider, "error", err)
 		s.fail(ctx, f, storeDiag("the credential could not be stored; nothing was changed"))
 		return
+	}
+
+	// Delivery happens before the flow is reported completed: the agent polls
+	// until terminal and a caller that sees `completed` may make a connector
+	// call in the next second.
+	if s.cfg.OnCommitted != nil {
+		if err := s.cfg.OnCommitted(ctx, provider, generation); err != nil {
+			// The credential IS stored. Reporting anything but success here
+			// would contradict the store, so the failure is loud rather than
+			// terminal — a connector that cannot read its credential is an
+			// operational fault an operator fixes, not a credential to discard.
+			s.log.Error("the credential was stored but could not be delivered to the connector workload",
+				"provider", provider, "generation", generation, "error", err)
+		}
 	}
 
 	s.complete(f, generation)

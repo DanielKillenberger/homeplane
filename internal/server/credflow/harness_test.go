@@ -100,6 +100,8 @@ type harnessOptions struct {
 	manifestJSON string
 	// skipClientSecrets leaves the provider's client credentials unimported.
 	skipClientSecrets bool
+	// onCommitted is the deployment's post-commit hook (credential delivery).
+	onCommitted func(ctx context.Context, provider string, generation int64) error
 }
 
 func newHarness(t *testing.T, opts harnessOptions) *harness {
@@ -161,6 +163,7 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		MaxActiveFlowsPerMachine: opts.maxActiveFlows,
 		HTTPClient:               h.client,
 		Now:                      now,
+		OnCommitted:              opts.onCommitted,
 		Logger:                   slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	if err != nil {

@@ -11,6 +11,7 @@
 package deploy_test
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,6 +60,27 @@ func TestDeployedManifestIsValid(t *testing.T) {
 	}
 }
 
+// TestDeployedManifestIsTheShippedManifest. The manifest the edge authorizes
+// against exists twice — once as the repository's connector definition and once
+// as the file that ships to the host — and a live proof attests to whichever one
+// the server was running. Byte equality is the only version of "these are the
+// same policy" that cannot quietly stop being true.
+func TestDeployedManifestIsTheShippedManifest(t *testing.T) {
+	root := repoRoot(t)
+	deployed, err := os.ReadFile(filepath.Join(root, "deploy", "server", "manifest.json"))
+	if err != nil {
+		t.Fatalf("read the deployed manifest: %v", err)
+	}
+	shipped, err := os.ReadFile(filepath.Join(root, "configs", "connectors", "google.json"))
+	if err != nil {
+		t.Fatalf("read the shipped connector definition: %v", err)
+	}
+	if !bytes.Equal(deployed, shipped) {
+		t.Error("deploy/server/manifest.json has drifted from configs/connectors/google.json; " +
+			"copy the shipped connector definition over it (the live proofs attest to that file)")
+	}
+}
+
 // TestDeployedManifestKeepsDriveWritesUnmapped pins the D18 scope policy at the
 // only place it is enforced for a deployed server: an unmapped tool is refused
 // by the edge. A well-meaning edit that "completes" the tool list would quietly
@@ -71,16 +93,46 @@ func TestDeployedManifestKeepsDriveWritesUnmapped(t *testing.T) {
 	for _, c := range m.Connectors {
 		for _, tool := range c.Tools {
 			switch tool.Tool {
-			case "create_drive_file", "update_drive_file":
+			case "create_drive_file", "update_drive_file", "create_drive_folder", "copy_drive_file",
+				"manage_drive_access", "set_drive_file_permissions":
 				t.Errorf("connector %q maps Drive write tool %q; D18 makes Drive read-only",
 					c.Provider, tool.Tool)
 			}
-			if tool.ActionClass != connectors.ActionRead {
-				t.Errorf("connector %q maps %q as %q: this deployment ships the read surface only "+
-					"(fn-1.12 owns the Calendar write mapping and its through-the-stack proof)",
-					c.Provider, tool.Tool, tool.ActionClass)
+		}
+	}
+}
+
+// TestDeployedManifestGuardsCalendarNotifications. D18's second half: Calendar
+// carries write authority, and `manage_event`'s send_updates turns a write into
+// a notification to every attendee — send authority no skeleton harness holds.
+// The guard is what makes an omitted send_updates a refusal rather than an email
+// to a room full of people.
+func TestDeployedManifestGuardsCalendarNotifications(t *testing.T) {
+	m, err := connectors.LoadFile(filepath.Join(repoRoot(t), "deploy", "server", "manifest.json"))
+	if err != nil {
+		t.Fatalf("load manifest: %v", err)
+	}
+	var found bool
+	for _, c := range m.Connectors {
+		for _, tool := range c.Tools {
+			if tool.Tool != "manage_event" {
+				continue
+			}
+			found = true
+			var guarded bool
+			for _, g := range tool.Guards {
+				if g.Pointer == "$.send_updates" && g.Capability == "connector.send" {
+					guarded = true
+				}
+			}
+			if !guarded {
+				t.Errorf("connector %q maps manage_event without a connector.send guard on send_updates",
+					c.Provider)
 			}
 		}
+	}
+	if !found {
+		t.Error("the deployed manifest maps no manage_event: R8's reversible-write proof has no tool to run through")
 	}
 }
 
@@ -98,6 +150,22 @@ func TestGatewayUnitBindsLoopbackOnly(t *testing.T) {
 	}
 	if !strings.Contains(unit, "--enable-audit") {
 		t.Error("the gateway unit does not pass --enable-audit (D6: supplementary per-tool-call diagnostics)")
+	}
+}
+
+// TestGatewayRunArgsCannotMoveTheProxyOffLoopback. Operator-supplied `thv run`
+// flags are what makes the gateway connector-agnostic (R12), and they are also
+// the one way the bypass boundary could be undone from a config file: a later
+// --host wins over the template's pinned one. The installer refuses instead.
+func TestGatewayRunArgsCannotMoveTheProxyOffLoopback(t *testing.T) {
+	body := deployFile(t, "install-server.sh")
+	if !strings.Contains(body, `case " $HOMEPLANE_GATEWAY_RUN_ARGS " in`) {
+		t.Fatal("install-server.sh no longer screens HOMEPLANE_GATEWAY_RUN_ARGS; a config file could move the gateway off loopback")
+	}
+	for _, flag := range []string{`*" --host "*`, `*" --proxy-port "*`} {
+		if !strings.Contains(body, flag) {
+			t.Errorf("the screen does not reject %s", flag)
+		}
 	}
 }
 

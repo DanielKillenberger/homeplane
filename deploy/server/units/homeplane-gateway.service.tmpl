@@ -24,7 +24,16 @@ Type=exec
 # --enable-audit turns on ToolHive's per-tool-call audit. It is SUPPLEMENTARY
 # diagnostics (tool outcome + latency); the authoritative, attributable audit is
 # the edge's AuditEvent log (D6 gate 3).
-ExecStart=@PREFIX@/bin/thv run --foreground --host 127.0.0.1 --proxy-port @GATEWAY_PORT@ --enable-audit --name @GATEWAY_NAME@ @GATEWAY_WORKLOAD@
+#
+# @GATEWAY_RUN_ARGS@ and @GATEWAY_WORKLOAD_ARGS@ are the connector's own
+# requirements (HOMEPLANE_GATEWAY_RUN_ARGS / _WORKLOAD_ARGS in server.env):
+# transport shape, build dependencies, environment and the credential volume for
+# the run flags, and everything after `--` for the workload's own argv. They are
+# deployment inputs rather than template edits because which connector this
+# gateway supervises is exactly what changes between deployments (R12) — the
+# flags above, which carry the isolation guarantee, are not negotiable and stay
+# pinned in the template.
+ExecStart=@PREFIX@/bin/thv run --foreground --host 127.0.0.1 --proxy-port @GATEWAY_PORT@ --enable-audit @GATEWAY_RUN_ARGS@ --name @GATEWAY_NAME@ @GATEWAY_WORKLOAD@ @GATEWAY_WORKLOAD_ARGS@
 # A stopped unit must not leave a workload record behind, or the next start
 # fails on a name that is already taken. `-` so teardown of an already-absent
 # workload is not itself a failure.

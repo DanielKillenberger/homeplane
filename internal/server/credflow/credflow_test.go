@@ -663,3 +663,73 @@ type brokenAudit struct{}
 func (brokenAudit) AppendAudit(context.Context, store.AuditEvent) error {
 	return errors.New("simulated audit failure")
 }
+
+// TestCommitHookRunsBeforeTheFlowReportsCompleted. `add-credentials` polls
+// until terminal and a caller that sees `completed` may make a connector call
+// in the next second — so a deployment's delivery step (materializing the
+// credential into the workload's directory) has to have run by then, or the
+// first call after a successful consent fails on a credential that is stored
+// and not yet readable by anything.
+func TestCommitHookRunsBeforeTheFlowReportsCompleted(t *testing.T) {
+	p := newFakeProvider(t, "google")
+	var (
+		mu           sync.Mutex
+		hookProvider string
+		hookGen      int64
+		hookSawCred  bool
+	)
+	var h *harness
+	h = newHarness(t, harnessOptions{
+		providers: []*fakeProvider{p},
+		onCommitted: func(ctx context.Context, provider string, generation int64) error {
+			mu.Lock()
+			defer mu.Unlock()
+			hookProvider, hookGen = provider, generation
+			// The credential must already be readable from the store when the
+			// hook runs: delivery reads it back rather than being handed it.
+			cred, _, err := h.svc.Credential(ctx, provider)
+			hookSawCred = err == nil && cred.Access != ""
+			return nil
+		},
+	})
+
+	_, terminal := h.runFlow(machineA, p, false)
+	if got := terminal.str("state"); got != string(credflow.StateCompleted) {
+		t.Fatalf("flow state %q, want completed", got)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if hookProvider != "google" {
+		t.Errorf("the commit hook was called with provider %q, want google", hookProvider)
+	}
+	if hookGen == 0 {
+		t.Error("the commit hook was not given the stored generation")
+	}
+	if !hookSawCred {
+		t.Error("the commit hook ran before the credential was readable from the store")
+	}
+}
+
+// TestCommitHookFailureDoesNotUnstoreTheCredential. The provider has already
+// issued the credential; a delivery fault is an operational problem an operator
+// fixes, and reporting the flow as failed would contradict the store — the
+// agent would tell a human to re-consent for a credential that is right there.
+func TestCommitHookFailureDoesNotUnstoreTheCredential(t *testing.T) {
+	p := newFakeProvider(t, "google")
+	h := newHarness(t, harnessOptions{
+		providers: []*fakeProvider{p},
+		onCommitted: func(context.Context, string, int64) error {
+			return errors.New("the workload's credential directory is not writable")
+		},
+	})
+
+	_, terminal := h.runFlow(machineA, p, false)
+	if got := terminal.str("state"); got != string(credflow.StateCompleted) {
+		t.Fatalf("flow state %q, want completed: the credential IS stored", got)
+	}
+	cred, _, err := h.credential("google")
+	if err != nil || cred.Access == "" {
+		t.Fatalf("credential after a failed delivery: %v (access %q)", err, cred.Access)
+	}
+}

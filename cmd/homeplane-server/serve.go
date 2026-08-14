@@ -40,6 +40,8 @@ type serveFlags struct {
 	manifestPath string
 	edgePath     string
 	gatewayProbe time.Duration
+	credDir      string
+	credAccount  string
 }
 
 func runServe(args []string) error {
@@ -54,6 +56,10 @@ func runServe(args []string) error {
 	fs.StringVar(&f.manifestPath, "connector-manifest", "", "path to the connector manifest the edge authorizes against")
 	fs.StringVar(&f.edgePath, "connector-edge-path", defaultEdgePath, "path the connector edge is served on")
 	fs.DurationVar(&f.gatewayProbe, "gateway-probe-timeout", 2*time.Second, "timeout for the gateway health probe")
+	fs.StringVar(&f.credDir, "workload-credential-dir", "",
+		"server-local directory the connector workload mounts; brokered credentials are materialized here")
+	fs.StringVar(&f.credAccount, "workload-credential-account", "",
+		"the account brokered credentials belong to (the connector looks its credential up by that name)")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "homeplane-server serve — run the control plane over tsnet\n\n")
 		fs.PrintDefaults()
@@ -106,11 +112,29 @@ token, the WhoIs machine binding and the manifest apply.`)
 		if err != nil {
 			return fmt.Errorf("connector manifest: %w", err)
 		}
-		broker, err = credflow.New(engine, st, keyring, st, credflow.Config{Logger: log})
+		// Delivery is built before the broker so the broker can call it on
+		// commit, and it holds a pointer to the broker that is filled in below —
+		// the two are genuinely mutually dependent: the broker owns the stored
+		// credential, delivery owns where it has to land.
+		delivery := &workloadDeliveryRef{}
+		broker, err = credflow.New(engine, st, keyring, st, credflow.Config{
+			Logger:      log,
+			OnCommitted: delivery.deliver,
+		})
 		if err != nil {
 			return fmt.Errorf("credential broker: %w", err)
 		}
-		log.Info("credential broker enabled", "providers", engine.Providers())
+		d, err := newWorkloadDelivery(broker, st, keyring, engine, f.credDir, f.credAccount, log)
+		if err != nil {
+			return err
+		}
+		delivery.set(d)
+		// A restart re-materializes whatever is already stored, so the workload's
+		// credential directory converges on the store rather than on whoever last
+		// ran a consent flow.
+		d.deliverStored(context.Background())
+		log.Info("credential broker enabled", "providers", engine.Providers(),
+			"workload_delivery", d != nil)
 	}
 
 	ts := &tsnet.Server{
