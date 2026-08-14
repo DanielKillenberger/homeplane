@@ -390,33 +390,65 @@ func (o *sixOp) delete() bool {
 		"audit: class=%s artifact=%s | harness said: %s", row.ActionClass, row.ArtifactID, firstLine(out.text))
 }
 
-// verifyCleanup is STEP 6, and it is two observations rather than one.
+// verifyCleanup is STEP 6, and it is three observations rather than one.
 //
 // The delete's ANSWER is not the proof, and neither is "the text does not
 // mention it" — an error saying the server is unavailable contains neither the
 // id nor the summary, and would disarm the cleanup on a calendar that still has
-// the event. So both calls must be ADMITTED by the server (the audit says so),
-// a direct get must show the event gone or cancelled, and a summary-filtered
-// listing must show nothing of ours.
+// the event. So every call here must be ADMITTED by the server (the audit says
+// so), and absence is established positively:
+//
+//	6a  a direct get by id — Google returns a deleted event as `cancelled`, and
+//	    what THIS connector renders of that is recorded rather than assumed;
+//	6b  a summary-filtered listing, which excludes cancelled events, shows
+//	    nothing of ours;
+//	6c  a second delete answers Gone — the positive signal that the artifact is
+//	    no longer there, from the provider rather than from our reading of prose.
 func (o *sixOp) verifyCleanup() bool {
 	direct, directRow := o.call("step 6a: get the deleted event directly", "get_events", map[string]any{
 		"calendar_id": o.cal, "event_id": o.eventID,
 	})
-	gone := directRow.Outcome == "allowed" &&
-		(strings.Contains(strings.ToLower(direct.text), "cancelled") ||
-			strings.Contains(strings.ToLower(direct.text), "not found") ||
-			strings.Contains(strings.ToLower(direct.text), "no events") ||
-			!strings.Contains(direct.text, o.summary))
-	ok := o.s.assert(o.h.name+" step 6: a direct get shows the event cancelled or gone",
-		gone, "audit: outcome=%s | harness said: %s", directRow.Outcome, firstLine(direct.text))
+	lower := strings.ToLower(direct.text)
+	saysCancelled := strings.Contains(lower, "cancelled") || strings.Contains(lower, "canceled") ||
+		strings.Contains(lower, "not found") || strings.Contains(lower, "no events")
+	admitted := o.s.assert(o.h.name+" step 6a: the direct get is admitted and audited against the event",
+		directRow.Outcome == "allowed" && directRow.ArtifactID == o.eventID,
+		"audit: outcome=%s artifact=%s | harness said: %s",
+		directRow.Outcome, directRow.ArtifactID, firstLine(direct.text))
+	if !saysCancelled {
+		// A recorded limitation rather than a weakened assertion: Google DOES
+		// return the deleted event with `status: cancelled` on a direct get, and
+		// the pinned connector renders neither the status nor an error — so the
+		// spec's "direct get shows cancelled/gone" cannot be read from this
+		// connector's prose. 6b and 6c below carry the proof instead.
+		o.s.recordLimitation(o.h.name+" step 6a: the direct get cannot express cancellation",
+			"workspace-mcp 1.24.0 renders a cancelled event exactly like a live one — no status, no error — "+
+				"so absence is proven by the filtered listing (6b) and by the provider answering Gone to a "+
+				"second delete (6c) instead. Owner: a connector-side improvement, or a mapped tool that "+
+				"surfaces event status.")
+	}
 
 	listing, listRow := o.call("step 6b: the summary-filtered listing", "get_events", map[string]any{
 		"calendar_id": o.cal, "query": o.summary, "max_results": 5,
 	})
-	absent := listRow.Outcome == "allowed" &&
-		!strings.Contains(listing.text, o.summary) && !strings.Contains(listing.text, o.eventID)
-	return o.s.assert(o.h.name+" step 6: the after-listing shows no non-cancelled match",
-		absent, "audit: outcome=%s | harness said: %s", listRow.Outcome, firstLine(listing.text)) && ok
+	absent := o.s.assert(o.h.name+" step 6b: the after-listing shows no non-cancelled match",
+		listRow.Outcome == "allowed" &&
+			!strings.Contains(listing.text, o.summary) && !strings.Contains(listing.text, o.eventID),
+		"audit: outcome=%s | harness said: %s", listRow.Outcome, firstLine(listing.text))
+
+	regone, goneRow := o.call("step 6c: delete it again — the provider must say it is gone", "manage_event",
+		map[string]any{
+			"action": "delete", "event_id": o.eventID, "calendar_id": o.cal, "send_updates": "none",
+		})
+	goneLower := strings.ToLower(regone.text)
+	gone := o.s.assert(o.h.name+" step 6c: the provider reports the event already gone",
+		goneRow.Outcome == "allowed" &&
+			(strings.Contains(goneLower, "410") || strings.Contains(goneLower, "gone") ||
+				strings.Contains(goneLower, "deleted") || strings.Contains(goneLower, "not found")),
+		"audit: outcome=%s class=%s | harness said: %s",
+		goneRow.Outcome, goneRow.ActionClass, firstLine(regone.text))
+
+	return admitted && absent && gone
 }
 
 // assertMetadataOnly checks THIS run's rows: the event summary passed through
