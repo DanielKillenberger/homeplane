@@ -6,7 +6,7 @@ passing recorded evidence, every artifact verified against the shipped history.
 | | |
 |---|---|
 | Spec | `fn-1-homeplane-walking-skeleton-install` — Homeplane walking skeleton |
-| Gate head | `00912b3315923ccf69d3f34cd2d0bcf54271b8c6` |
+| Gate head | `4f10b1272ed1420c5a194fc3cd9bf3710767c2ab` (clean worktree) |
 | Gate run | 2026-08-14, task `.14` |
 | Machine-readable | `test/evidence/fn-1-homeplane-walking-skeleton-install.14.json` (`extra` key), produced by `scripts/final-gate.py` |
 | Re-validation at gate head | `go build ./...` 0 · `go vet ./...` 0 · `go test ./... -count=1` 0 (21 packages ok, 0 failures) |
@@ -33,6 +33,10 @@ That rejection is demonstrated, not assumed. Against the real artifacts the gate
 returns `fail` for: a missing artifact, an artifact whose commit is not an
 ancestor, one recorded on a dirty worktree, one carrying failed assertions, a
 named test that is absent, and a named live stage that is absent.
+
+The gate head is the last commit that changes shipped code or documentation; the
+evidence artifact and this summary's head line are written afterwards and land in
+a receipt commit on top of it, which touches nothing else.
 
 **Deferred-hardening items in the spec's Boundaries are not gate obligations**
 and were not treated as any. R11, R16 and R17 do not appear because D17 deleted
