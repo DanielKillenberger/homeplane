@@ -13,8 +13,16 @@ description: >-
 # Homeplane capabilities
 
 Daniel runs Homeplane: his machines' agent harnesses all share the same
-capability plane. If you can read this, this harness is enrolled and has its
-own revocable grant. Two MCP surfaces matter:
+capability plane. Two MCP surfaces matter:
+
+**Reading this skill does NOT mean this harness is enrolled.** Some harnesses
+discover other vendors' skill directories (grok scans `~/.claude/skills` by
+default), so this file can reach a harness that holds no grant of its own — and
+an MCP entry it inherited the same way would act under a *different* harness's
+identity, with that harness's audit trail and revocation. If you need to rely
+on having your own grant, verify the Homeplane MCP entry is configured for THIS
+harness rather than inherited from another one; do not infer it from the fact
+that you can read this.
 
 ## 1. Vault retrieval (`gno` MCP server, local)
 

@@ -33,6 +33,17 @@ snapshotted before the probe and re-hashed after:
 - No probe artifact (`hp-probe-*`, `homeplane-edge`, `expand-probe`,
   `staleness-probe`) exists anywhere under the real `~/.grok`.
 
+**The relocation claim is proven, not assumed.** An earlier revision of the
+capture pointed `GROK_HOME` at `$HOME/.grok` — exactly the path grok would use
+if it ignored the variable entirely, which proved nothing. The capture now puts
+`HOME` and `GROK_HOME` at **different roots** and seeds a **decoy** config and
+skill at `$HOME/.grok` (`decoy-must-never-appear`,
+`decoy-skill-must-never-appear`). The committed contract records `0 decoy
+references` across `grok mcp list` and `grok inspect`, next to the entries we
+wrote to the relocated directory — so `GROK_HOME` demonstrably relocates **both**
+config and skills discovery. If a future grok release stops honoring it, the
+decoy names appear and the capture says so in as many words.
+
 **`GROK_HOME` does not relocate everything.** Skill discovery still reads
 `~/.claude/skills`, `~/.cursor/skills` and `~/.agents/skills` relative to
 `HOME`, and MCP discovery still reads `~/.claude.json`. Sealing a probe (or a
@@ -100,12 +111,17 @@ Observed facts the writer must honor:
   full. Homeplane must keep this output out of logs and model context; prefer
   `mcp doctor --json` or read the entry we wrote.
 - `grok mcp doctor [name] --json` — well-formed JSON on **stdout** with an
-  unstructured `ERROR` log on **stderr** (parse stdout only). Carries a
-  `sources` list (each config source + `found`/`not_found` + `server_count`)
-  and per-server `checks` with `{label, passed, detail}` — for a broken entry,
-  `server started: true` then `handshake failed: false` with the transport
-  error. It performs **real network connections**, so it stays a probe/verify
-  aid, not a standing status dependency (as the spec's boundaries already say).
+  unstructured tracing `ERROR` line on **stderr**. The capture records the two
+  streams **separately** precisely because a caller that merges them cannot
+  parse the result. Carries a `sources` list (each config source +
+  `found`/`not_found` + `server_count`), per-server `checks` with
+  `{label, passed, detail, hint}`, a per-server `healthy`, and
+  `healthy_count`/`failing_count`. For the captured broken entry:
+  `server started: true`, then `handshake failed: false` with the transport
+  error, `healthy: false` — and **doctor exits 1 when any server is
+  unhealthy**, so its exit status is a usable signal, not just its JSON.
+  It performs **real network connections**, so it stays a probe/verify aid,
+  not a standing status dependency (as the spec's boundaries already say).
 - **`grok mcp list` is authoritative only for the TOML scopes.** The spec
   assumed it was the authoritative read of what grok loads; it is not. See §5.
 
@@ -248,8 +264,8 @@ their origins in one fresh process, and it is what proved §2 and §5.
 
 ## 5. FINDING — grok already inherits Claude Code's MCP servers (R12 / R5)
 
-**This is a falsification-gate finding, surfaced not implemented, per the
-spec's R12 boundary.**
+**Surfaced by the probe under the spec's R12 boundary, then RESOLVED by Daniel
+— see D4 at the end of this section.**
 
 grok scans other vendors' configs **by default**: `[compat.claude] mcps = true`
 reads `~/.claude.json`, and `[compat.cursor] mcps = true` reads `~/.cursor/mcp.json`.
@@ -282,31 +298,40 @@ Why it matters, precisely:
   load-bearing rather than cosmetic: if Homeplane's grok entry were named
   anything else, both would load and grok would hold two edge credentials.
 
-**Not decided here — this needs Daniel.** The options, with the tradeoff:
+### D4 (fn-3) — RESOLVED by Daniel: `[compat.claude] mcps = false`
 
-1. **Rely on name shadowing alone.** Zero extra writes; `gno` and `homeplane`
-   already match the names Homeplane uses. But `[compat.claude] mcps` stays on,
-   so any Claude-scope server Homeplane does *not* shadow still loads into
-   grok, and the guarantee silently depends on names never diverging.
-2. **Write `[compat.claude] mcps = false` (and `cursor`) into grok's config.**
-   Makes grok's connector access exclusively its own grant, which is what R5
-   and R3 actually claim. But it is a change to Daniel's *general* grok
-   behaviour, beyond Homeplane's own entries — it would stop grok seeing every
-   other Claude MCP server too, which he may want. It also sits uneasily with
-   the preservation rule: it is a setting Homeplane would be asserting, not an
-   entry it owns.
+**Ratified 2026-08-14. The .2 writer sets `[compat.claude] mcps = false` as part
+of configuring grok.** Clean identity isolation was chosen over name shadowing:
+grok's connector access becomes exclusively its own grant, which is what R3 and
+R5 actually claim.
 
-Recommendation: **(2), scoped and explicit**, because R5's claim is otherwise
-untrue and the walking skeleton's whole point is that a grant is cheaply and
-*completely* revocable — but it changes behaviour Daniel did not ask us to
-change, so it is his call, and .2 should not assume it. Note the same question
-exists for skills (`[compat.claude] skills`), where the answer is likely
-**no** — grok seeing Claude's skills is a feature, and R4 only needs *at least
-one* vault skill discovered through Homeplane's own link.
+Daniel accepts the side effect: **grok stops inheriting `rize` and any other
+Claude-configured MCP server.** Those get added to grok directly later if
+wanted. The alternative — relying on name shadowing alone — was rejected
+because it leaves `mcps` on, so any Claude-scope server Homeplane does not
+shadow still loads, and the guarantee silently depends on names never diverging.
 
-Whichever is chosen, the **detection/support model (R6) should surface the
-compat sources**, so "configured" never silently means "reachable via someone
-else's grant".
+What .2 and .3 may now rely on:
+
+- The revocation proof (R5) **produces a real denied call** under grok's own
+  identity, because there is no inherited entry left to fall back to.
+- Audit attribution (R3) is grok's grant, not Claude Code's.
+
+Implementation constraints, all inherited from the rest of this document:
+
+- **The byte-span discipline applies to this key too.** It is a
+  semantic-preserving edit of one key: the rest of `[compat.claude]`
+  (`skills`, `rules`, `agents`, `hooks`, `sessions`) is left untouched, and so
+  is every comment — which is, again, why the CLI verbs are not the writer (§1).
+- **It must be re-asserted on idempotent re-runs**, exactly like the 0600 mode
+  (§3). Both are settings grok's own tooling can undo, so "we set it once" is
+  not a guarantee; each configure run re-establishes them and converges.
+- **`[compat.claude] skills` stays ON.** grok discovering Claude's skills is a
+  feature, and R4 only needs *at least one* vault skill discovered through
+  Homeplane's own link. Only the `mcps` cell changes.
+- The **detection/support model (R6) should still surface compat sources**, so
+  "configured" never silently means "reachable via someone else's grant" — the
+  setting makes that true today, and the surfacing keeps it verifiable.
 
 ---
 
@@ -343,4 +368,6 @@ contents, never on the directory's existence.
 - A `contract_test.go` for the harness package asserts our argv and entry shape
   against `testdata/grok-1.0.3-contract.txt` — the gno pattern. **.2 owns that
   test**; .1 committed the testdata and the capture script it comes from.
-- The §5 compat finding is surfaced to Daniel before R5 is attempted.
+- **D4:** the writer also sets `[compat.claude] mcps = false` (§5) — one key,
+  semantic-preserving, re-asserted on every run like the 0600 mode. `skills`
+  stays on.

@@ -2,7 +2,7 @@
 # Verbatim upstream output and observed behaviour. Do not hand-edit.
 
 === grok --version ===
-grok 1.0.3 (1a29d5bc12d4) [stable]
+grok 1.0.3 (1a29d5bc12d4)
 
 === grok --help ===
 Grok Build TUI
@@ -354,7 +354,15 @@ Options:
   -h, --help                  Print help
       --leader-socket <PATH>  Use a custom leader socket path instead of the default `~/.grok/leader.sock`
 
-=== never-launched sealed home: ls ~/.grok ===
+=== decoy seeded at $HOME/.grok (must NEVER appear below) ===
+  mcp server: decoy-must-never-appear
+  skill:      decoy-skill-must-never-appear
+
+=== GROK_HOME points somewhere $HOME/.grok never would ===
+  HOME       = <os-home>        (so $HOME/.grok = <os-home>/.grok)
+  GROK_HOME  = <grok-home>      (a different root entirely)
+
+=== never-launched sealed home: ls $GROK_HOME ===
 (empty)
 
 === never-launched: grok mcp list --json ===
@@ -474,10 +482,113 @@ enabled = true
 url = "https://${HP_PROBE_HOST}/mcp"
 enabled = true
 
-=== grok mcp doctor expand-probe --json | target, WITHOUT the env var ===
-target = "https://${HP_PROBE_HOST}/mcp"
+=== grok mcp doctor homeplane-edge (unreachable host) | STDOUT ===
+{
+  "sources": [
+    {
+      "path": "~/.grok/config.toml",
+      "status": {
+        "status": "found",
+        "server_count": 3
+      }
+    },
+    {
+      "path": "~/.claude.json",
+      "status": {
+        "status": "not_found"
+      }
+    },
+    {
+      "path": ".mcp.json",
+      "status": {
+        "status": "not_found"
+      }
+    }
+  ],
+  "servers": [
+    {
+      "name": "homeplane-edge",
+      "transport": "http",
+      "target": "https://edge.example.invalid/mcp",
+      "source": "config",
+      "checks": [
+        {
+          "label": "server started",
+          "passed": true,
+          "detail": "<duration>"
+        },
+        {
+          "label": "handshake failed",
+          "passed": false,
+          "detail": "Send message error Transport [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<xai_grok_mcp::mcp_http_client::McpHttpClient<reqwest::async_impl::client::Client>>>] error: Client error: error sending request for url (https://edge.example.invalid/mcp), when send initialize request",
+          "hint": "check server logs"
+        }
+      ],
+      "healthy": false
+    }
+  ],
+  "healthy_count": 0,
+  "failing_count": 1
+}
+exit: 1
 
-=== grok mcp doctor expand-probe --json | target, WITH HP_PROBE_HOST set ===
+=== grok mcp doctor homeplane-edge (unreachable host) | STDERR ===
+[2m<timestamp>[0m [31mERROR[0m worker quit with fatal: Transport channel closed, when Client(reqwest::Error { kind: Request, url: "https://edge.example.invalid/mcp", source: hyper_util::client::legacy::Error(Connect, ConnectError("dns error", Custom { kind: Uncategorized, error: "failed to lookup address information: nodename nor servname provided, or not known" })) })
+
+=== grok mcp doctor expand-probe (HP_PROBE_HOST unset) | STDOUT ===
+{
+  "sources": [
+    {
+      "path": "~/.grok/config.toml",
+      "status": {
+        "status": "found",
+        "server_count": 3
+      }
+    },
+    {
+      "path": "~/.claude.json",
+      "status": {
+        "status": "not_found"
+      }
+    },
+    {
+      "path": ".mcp.json",
+      "status": {
+        "status": "not_found"
+      }
+    }
+  ],
+  "servers": [
+    {
+      "name": "expand-probe",
+      "transport": "http",
+      "target": "https://${HP_PROBE_HOST}/mcp",
+      "source": "config",
+      "checks": [
+        {
+          "label": "server started",
+          "passed": true,
+          "detail": "<duration>"
+        },
+        {
+          "label": "handshake failed",
+          "passed": false,
+          "detail": "Send message error Transport [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<xai_grok_mcp::mcp_http_client::McpHttpClient<reqwest::async_impl::client::Client>>>] error: Client error: builder error for url (https://${hp_probe_host}/mcp), when send initialize request",
+          "hint": "check server logs"
+        }
+      ],
+      "healthy": false
+    }
+  ],
+  "healthy_count": 0,
+  "failing_count": 1
+}
+exit: 1
+
+=== grok mcp doctor expand-probe (HP_PROBE_HOST unset) | STDERR ===
+[2m<timestamp>[0m [31mERROR[0m worker quit with fatal: Transport channel closed, when Client(reqwest::Error { kind: Builder, url: "https://${hp_probe_host}/mcp", source: "Parsed Url is not a valid Uri" })
+
+=== grok mcp doctor expand-probe | target WITH HP_PROBE_HOST set ===
 target = "https://expanded.example.invalid/mcp"
 
 === grok mcp remove <unknown> ===
@@ -509,6 +620,9 @@ exit: 1
   └ frontmatter-beta-name  user
   └ gamma-dir-name         user
   └ hp-probe-alpha         user
+
+=== decoy check: did anything from $HOME/.grok leak in? ===
+0 decoy references: GROK_HOME relocated BOTH config and skills discovery
 
 === grok leader list (sealed home) ===
 No leader candidates found.

@@ -90,25 +90,87 @@
       "task": null,
       "timestamp": "2026-08-14T20:45:46.640534Z",
       "verdict": "SHIP"
+    },
+    {
+      "artifact_sha256": "139b0b1767a4986ec47e808027f1110c06565baa0d7a0aabdd8c5583761fe7df",
+      "backend": "codex",
+      "counter_kind": "impl",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "not_applicable"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-abdc6e38973f47d18327848ec5f52a08",
+            "classification": "introduced",
+            "findingId": "finding-abdc6e38973f47d18327848ec5f52a08",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-dc1efa8894aaa82404be3f26bffa3867",
+            "classification": "introduced",
+            "findingId": "finding-dc1efa8894aaa82404be3f26bffa3867",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-775953d7964db959ff76acabdf02f3bc",
+            "classification": "introduced",
+            "findingId": "finding-775953d7964db959ff76acabdf02f3bc",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8e5e519f4849666d60c1943b45579562",
+            "classification": "introduced",
+            "findingId": "finding-8e5e519f4849666d60c1943b45579562",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-5508a714f27ba0714e6b9f4764bef48f",
+            "classification": "introduced",
+            "findingId": "finding-5508a714f27ba0714e6b9f4764bef48f",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "implementation"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "58e1faf31281fbad24e45e90a8f1a700f94b4475",
+      "kind": "impl",
+      "outcome": "verdict",
+      "output_sha256": "edd7d55b2b068f8d1408183fe1fbcdcfd0f429aba12cebdc8db17060071a93bf",
+      "reservation_id": "61f0fac4dc5d464d907365ba284e14f7",
+      "round_consumed": true,
+      "scope": "impl:fn-3-add-grok-as-a-third-harness.1",
+      "superseded_by": null,
+      "task": "fn-3-add-grok-as-a-third-harness.1",
+      "timestamp": "2026-08-14T21:14:06.824994Z",
+      "verdict": "NEEDS_WORK"
     }
   ],
   "review_hash_epoch": {
     "plan": 1,
     "plan#completion": 0
   },
-  "review_pending_rounds": {
-    "impl:fn-3-add-grok-as-a-third-harness.1": 1
-  },
-  "review_reservations": {
-    "61f0fac4dc5d464d907365ba284e14f7": {
-      "artifact_sha256": "139b0b1767a4986ec47e808027f1110c06565baa0d7a0aabdd8c5583761fe7df",
-      "counter_scope": "impl:fn-3-add-grok-as-a-third-harness.1",
-      "epoch": 0,
-      "forced": false,
-      "review_type": "impl"
-    }
-  },
+  "review_pending_rounds": {},
+  "review_reservations": {},
   "review_transport_failures": {
+    "impl:fn-3-add-grok-as-a-third-harness.1": 0,
     "plan": 0
   },
   "spec_path": ".flow/specs/fn-3-add-grok-as-a-third-harness.md",
@@ -125,5 +187,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-08-14T21:07:45.431457Z"
+  "updated_at": "2026-08-14T21:14:06.830412Z"
 }
