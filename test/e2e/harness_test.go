@@ -96,11 +96,20 @@ func (s *stage) codex(what, prompt string) harnessOutput {
 // spelled out and the harness is told not to improvise.
 func toolPrompt(server, tool string, args map[string]any, extra string) string {
 	body, _ := json.MarshalIndent(args, "", "  ")
-	return "Call the MCP tool `" + tool + "` on the `" + server + "` server with EXACTLY these arguments:\n\n" +
-		"```json\n" + string(body) + "\n```\n\n" +
+	// The tool is named in its fully-qualified form, and the prompt says out
+	// loud that the server exposes many tools. Without that, a model that
+	// enumerates the surface first can decide the request is ambiguous — one run
+	// answered "Refused: expected exactly one homeplane get_events tool, found
+	// 24" and made no call at all, which is a proof step that neither passed nor
+	// failed for any reason to do with Homeplane.
+	return "Call the MCP tool `" + server + "/" + tool + "` — the tool named `" + tool +
+		"` on the MCP server named `" + server + "`. That server exposes many tools; call only this one, " +
+		"and do not look for another server or a differently named tool.\n\n" +
+		"Use EXACTLY these arguments:\n\n```json\n" + string(body) + "\n```\n\n" +
 		"Do not add, remove or change any argument. Make exactly one tool call and run no shell commands. " +
 		"Then reply with the tool's raw result text and nothing else. " +
-		"If the call is refused, reply with the refusal text verbatim." + extra
+		"If the call is refused or errors, reply with that text verbatim — an error IS the answer here, " +
+		"and must not be turned into a refusal to call." + extra
 }
 
 // repoRoot locates the repository from the test's own directory.
