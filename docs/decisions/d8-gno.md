@@ -220,3 +220,49 @@ survived, so a daemon that failed immediately on every start passed.
 10 MB package. Without the binary, this package's guarantees rest on the stub
 **plus** the captured upstream contract; with it, they rest on the engine
 itself. The evidence artifact records which of the two ran.
+
+## 8. Open follow-up — daemon and stdio cannot share the index (UNRESOLVED)
+
+Found on the live machine during the end-to-end proof (task .7, 2026-08-14) and
+recorded in that task's evidence file under the `gno` stage. **This is an open
+decision for Daniel, not a defect and not something a later task should quietly
+pick a side on.**
+
+**The observation.** gno 1.29.6 allows **one resident runtime per index**. With
+the supervised daemon loaded, a harness stdio launch fails with `database is
+locked`; with the daemon stopped, the same launch connects. The two lifecycles
+§4 deliberately separated turn out to be mutually exclusive on this build for a
+single index.
+
+**What the machine does today, and what it costs.** §4 chose supervised-daemon
+mode for the indexing half. Since the halves cannot coexist, the stdio half —
+the one harnesses actually use — wins, and the daemon is not loaded. The index
+is therefore refreshed **at activation, not continuously**. `status` reports
+that as `degraded` with the reason spelled out ("supervision unit installed but
+not loaded — the index is NOT being kept current") rather than rounding a
+partial arrangement up to `ok`. That reporting is the correct behaviour of the
+existing design and is not what needs deciding.
+
+**The two candidate resolutions, neither taken:**
+
+1. **Point harnesses at the daemon's own loopback MCP gateway instead of stdio.**
+   Restores continuous indexing. The cost is precisely the one §4 rejected the
+   gateway for: a single bearer token shared by every harness on the machine,
+   which the skeleton cannot revoke **per harness** — the guarantee R9 exists
+   for. It would also leave the harness path on a route upstream's own
+   installers do not emit, and make one long-lived process a single point of
+   failure for every harness at once.
+2. **Schedule index refreshes without a resident daemon.** Keeps stdio,
+   per-harness revocation, and the upstream-supported path; pays for freshness
+   with periodic reindexing instead of watch-driven indexing, and needs a
+   refresh cadence chosen against how often the vault actually changes.
+
+A third possibility exists and is not ours to schedule: an upstream gno release
+that lets a daemon and a stdio client share one index. Worth re-checking before
+committing to either option above.
+
+**Blast radius if this is left as it is:** retrieval keeps working; results go
+stale between activations. Nothing about identity, custody, authorization,
+audit or revocation is affected — the seam in §5 means whichever way this is
+resolved, the change is an endpoint descriptor and a supervision decision, not
+a change to any other component.

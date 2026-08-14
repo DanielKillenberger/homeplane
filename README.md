@@ -4,31 +4,140 @@ Self-hosted capability plane for personal AI agents.
 
 Homeplane enrols a machine over Tailnet, issues per-(machine, harness) grants
 with their own revocable tokens, keeps provider credentials on the server, and
-records every lifecycle event in an append-only, metadata-only audit log.
+records every lifecycle event in an append-only, metadata-only audit log. Your
+harnesses get the vault, the retrieval engine, your skills, and the Google
+connectors — and you get one place to see and revoke all of it.
 
-Architecture, decisions, and scope live in `STRATEGY.md`,
-`.flow/specs/`, and `docs/decisions/`.
+```
+machine: vault · retrieval engine · skills · harness config
+   │  tailnet, Bearer <grant token>
+server: enrolment · grants · audit · provider credentials · composed gateway
+```
+
+**Where to go next**
+
+| Document | What it answers |
+|---|---|
+| this page | how do I install a machine and check that it worked |
+| [`docs/RUNBOOK.md`](docs/RUNBOOK.md) | it is running — how do I read status, fix a degraded component, revoke, re-authorize, find the logs |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | how is it built, what does it actually guarantee, and what is deliberately missing |
+| [`deploy/server/README.md`](deploy/server/README.md) | deploying and upgrading the server itself |
+| [`docs/decisions/`](docs/decisions/) | why each contested choice went the way it did |
+
+---
+
+## Install
+
+The server must already be deployed (`deploy/server/README.md`) and reachable on
+the tailnet. Then, on the machine:
+
+```bash
+scripts/stage-release.sh dist        # agent binaries + pinned Node 22 + Bun 1.3 + SHA256SUMS
+./install.sh --stage-dir dist        # verify checksums, provision both runtimes, install
+```
+
+Supported: **macOS 13+ (launchd)** and **systemd-based Linux** with
+`systemctl --user` and linger. Anything else is rejected *before* anything is
+written. The installer validates artifact checksums, that the agent binary runs
+here, and that the extracted Node runtime runs and reports 22+, all before it
+touches the install prefix — and it keeps the previous Node runtime until the
+whole install has landed, restoring it if any step fails. A checksum mismatch
+aborts with nothing installed. A re-run is an idempotent refresh that leaves
+enrolment state alone.
+
+Node and Bun are both prerequisites, not alternatives: vault sync runs on Node
+(`obsidian-headless`), the retrieval engine runs on Bun (GNO, D8). A machine
+that cannot get either fails the install rather than ending up quietly unable to
+sync its vault. `stage-release.sh` verifies each runtime against its upstream
+checksums (`scripts/node-pinned.sha256`, `scripts/bun-pinned.sha256`) before
+allowing it into the staging directory — which is what makes a fresh-machine
+install work, since macOS has no package-manager fallback.
+
+## Enrol
+
+```bash
+~/.homeplane/bin/homeplane-agent enrol -server https://homeplane.<tailnet>.ts.net
+```
+
+Enrolment is identity-preserving: re-running it rotates this machine's
+credential on the same server-side record, and the previous credential stops
+working immediately. If the server cannot be reached, nothing is written to
+`~/.homeplane`. Concurrent enrolments are safe — the state directory is locked
+for the write, and a response older than the stored credential version is
+discarded rather than written over the live one.
+
+Then bring up the rest of the machine:
+
+```bash
+homeplane-agent vault detect -record                 # or: vault retrieve -path DIR
+scripts/fetch-gno.sh --prefix ~/.homeplane/gno-pkg   # checksum-verified install
+homeplane-agent gno activate -apply                  # bind the vault, supervise, publish
+homeplane-agent configure-harnesses                  # Claude Code + Codex, one grant each
+homeplane-agent skills provision -verify             # link vault skills, prove in a fresh process
+homeplane-agent add-credentials google                # consent here, credential stays on the server
+```
+
+Each step is independent: enrolment succeeding while GNO fails still leaves the
+server connectors usable, and `status` names which stage is where.
+
+## Verify
+
+```bash
+homeplane-agent status                                        # machine side
+curl -sf https://homeplane.<tailnet>.ts.net/healthz | jq .    # server side
+```
+
+`status` exits **0** ok, **1** a named component is degraded, **2** not enrolled;
+grants are reconciled live against the server on every run, so a revoked grant
+reads `revoked` and an unreachable server makes grant state `unknown` rather
+than a stale `active`. `/healthz` reports **server** components only and returns
+503 with a component-level payload when degraded, so `curl -sf` fails.
+
+Machine-local failures are `status`'s job and never appear in `/healthz`. That
+separation is checked, not promised. Reading either surface, and what to do
+about each degraded component, is [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+To re-verify the **server** deployment — run from a second tailnet node, because
+the isolation checks are meaningless from the server itself:
+
+```bash
+deploy/server/verify.sh --host <server> --fqdn homeplane.<tailnet>.ts.net
+```
+
+End-to-end, from the harnesses themselves: the recorded proof of a real machine
+installed, enrolled, configured, and exercised against the live server is
+`test/evidence/fn-1-homeplane-walking-skeleton-install.7.live.json` — fourteen
+stages, each assertion carrying the observation that settles it, with connector
+claims settled by the server's own audit log rather than by what a harness said
+it did.
+
+---
 
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `cmd/homeplane-server` | Control plane: tsnet-embedded HTTP server + server-local admin CLI |
-| `cmd/homeplane-agent` | Machine agent: `enrol`, `status`, `vault`, `gno`, `add-credentials` |
+| `cmd/homeplane-agent` | Machine agent: `enrol`, `status`, `vault`, `gno`, `configure-harnesses`, `skills`, `add-credentials` |
 | `internal/agent` | Agent state directory, control-plane client, enrolment, status |
+| `internal/agent/vault` | Vault detection, retrieval, supervised continuous sync |
+| `internal/agent/gno` | Retrieval engine: install, disposable machine-local index, supervision, endpoint descriptor |
+| `internal/agent/harness` | Merge-only harness configuration writer (Claude Code, Codex) |
+| `internal/agent/skills` | Vault skill discovery, profiles, linking, fresh-process verification |
 | `internal/agent/credflow` | Machine half of the credential flow: loopback listener, browser, relay |
-| `internal/agent/gno` | Retrieval engine (GNO): install, disposable machine-local index, supervision, endpoint descriptor |
-| `internal/server/credflow` | Credential broker: the OAuth flow state machine and credential swap |
-| `install.sh` | Installer: platform gating, checksummed artifacts, Node 22 + Bun 1.3 provisioning |
-| `internal/store` | SQLite persistence (machines, grants, audit, encrypted secrets) |
 | `internal/server` | Enrolment, grant lifecycle, audit, health handlers |
+| `internal/server/credflow` | Credential broker: the OAuth flow state machine and credential swap |
 | `internal/server/connectors` | Connector manifest, policy engine, audit derivation, in-process broker |
 | `internal/server/edge` | Streamable-HTTP MCP edge: grant auth, WhoIs machine binding, gateway forwarding |
 | `internal/policy` | Server-side per-harness capability policy |
 | `internal/cred` | Credential minting, hashing, audit fingerprints |
 | `internal/secrets` | age encryption for provider secrets at rest |
+| `internal/store` | SQLite persistence (machines, grants, audit, encrypted secrets) |
 | `internal/health` | Server-component health probes |
 | `internal/tsnetid` | tsnet WhoIs identity resolution |
+| `install.sh` | Installer: platform gating, checksummed artifacts, Node 22 + Bun 1.3 provisioning |
+| `deploy/server` | Server deployment: units, manifest, installer, `verify.sh` |
+| `test/evidence` | Versioned evidence artifacts, one per implementation task |
 | `spike/` | Disposable D6-spike prototypes — not production code |
 
 ## Build and test
@@ -58,184 +167,19 @@ homeplane-server serve \
   --gateway-mcp-url http://127.0.0.1:44022/mcp
 ```
 
-`GET /healthz` reports **server** components only (store, gateway runtime,
-tsnet, credential store) and returns 503 with a component-level payload when
-any is degraded, so `curl -sf .../healthz` fails. Machine-side state
-(enrolment, vault, sync, GNO, harness config) belongs to `homeplane-agent
-status`.
-
-## The connector edge
-
-The control plane and the connector edge share one tsnet listener. The edge is
-served on `--connector-edge-path` (default `/mcp`) once **both**
+The edge is served on `--connector-edge-path` (default `/mcp`) once **both**
 `--connector-manifest` and `--gateway-mcp-url` are given; supplying one without
 the other is refused rather than quietly serving no connectors.
-
-A harness points at the edge with the grant token it was issued:
-
-```
-harness  --(streamable HTTP + Authorization: Bearer <grant token>, tailnet)-->  edge
-edge     --(loopback HTTP, grant token stripped)-->  composed gateway (ToolHive)
-```
-
-What the edge adds, and nothing else (D6's adopted shape — see
-`docs/decisions/d6-gateway.md`):
-
-- **Grant authentication**, resolved from the store on every request. There is
-  no token cache, so a revoked grant stops working on the next call.
-- **Machine binding**: the WhoIs-observed tailnet node must be the node the
-  grant's machine enrolled from. A token replayed from another node is refused
-  and audited against the node that sent it, never against the token's owner.
-- **Manifest authorization and the authoritative audit row** for every
-  `tools/call`, via `internal/server/connectors` — unmapped and excluded tools
-  fail closed, and a call that cannot be recorded is not forwarded.
-
-When the edge is wired, `--connector-endpoint-url` is required and its path
-must match `--connector-edge-path` (a URL with no path is completed from it):
-that URL is handed to every harness with its grant, so a mismatch would issue
-working grants pointing at an endpoint that answers 404. A mount path that
-would shadow a control-plane route (`/enrol`, `/grants`, `/healthz`) or that
-is not a literal path is refused at startup.
-
-`--gateway-mcp-url` must be a **loopback** address and is refused otherwise:
-the isolation guarantee is that the only route to the gateway from another
-tailnet node runs through the edge. Every other MCP frame (initialize,
-`tools/list`, the SSE stream, session teardown) is forwarded verbatim with the
-Homeplane grant token stripped — MCP semantics stay with the gateway.
-
-## Installing a machine
-
-```bash
-scripts/stage-release.sh dist        # agent binaries + pinned Node 22 + Bun 1.3 + SHA256SUMS
-./install.sh --stage-dir dist        # verify checksums, provision both runtimes, install
-
-~/.homeplane/bin/homeplane-agent enrol -server https://homeplane.<tailnet>.ts.net
-~/.homeplane/bin/homeplane-agent status
-```
-
-`stage-release.sh` stages every half of a release: the cross-compiled agent for
-every supported platform, the pinned Node 22 runtime (`scripts/node-pinned.sha256`),
-and the pinned Bun 1.3 runtime (`scripts/bun-pinned.sha256`), each verified
-against its upstream checksums before it is allowed into the staging directory.
-That is what makes a fresh-machine install work — macOS has no package-manager
-fallback. Node and Bun are both prerequisites, not alternatives: vault sync runs
-on Node (`obsidian-headless`), the retrieval engine runs on Bun (GNO, D8).
-
-The installer supports macOS (launchd) and systemd-based Linux with
-`systemctl --user`; anything else is rejected **before** anything is written. It
-validates everything — artifact checksums, that the agent binary runs here, that
-the extracted Node runtime runs and reports 22+ — before it touches the install
-prefix, and it keeps the previous Node runtime until the whole install has
-landed, restoring it if any step fails. A checksum mismatch aborts with nothing
-installed, and a re-run is an idempotent refresh that leaves enrolment state
-alone. A machine that cannot get Node 22 (staged tarball, or the distribution's
-package manager with `HOMEPLANE_NODE_PACKAGE=1`) fails the install rather than
-ending up quietly unable to sync its vault, and the same is true of Bun 1.3 and
-the retrieval engine.
-
-## The retrieval engine
-
-```bash
-scripts/fetch-gno.sh --prefix ~/.homeplane/gno-pkg   # checksum-verified install
-homeplane-agent gno activate -apply                  # bind the vault, supervise, publish
-homeplane-agent gno endpoint                         # what harnesses are wired from
-homeplane-agent gno rebuild                          # discard the index, rebuild from the vault
-```
-
-`gno activate` refuses unless GNO matches its pinned version, the index location
-is outside the vault and outside every known synchronized tree, `gno setup`
-verifies the binding with a real retrieval, and one launch of the stdio MCP
-template returns the *same document the index itself just returned* — an
-endpoint that answers with nothing, with an in-band MCP error, or from a
-different index is a refusal. It then publishes
-`~/.homeplane/endpoints/retrieval-engine.json` — the descriptor harness
-configuration is generated from — and registers a removal plan. The descriptor is
-written last, so a failed activation never leaves an endpoint behind.
-
-Two lifecycles, deliberately not conflated: the indexing **daemon** is supervised
-(pid, restart count, crash-loop surfaced in `status`) and binds a
-token-protected, loopback-only gateway, while harness access is **stdio**,
-launched per client through `homeplane-agent gno mcp` so that every launch —
-including the ones that fail instantly — is recorded and reported. `status` never
-claims a pid for the stdio half. `gno rebuild` stops the daemon before replacing
-the index and resumes it afterwards, and refuses rather than racing if it cannot.
-The reasoning, and what was verified against the real binary, is in
-`docs/decisions/d8-gno.md`.
-
-Enrolment is identity-preserving: re-running `enrol` rotates this machine's
-credential on the same server-side record and the previous credential stops
-working immediately. If the server cannot be reached, nothing is written to
-`~/.homeplane`. Concurrent enrolments are safe: the state directory is locked
-for the write, and a response older than the stored credential version is
-discarded rather than written over the live credential.
-
-`homeplane-agent status` reconciles grants **live** against the server on every
-run: a revoked grant reads `revoked`, and a server that cannot be reached makes
-grant state `unknown` rather than a stale `active`. Exit codes are `0` ok, `1`
-a named component is degraded, `2` this machine is not enrolled.
-
-## Authorizing a provider
-
-```bash
-homeplane-agent add-credentials google-drive            # first time
-homeplane-agent add-credentials google-drive -replace   # re-authorize
-```
-
-The provider's consent screen opens on the machine where you run it, and the
-credential is stored **only on the server** — this machine never receives,
-writes, or logs a provider token, and every enrolled machine's grants can use
-the credential the moment it lands.
-
-The flow is an asynchronous state machine (`pending` → `completed` | `denied` |
-`expired` | `failed`), driven from the machine but decided by the server:
-
-- The agent binds a loopback listener **first** and passes that exact address as
-  the redirect URI; the server validates it is genuinely `http://127.0.0.1:<port>`
-  or `http://[::1]:<port>` and uses the identical URI when building the
-  authorization URL and again at token exchange.
-- The authorization outcome is relayed **once** (a replay is refused with 409),
-  with PKCE and the state parameter verified server-side. The relay returns as
-  soon as the outcome is consumed: redeeming the code is a **server-owned job**
-  that no request can cancel, and the machine learns what came of it by polling.
-  A relay response lost in transit therefore costs one more poll rather than
-  leaving the CLI reporting failure for a credential that was actually stored.
-- The flow's window bounds how long the HUMAN has to consent, not how long the
-  exchange may take: once an outcome is relayed, the exchange job alone decides
-  the ending, so a slow provider can never produce two conflicting outcomes.
-- A terminal state is never shown before its audit row is written, and open
-  flows are bounded per machine and forgotten after a retention window.
-- Replacement is an atomic swap: the existing credential stays active until the
-  new one is durably stored, so a declined, expired, failed, or abandoned flow
-  leaves it exactly as it was. Two flows racing for the same provider produce
-  one commit and one clear "nothing was overwritten, re-run to retry".
-- A terminal failure returns a safe diagnostic — `{error_code, message,
-  retryable}` from a closed vocabulary — that can never carry a provider
-  response body or token.
-
-Providers come from the connector manifest (`homeplane-server serve
--connector-manifest …`): onboarding another OAuth provider is a manifest entry
-plus its client credentials, with no code change.
-
-## Audit guarantees
-
-The audit log is authoritative (D13), so it is fail-closed in both directions:
-
-- A lifecycle mutation (enrolment, credential rotation, grant issuance or
-  supersession, revocation, secret import) and its audit rows commit in one
-  SQLite transaction — if the record cannot be written, the change does not
-  happen.
-- A rejected call that cannot be recorded returns 503 rather than a plain
-  401/403. The request is refused either way; the different status says the
-  server could not uphold its own audit guarantee.
-
-Rows are metadata only — enforced by the schema and an allow-listed detail
-vocabulary, not by convention — and attribution splits observed identity
-(WhoIs) from authenticated identity (credential), with rejected calls carrying
-a non-reversible token fingerprint instead of an owner.
+`--connector-endpoint-url` is then required and its path must match the mount
+path — that URL is handed to every harness with its grant, so a mismatch would
+issue working grants pointing at an endpoint that answers 404. A mount path that
+would shadow a control-plane route (`/enrol`, `/grants`, `/healthz`) is refused
+at startup, and `--gateway-mcp-url` must be a **loopback** address: that binding
+is the bypass boundary.
 
 ## Operator surface
 
-The admin CLI is server-local by design: operator authority is shell access to
+The admin CLI is server-local by design — operator authority is shell access to
 the server host, so there is no operator HTTP credential to leak.
 
 ```bash
@@ -246,5 +190,10 @@ pass show google/oauth-client | \
 ```
 
 Secret values are never accepted as command-line arguments (argv is
-world-readable via `ps`): pipe them on stdin, or pass `-file` pointing at a
-0600 file.
+world-readable via `ps`): pipe them on stdin, or pass `-file` pointing at a 0600
+file.
+
+---
+
+Scope, requirements and the decisions behind them live in `STRATEGY.md`,
+`.flow/specs/`, and `docs/decisions/`.
