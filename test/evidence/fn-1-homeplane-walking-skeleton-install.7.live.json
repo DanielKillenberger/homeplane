@@ -1,5 +1,5 @@
 {
-  "commit": "4e58bf31a4b23f86171d622765bec4f0d3fb1951",
+  "commit": "2af67c702c29fa2a77bd8ff0b289918a2b592944",
   "deployment": {
     "account": "daniel.killenberger@gmail.com",
     "agent": "/Users/daniel/.homeplane/bin/homeplane-agent",
@@ -624,8 +624,8 @@
     {
       "stage": "credentials",
       "status": "pass",
-      "started_at": "2026-08-14T16:12:35Z",
-      "finished_at": "2026-08-14T16:12:38Z",
+      "started_at": "2026-08-14T16:35:00Z",
+      "finished_at": "2026-08-14T16:35:03Z",
       "steps": [
         {
           "what": "homeplane-agent add-credentials google (real consent)",
@@ -641,8 +641,8 @@
           "exit_code": 1,
           "stdout_excerpt": "",
           "stderr_excerpt": "homeplane-agent add-credentials: start credential flow: server refused the request (409 conflict): provider \"google\" already has a credential; re-run with replace to authorize a new one (the existing credential stays active until the replacement is stored)",
-          "at": "2026-08-14T16:12:35Z",
-          "duration": "234ms"
+          "at": "2026-08-14T16:35:00Z",
+          "duration": "355ms"
         },
         {
           "what": "server: admin secret list",
@@ -656,8 +656,8 @@
           "exit_code": 0,
           "stdout_excerpt": "REF                        GENERATION  ENCRYPTED  BYTES  UPDATED\ndeploy/bootstrap-selftest  1           true       232    2026-08-13T22:36:55Z\ngoogle/client-id           1           true       272    2026-08-13T23:25:21Z\ngoogle/client-secret       1           true       235    2026-08-13T23:25:22Z\ngoogle/oauth-session       1           true       884    2026-08-14T13:09:21Z",
           "stderr_excerpt": "4 secret(s)",
-          "at": "2026-08-14T16:12:35Z",
-          "duration": "915ms"
+          "at": "2026-08-14T16:35:00Z",
+          "duration": "888ms"
         },
         {
           "what": "server: the workload's credential file",
@@ -669,10 +669,10 @@
             "ls -l /home/claw/homeplane/var/workload-creds"
           ],
           "exit_code": 0,
-          "stdout_excerpt": "total 16\n-rw-r----- 1 claw   166534  301 Aug 14 17:12 client_secret.json\n-rw-rw---- 1 claw   166534  825 Aug 14 17:16 daniel.killenberger@gmail.com.json\n-rw------- 1 166534 166534 4367 Aug 14 16:26 oauth_states.json",
+          "stdout_excerpt": "total 16\n-rw-r----- 1 claw   166534  301 Aug 14 18:34 client_secret.json\n-rw-rw---- 1 claw   166534  778 Aug 14 18:34 daniel.killenberger@gmail.com.json\n-rw------- 1 166534 166534 4367 Aug 14 16:26 oauth_states.json",
           "stderr_excerpt": "",
-          "at": "2026-08-14T16:12:36Z",
-          "duration": "929ms"
+          "at": "2026-08-14T16:35:01Z",
+          "duration": "896ms"
         },
         {
           "what": "server audit: the credential flow",
@@ -681,13 +681,13 @@
             "-o",
             "BatchMode=yes",
             "clawniel",
-            "/home/claw/homeplane/bin/homeplane-server admin audit -state-dir /home/claw/homeplane/var -json -since 2026-08-13T16:12:35Z -limit 2000"
+            "/home/claw/homeplane/bin/homeplane-server admin audit -state-dir /home/claw/homeplane/var -json -since 2026-08-13T16:35:00Z -limit 2000"
           ],
           "exit_code": 0,
-          "stdout_excerpt": "{\"ID\":1,\"TS\":\"2026-08-13T22:36:55.182104931Z\",\"Event\":\"secret_imported\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"secret_generation\":\"1\",\"secret_ref\":\"deploy/bootstrap-selftest\",\"source\":\"file\"}}\n{\"ID\":2,\"TS\":\"2026-08-13T22:36:55.202672115Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"5\"}}\n{\"ID\":3,\"TS\":\"2026-08-13T22:37:36.635288287Z\",\"Event\":\"auth_denied\",\"ActorKind\":\"machine\",\"ObservedNodeID\":\"noo31buBSC11CNTRL\",\"ObservedNodeName\":\"daniels-macbook-pro\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"denied\",\"Reason\":\"missing_grant_token\",\"TokenFingerprint\":\"\",\"Detail\":{\"method\":\"POST\",\"path\":\"/mcp\"}}\n{\"ID\":4,\"TS\":\"2026-08-13T22:37:37.865228049Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"3\"}}\n{\"ID\":5,\"TS\":\"2026-08-13T22:37:40.471588825Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":6,\"TS\":\"2026-08-13T22:38:08.558237583Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":7,\"TS\":\"2026-08-13T22:40:06.933808163Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":8,\"TS\":\"2026-08-13T22:40:19.811687973Z\",\"Event\":\"auth_denied\",\"ActorKind\":\"machine\",\"ObservedNodeID\":\"noo31buBSC11CNTRL\",\"ObservedNodeName\":\"daniels-macbook-pro\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"denied\",\"Reason\":\"missing_grant_token\",\"TokenFingerprint\":\"\",\"Detail\":{\"method\":\"POST\",\"path\":\"/mcp\"}}\n{\"ID\":9,\"TS\":\"2026-08-13T22:40:21.052536261Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"3\"}}\n{\"ID\":10,\"TS\":\"2026-08-13T22:40:22.90843062Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":11,\"TS\":\"2026-08-13T22:42:54.123561263Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":12,\"TS\":\"2026-08-13T22:44:57.69881396Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":13,\"TS\":\"2026-08-13T22:45:09.4193106Z\",\"Event\":\"auth_denied\",\"ActorKind\":\"machine\",\"ObservedNodeID\":\"noo31buBSC11CNTRL\",\"ObservedNodeName\":\"daniels-macbook-pro\",\"AuthMachin\n…[349002 bytes truncated]",
+          "stdout_excerpt": "{\"ID\":1,\"TS\":\"2026-08-13T22:36:55.182104931Z\",\"Event\":\"secret_imported\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"secret_generation\":\"1\",\"secret_ref\":\"deploy/bootstrap-selftest\",\"source\":\"file\"}}\n{\"ID\":2,\"TS\":\"2026-08-13T22:36:55.202672115Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"5\"}}\n{\"ID\":3,\"TS\":\"2026-08-13T22:37:36.635288287Z\",\"Event\":\"auth_denied\",\"ActorKind\":\"machine\",\"ObservedNodeID\":\"noo31buBSC11CNTRL\",\"ObservedNodeName\":\"daniels-macbook-pro\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"denied\",\"Reason\":\"missing_grant_token\",\"TokenFingerprint\":\"\",\"Detail\":{\"method\":\"POST\",\"path\":\"/mcp\"}}\n{\"ID\":4,\"TS\":\"2026-08-13T22:37:37.865228049Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"3\"}}\n{\"ID\":5,\"TS\":\"2026-08-13T22:37:40.471588825Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":6,\"TS\":\"2026-08-13T22:38:08.558237583Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":7,\"TS\":\"2026-08-13T22:40:06.933808163Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":8,\"TS\":\"2026-08-13T22:40:19.811687973Z\",\"Event\":\"auth_denied\",\"ActorKind\":\"machine\",\"ObservedNodeID\":\"noo31buBSC11CNTRL\",\"ObservedNodeName\":\"daniels-macbook-pro\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"denied\",\"Reason\":\"missing_grant_token\",\"TokenFingerprint\":\"\",\"Detail\":{\"method\":\"POST\",\"path\":\"/mcp\"}}\n{\"ID\":9,\"TS\":\"2026-08-13T22:40:21.052536261Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"3\"}}\n{\"ID\":10,\"TS\":\"2026-08-13T22:40:22.90843062Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":11,\"TS\":\"2026-08-13T22:42:54.123561263Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":12,\"TS\":\"2026-08-13T22:44:57.69881396Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"0\"}}\n{\"ID\":13,\"TS\":\"2026-08-13T22:45:09.4193106Z\",\"Event\":\"auth_denied\",\"ActorKind\":\"machine\",\"ObservedNodeID\":\"noo31buBSC11CNTRL\",\"ObservedNodeName\":\"daniels-macbook-pro\",\"AuthMachin\n…[387870 bytes truncated]",
           "stderr_excerpt": "",
-          "at": "2026-08-14T16:12:37Z",
-          "duration": "1.358s"
+          "at": "2026-08-14T16:35:02Z",
+          "duration": "1.328s"
         }
       ],
       "assertions": [
@@ -719,7 +719,7 @@
         {
           "claim": "the server audited the credential commit",
           "ok": true,
-          "detail": "791 row(s) since 2026-08-13T16:12:35Z"
+          "detail": "877 row(s) since 2026-08-13T16:35:00Z"
         }
       ]
     },
@@ -2435,7 +2435,7 @@
       ]
     }
   ],
-  "started_at": "2026-08-14T16:10:25Z",
+  "started_at": "2026-08-14T16:35:00Z",
   "summary": {
     "stages_failed": 0,
     "stages_partial": 3,
@@ -2443,6 +2443,6 @@
     "stages_skipped": 0
   },
   "task": "fn-1-homeplane-walking-skeleton-install.7",
-  "updated_at": "2026-08-14T16:23:33Z",
+  "updated_at": "2026-08-14T16:35:03Z",
   "what_this_is": "The record of the end-to-end walking-skeleton proof: a real machine installed, enrolled and configured against the live server, and every capability exercised from the harnesses themselves. Nothing here can be produced by `go test ./...` — it needs a deployment and, once, a human at a consent screen. Each stage carries the commands it ran with their exit codes, and each assertion carries the observation that settles it. Connector claims are settled by the server's own audit log, never by what a harness said it did."
 }
