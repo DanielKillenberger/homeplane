@@ -1,0 +1,167 @@
+{
+  "commit": "c3a17b69f1846d42e5ca009b2e8eac91f904be50",
+  "deployment": {
+    "account": "daniel.killenberger@gmail.com",
+    "agent": "/Users/daniel/.homeplane/bin/homeplane-agent",
+    "calendar_id": "primary",
+    "server_host": "clawniel",
+    "server_url": "http://homeplane.tailab4e9b.ts.net",
+    "vault": "/Users/daniel/Documents/daniel-os"
+  },
+  "kind": "live_e2e_proof",
+  "schema_version": 1,
+  "stages": [
+    {
+      "stage": "install",
+      "status": "pass",
+      "started_at": "2026-08-15T00:39:30Z",
+      "finished_at": "2026-08-15T00:39:41Z",
+      "steps": [
+        {
+          "what": "scripts/stage-release.sh (checksummed release-form artifacts)",
+          "command": [
+            "/Users/daniel/Projects/homeplane/scripts/stage-release.sh",
+            "/Users/daniel/Projects/homeplane/dist"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "stage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-darwin-arm64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-darwin-amd64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-linux-amd64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-server-linux-amd64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-linux-arm64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-server-linux-arm64\nstage-release.sh: staging node v22.11.0 (pinned in /Users/daniel/Projects/homeplane/scripts/node-pinned.sha256)\nstage-release.sh: staged node-v22.11.0-darwin-arm64.tar.gz\nstage-release.sh: staged node-v22.11.0-darwin-x64.tar.gz\nstage-release.sh: staged node-v22.11.0-linux-x64.tar.gz\nstage-release.sh: staged node-v22.11.0-linux-arm64.tar.gz\nstage-release.sh: staging bun v1.3.11 (pinned in /Users/daniel/Projects/homeplane/scripts/bun-pinned.sha256)\nstage-release.sh: staged bun-v1.3.11-darwin-aarch64.zip\nstage-release.sh: staged bun-v1.3.11-darwin-x64.zip\nstage-release.sh: staged bun-v1.3.11-linux-x64.zip\nstage-release.sh: staged bun-v1.3.11-linux-aarch64.zip\n\nstage-release.sh: staged /Users/daniel/Projects/homeplane/dist (agent version c3a17b6):\nda70304f9b57b2527d2940caf4a74c1a68ca0cd4e7ea6e12e9e0a04ae7364a74  homeplane-agent-darwin-amd64\n2b4b2e8b291a4639b9dacfaeebaa123f34fee2f4e103b0ac6a58d430440522a9  homeplane-agent-darwin-arm64\n6b2f3efce7020fabd24af6eb8fec31744cb2de3be06947f7bed14bdba9b44257  homeplane-agent-linux-amd64\ne0fe5080e8b7fe672cc6be45652addf86c8f2dcec84eeedd5a9d41131bae8419  homeplane-agent-linux-arm64\n5dea065c78959b3e348abcd88c40a918b46333ed3d493e37203c8fc3f6fd4c34  homeplane-server-linux-amd64\n37bc1dee343b351fecc66fca249d67537a01eac29423bf2b20006ddff8968089  homeplane-server-linux-arm64\n2e89afe6f4e3aa6c7e21c560d8a0453d84807e97850bbb819b998531a22bdfde  node-v22.11.0-darwin-arm64.tar.gz\n668d30b9512137b5f5baeef6c1bb4c46efff9a761ba990a034fb6b28b9da2465  node-v22.11.0-darwin-x64.tar.gz\n27453f7a0dd6b9e6738f1f6ea6a09b102ec7aa484de1e39d6a1c3608ad47aa6a  node-v22.11.0-linux-arm64.tar.gz\n4f862bab52039835efbe613b532238b6e4dde98d139a34e6923193e073438b13  node-v22.11.0-linux-x64.tar.gz\n6f5a3467ed9caec4795bf78cd476507d9f870c7d57b86c945fcb338126772ffc  bun-v1.3.11-darwin-aarch64.zip\nc4fe2b9247218b0295f24e895aaec8fee62e74452679a9026b67eacbd611a286  bun-v1.3.11-darwin-x64.zip\nd13944da12a53ecc74bf6a720bd1d04c4555c038dfe422365356a7be47691fdf  bun-v1.3.11-linux-aarch64.zip\n8611ba935af886f05a6f38740a15160326c15e5d5d07adef966130b4493607ed  bun-v1.3.11-linux-x64.zip\n\ninstall with: ./install.sh --stage-dir /Users/daniel/Projects/homeplane/dist",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T00:39:30Z",
+          "duration": "10.017s"
+        },
+        {
+          "what": "./install.sh (one command, from the staged artifacts)",
+          "command": [
+            "/Users/daniel/Projects/homeplane/install.sh",
+            "--stage-dir",
+            "/Users/daniel/Projects/homeplane/dist"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "install.sh: platform darwin/arm64 supervised by launchd\ninstall.sh: verified homeplane-agent-darwin-arm64 (2b4b2e8b291a4639b9dacfaeebaa123f34fee2f4e103b0ac6a58d430440522a9)\ninstall.sh: node 22+ already present\ninstall.sh: bun 1.3+ already present\ninstall.sh: installed /Users/daniel/.homeplane/bin/homeplane-agent\n\nHomeplane agent installed.\n\n  /Users/daniel/.homeplane/bin/homeplane-agent\n\nNext:\n  1. add /Users/daniel/.homeplane/bin to your PATH\n  2. enrol this machine:  homeplane-agent enrol -server https://\u003cserver\u003e.ts.net\n  3. check it:            homeplane-agent status\n\nEnrolment state lives in ~/.homeplane and is untouched by re-running this\ninstaller.",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T00:39:40Z",
+          "duration": "780ms"
+        },
+        {
+          "what": "the INSTALLED agent runs",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "version"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "homeplane-agent c3a17b6",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T00:39:41Z",
+          "duration": "247ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "the staged release carries a checksum manifest",
+          "ok": true,
+          "detail": "dist/SHA256SUMS: 1340 bytes"
+        },
+        {
+          "claim": "the installer completes on this machine",
+          "ok": true,
+          "detail": "exit 0"
+        },
+        {
+          "claim": "the installed agent reports its version",
+          "ok": true,
+          "detail": "homeplane-agent c3a17b6"
+        }
+      ]
+    },
+    {
+      "stage": "grok-harness",
+      "status": "fail",
+      "started_at": "2026-08-15T00:40:03Z",
+      "finished_at": "2026-08-15T00:40:04Z",
+      "steps": [
+        {
+          "what": "homeplane-agent configure-harnesses -detect (before any write)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "configure-harnesses",
+            "-detect",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"config_exists\": true,\n      \"binary_path\": \"/Users/daniel/.local/bin/claude\",\n      \"support\": \"unknown\",\n      \"support_reason\": \"no version contract is pinned for claude-code, so its CLI surface is not version-gated\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"config_exists\": true,\n      \"binary_path\": \"/Users/daniel/.local/bin/codex\",\n      \"support\": \"unknown\",\n      \"support_reason\": \"no version contract is pinned for codex, so its CLI surface is not version-gated\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.grok/config.toml\",\n      \"config_exists\": true,\n      \"binary_path\": \"/Users/daniel/.local/bin/grok\",\n      \"version\": \"1.0.3\",\n      \"support\": \"supported\",\n      \"compat_sources\": [\n        \"claude\",\n        \"cursor\",\n        \"project(.mcp.json)\"\n      ]\n    }\n  ]\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T00:40:03Z",
+          "duration": "18ms"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T00:40:03.389813Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"degraded\",\n      \"detail\": \"claude-code, codex; grok is detected_unconfigured\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-c085ad4a2d08346f\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-63b8db515f635d47\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"state\": \"detected_unconfigured\",\n      \"detail\": \"grok is installed but Homeplane has not configured it — run `homeplane-agent c\n…[15438 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T00:40:03Z",
+          "duration": "453ms"
+        },
+        {
+          "what": "homeplane-agent configure-harnesses (all three harnesses)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "configure-harnesses",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"status\": \"configured\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"backup_path\": \"/Users/daniel/.claude.json.homeplane-backup-20260815T004003Z\",\n      \"managed_servers\": [\n        \"gno\",\n        \"homeplane\"\n      ],\n      \"grant_id\": \"g-32d74930f4a4790f\",\n      \"superseded_grant_id\": \"g-c085ad4a2d08346f\",\n      \"endpoint_url\": \"http://homeplane.tailab4e9b.ts.net/mcp\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"changed\": true,\n      \"configured_at\": \"2026-08-15T02:40:03.843713+02:00\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"status\": \"configured\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"backup_path\": \"/Users/daniel/.codex/config.toml.homeplane-backup-20260815T004004Z\",\n      \"managed_servers\": [\n        \"gno\",\n        \"homeplane\"\n      ],\n      \"grant_id\": \"g-60635c74d0efbefd\",\n      \"superseded_grant_id\": \"g-63b8db515f635d47\",\n      \"endpoint_url\": \"http://homeplane.tailab4e9b.ts.net/mcp\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"changed\": true,\n      \"configured_at\": \"2026-08-15T02:40:04.102409+02:00\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"status\": \"failed\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.grok/config.toml\",\n      \"backup_path\": \"/Users/daniel/.grok/config.toml.homeplane-backup-20260815T004004Z\",\n      \"managed_servers\": [\n        \"gno\",\n        \"homeplane\"\n      ],\n      \"message\": \"requesting a grant failed: issue grant: server refused the request (403 forbidden): policy: unknown harness: \\\"grok\\\" (known: claude-code, codex)\",\n      \"changed\": false,\n      \"configured_at\": \"2026-08-15T02:40:04.236731+02:00\"\n    }\n  ]\n}",
+          "stderr_excerpt": "homeplane-agent configure-harnesses: harness: grok: requesting a grant failed: issue grant: server refused the request (403 forbidden): policy: unknown harness: \"grok\" (known: claude-code, codex)",
+          "at": "2026-08-15T00:40:03Z",
+          "duration": "532ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "grok's configuration is readable and its pre-run bytes are recorded",
+          "ok": true,
+          "detail": "/Users/daniel/.grok/config.toml sha256 9b8cdca91818bab0a3a341465af7c7d11461dba863b6af80c0c26b974819cd51 (\u003cnil\u003e)"
+        },
+        {
+          "claim": "the proof holds its own restorable copy of grok's configuration",
+          "ok": true,
+          "detail": "/Users/daniel/.homeplane/fn3-grok-backup/config.toml.20260815T004003Z (\u003cnil\u003e/\u003cnil\u003e)"
+        },
+        {
+          "claim": "detection reports grok alongside the other harnesses, with an observed version and a support verdict",
+          "ok": true,
+          "detail": "exit 0; grok installed=true version=\"1.0.3\" support=\"supported\" config=/Users/daniel/.grok/config.toml binary=/Users/daniel/.local/bin/grok"
+        },
+        {
+          "claim": "detection reports the compat sources grok would still inherit MCP servers from",
+          "ok": true,
+          "detail": "compat_sources [claude cursor project(.mcp.json)]"
+        },
+        {
+          "claim": "before configuration, status reports grok as detected-unconfigured (R6 state 2 of 5)",
+          "ok": true,
+          "detail": "grok: state=detected_unconfigured detail=grok is installed but Homeplane has not configured it — run `homeplane-agent configure-harnesses`; still inherits MCP servers from: claude, cursor, project(.mcp.json)"
+        },
+        {
+          "claim": "configure-harnesses completes",
+          "ok": false,
+          "detail": "exit 1: homeplane-agent configure-harnesses: harness: grok: requesting a grant failed: issue grant: server refused the request (403 forbidden): policy: unknown harness: \"grok\" (known: claude-code, codex)"
+        }
+      ]
+    }
+  ],
+  "started_at": "2026-08-15T00:40:03Z",
+  "summary": {
+    "stages_failed": 1,
+    "stages_partial": 0,
+    "stages_passed": 1,
+    "stages_skipped": 0
+  },
+  "task": "fn-3-add-grok-as-a-third-harness.3",
+  "updated_at": "2026-08-15T00:40:04Z",
+  "what_this_is": "The record of the end-to-end walking-skeleton proof: a real machine installed, enrolled and configured against the live server, and every capability exercised from the harnesses themselves. Nothing here can be produced by `go test ./...` — it needs a deployment and, once, a human at a consent screen. Each stage carries the commands it ran with their exit codes, and each assertion carries the observation that settles it. Connector claims are settled by the server's own audit log, never by what a harness said it did."
+}

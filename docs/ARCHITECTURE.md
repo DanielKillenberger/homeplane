@@ -447,3 +447,12 @@ side — one row in the policy table. The diff from the spec's branch point over
 Enrolment, identity, credential custody, policy resolution, audit and revocation
 needed no change, which is the claim R12 exists to falsify. A fourth harness is
 the same shape of work again; nothing about it is deferred hardening.
+
+**The one row has an operational consequence, and it is not free.** The policy
+table is compiled into the server, so a harness the deployed server does not
+know is refused at grant issuance with `403 policy: unknown harness` — observed,
+not predicted. Adding a harness therefore has an ORDER: deploy the server first,
+then configure the machine. Failing that way round is the correct behaviour and
+costs nothing, because mint-authority-last means the refusal arrives before
+anything local is written — the harness's configuration file is left
+byte-identical and the machine keeps working. See the RUNBOOK's harness section.

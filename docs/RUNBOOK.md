@@ -429,7 +429,20 @@ Two constraints, both enforced server-side rather than by convention:
 
 - **Only `claude-code`, `codex` and `grok` exist.** Server policy names exactly
   those three harnesses (`internal/policy`), so a grant request for anything
-  else is refused. Wiring an unsupported harness is not a documentation gap you can
+  else is refused. The table is **compiled into the server**, so this is a
+  property of the DEPLOYED build, not of the repository: against a server that
+  predates a harness, `configure-harnesses` fails that harness with
+
+  ```
+  requesting a grant failed: issue grant: server refused the request
+  (403 forbidden): policy: unknown harness: "grok" (known: claude-code, codex)
+  ```
+
+  Deploy the server first (`deploy/server/deploy.sh --host clawniel`), then
+  configure the machine. Getting the order wrong costs nothing but the message:
+  the grant is requested only after every local precondition passes, so the
+  harness's configuration file is left byte-identical and the other harnesses
+  are configured normally. Wiring an unsupported harness is not a documentation gap you can
   work around here — it needs the policy to name it first.
 - **Use a freshly issued grant for the harness you are wiring — never another
   harness's token.** Reusing one makes every call appear under the *original*
