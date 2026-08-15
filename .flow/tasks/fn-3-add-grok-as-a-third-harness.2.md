@@ -30,9 +30,15 @@ Implement detection, configuration, skills linking, and the policy-table entry p
 - [ ] TBD
 
 ## Done summary
-TBD
+grok is a third harness end to end: detection with an observed version and a support verdict, a byte-span TOML writer that closes both compat cells (D4/D4b), skills linking + a fresh-process verifier, a policy row, and a five-state per-harness status. Configure is now a two-phase transaction for ALL harnesses — every local precondition is proven before IssueGrant, so a purely local failure can no longer supersede a harness's working grant.
 
+R12 falsification gate: `git diff --stat internal/server internal/store internal/cred internal/secrets` from bab0835 is EMPTY — adding a harness was a policy row and nothing else server-side.
+
+Real ~/.grok untouched: config.toml still sha256 9b8cdca9…19cd51 (the .1 snapshot), skills/ still empty. A first test run linked four skills into the real ~/.grok/skills through fixtures that did not pin GROK_HOME; they were removed and every fixture (harness, skills, cmd, e2e) now pins GrokHome/GROK_HOME.
+
+stage: impl-review - ran [round 1 NEEDS_WORK (7 findings: 2×P1 status truthfulness/health integration, 1×P1 MCP-surface drift, 4×P2), round 2 SHIP]
+stage: delegation - skipped(config: delegation off)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: a4a1581759357963f5a625c335662b3aa52b10ee, b666d55ee714579c1e8c98bca47213b7eba8e3c9, b5b19afca3df5810429f0fed9bd9a8a569e007e9, d37860d8fd820f563504a0b23752eaebce57fa5f
+- Tests: go build ./..., go vet ./..., go test ./... -count=1 -json (981/981 assertions, artifact test/evidence/fn-3-add-grok-as-a-third-harness.2.json at b5b19af), git diff --stat internal/server internal/store internal/cred internal/secrets (R12 gate: empty)
 - PRs:
