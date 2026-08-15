@@ -241,13 +241,21 @@ func (c Configurator) configureOne(ctx context.Context, h string, engine Entry, 
 	sort.Strings(out.Retired)
 
 	plan, err := writer.Prepare(provisional, out.Retired)
+	// Assigned BEFORE the error check: Prepare takes its copy before it parses
+	// anything, precisely so a file we end up refusing to touch still leaves the
+	// operator a copy — and a copy nobody is told about is not a copy they have.
+	out.BackupPath = plan.BackupPath
 	if err != nil {
 		if errors.Is(err, ErrMalformedConfig) {
 			out.Status = StatusSkipped
 			out.Message = fmt.Sprintf("%s was left untouched: %v", detection.ConfigPath, err)
 			return out
 		}
-		return failed(out, err.Error())
+		message := err.Error()
+		if out.BackupPath != "" {
+			message += fmt.Sprintf(" (%s was left untouched; a copy of it is at %s)", detection.ConfigPath, out.BackupPath)
+		}
+		return failed(out, message)
 	}
 	// The record is the machine's memory of which entries a previous run
 	// managed. A state directory we cannot write is a run that would configure

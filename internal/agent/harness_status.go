@@ -78,7 +78,12 @@ type HarnessStatus struct {
 // disk — so the row keeps `configured` and SAYS the grant could not be checked,
 // rather than inventing a revocation from a network failure. The overall report
 // already carries the grants component as `unknown` for exactly this case.
-func reconcileHarnesses(detections []harness.Detection, records []harness.Record, grants []GrantReport, grantsKnown bool) []HarnessStatus {
+//
+// recordsErr is the failure to READ this machine's harness records, carried in
+// rather than swallowed: "we have no record of configuring grok" and "we could
+// not read our records" look identical in the resulting row otherwise, and the
+// second is a machine-side fault an operator has to fix.
+func reconcileHarnesses(detections []harness.Detection, records []harness.Record, grants []GrantReport, grantsKnown bool, recordsErr error) []HarnessStatus {
 	byHarness := map[string]harness.Detection{}
 	for _, d := range detections {
 		byHarness[d.Harness] = d
@@ -113,10 +118,35 @@ func reconcileHarnesses(detections []harness.Detection, records []harness.Record
 			row.State = HarnessDetectedUnsupported
 			row.Detail = d.SupportReason
 		default:
+			if recordsErr != nil {
+				row.State = HarnessDetectedUnconfigured
+				row.Detail = "this machine's harness records could not be read, so nothing can be claimed about " +
+					name + "'s configuration: " + recordsErr.Error()
+				break
+			}
 			rec, hasRecord := recorded[name]
 			if !hasRecord || strings.TrimSpace(rec.GrantID) == "" {
 				row.State = HarnessDetectedUnconfigured
 				row.Detail = name + " is installed but Homeplane has not configured it — run `homeplane-agent configure-harnesses`"
+				break
+			}
+			// A record is a memory, not an observation. The FILE it names is
+			// what the harness actually reads, so a config that has been
+			// deleted — or a GROK_HOME that now resolves somewhere else — means
+			// the harness reads no Homeplane configuration at all, whatever the
+			// record and the server still agree about. Reporting that as
+			// configured would be a claim about a file that is not there.
+			if !d.ConfigExists {
+				row.State = HarnessDetectedUnconfigured
+				row.Detail = fmt.Sprintf("%s was configured at %s, but that file no longer exists — "+
+					"re-run `homeplane-agent configure-harnesses`", name, rec.ConfigPath)
+				break
+			}
+			if rec.ConfigPath != "" && rec.ConfigPath != d.ConfigPath {
+				row.State = HarnessDetectedUnconfigured
+				row.Detail = fmt.Sprintf("%s was configured at %s, but it now reads %s — "+
+					"re-run `homeplane-agent configure-harnesses` to wire the configuration it actually loads",
+					name, rec.ConfigPath, d.ConfigPath)
 				break
 			}
 			row.GrantID = rec.GrantID

@@ -83,6 +83,10 @@ const (
 // call, so anything slower than this is stuck rather than slow.
 const versionProbeTimeout = 10 * time.Second
 
+// versionProbeWaitDelay bounds how long a killed probe's output pipes may keep
+// Wait blocked. A child that inherits them can outlive its parent.
+const versionProbeWaitDelay = 2 * time.Second
+
 // Locator resolves harness configuration paths and decides what is installed.
 //
 // Both fields are seams. Tests point Home at a temporary directory and stub
@@ -103,6 +107,14 @@ type Locator struct {
 	GrokHome string
 	// LookPath finds an executable. Empty means exec.LookPath.
 	LookPath func(string) (string, error)
+	// Surface reports whether a harness CLI still exposes a required
+	// subcommand, by running it read-only and returning its exit status. Empty
+	// means run it for real, with a timeout.
+	//
+	// It is separate from Version because it answers a different question: a
+	// version string tells us WHICH release this is, and this tells us whether
+	// that release still has the surface the contract was captured against.
+	Surface func(binary string, args ...string) error
 	// Version reports a harness CLI's self-declared version string, given the
 	// resolved binary path. Empty means run `<binary> --version` with a timeout.
 	//
@@ -321,7 +333,49 @@ func (l Locator) grokSupport(binaryPath string) (version, support, reason string
 			truncateForMessage(raw, 80))
 	}
 	support, reason = judgeGrokVersion(version)
+	if support != SupportDrifted {
+		return version, support, reason
+	}
+
+	// A same-major release is not automatically a release that still has the
+	// surface the contract describes. The version comparison says "probably the
+	// same shape"; nobody has observed THIS build. So the one surface everything
+	// here depends on is checked directly, before the drift verdict is allowed
+	// to authorise a write — otherwise a release that dropped `mcp` would
+	// supersede a working grant and then receive a configuration it cannot read.
+	//
+	// `mcp list --json` is the check because it is the READ verb the capture
+	// pins: on a never-launched home it prints `[]` and exits 0, so a clean exit
+	// means the surface is there and nothing was mutated. Its OUTPUT is
+	// discarded unread — `mcp list` echoes header values verbatim, and that
+	// includes a bearer token.
+	if err := l.probeSurface(binaryPath, "mcp", "list", "--json"); err != nil {
+		return version, SupportUnsupported, fmt.Sprintf(
+			"grok %s differs from the captured contract (grok %s) AND does not answer `grok mcp list --json` (%v), so the "+
+				"configuration surface this build writes is not there. Re-run scripts/capture-grok-contract.sh against this release",
+			version, GrokContractVersion, err)
+	}
 	return version, support, reason
+}
+
+func (l Locator) probeSurface(binary string, args ...string) error {
+	if l.Surface != nil {
+		return l.Surface(binary, args...)
+	}
+	return runSurfaceProbe(binary, args...)
+}
+
+// runSurfaceProbe runs a READ-ONLY harness verb and reports only its exit
+// status. The output is deliberately thrown away: this asks "does the verb
+// exist", and the answer must not carry a credential into a log.
+func runSurfaceProbe(binary string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), versionProbeTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.WaitDelay = versionProbeWaitDelay
+	return cmd.Run()
 }
 
 func (l Locator) probeVersion(binary string) (string, error) {
@@ -337,7 +391,9 @@ func (l Locator) probeVersion(binary string) (string, error) {
 func runVersion(binary string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), versionProbeTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, binary, "--version").Output()
+	cmd := exec.CommandContext(ctx, binary, "--version")
+	cmd.WaitDelay = versionProbeWaitDelay
+	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}

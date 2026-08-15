@@ -185,18 +185,22 @@ func Status(ctx context.Context, opts StatusOptions) (Report, error) {
 	report.MachineName = state.MachineName
 	report.MachineOS = state.OS
 
+	// The server reconcile runs BEFORE the component list is assembled, because
+	// the harness component now depends on it: whether a configured harness's
+	// grant is still live is a fact only the server holds. The list is still
+	// appended in its established order.
+	grants, server := serverComponents(ctx, opts, report.Enroled, state, credential)
+	report.Harnesses = harnessStatuses(dir, opts, grants)
+
 	report.Components = append(report.Components, enrolmentComponent(hasState, state, credential))
 	report.Components = append(report.Components, vaultComponent(state))
 	report.Components = append(report.Components, syncComponent(dir, state, opts.SyncLiveness))
 	report.Components = append(report.Components, gnoComponent(dir, state, opts.GNOLiveness))
-	report.Components = append(report.Components, harnessComponent(state))
+	report.Components = append(report.Components, harnessComponent(state, report.Harnesses))
 	report.Components = append(report.Components, skillsComponent(state))
-
-	grants, server := serverComponents(ctx, opts, report.Enroled, state, credential)
 	report.Components = append(report.Components, grants.component, server.component)
 	report.Grants = grants.grants
 	report.Server = server.health
-	report.Harnesses = harnessStatuses(dir, opts, grants)
 
 	switch {
 	case !report.Enroled:
@@ -215,26 +219,34 @@ func Status(ctx context.Context, opts StatusOptions) (Report, error) {
 // cannot be resolved is a machine an operator still needs a report about, so the
 // error becomes the detail of a not-detected row rather than an empty report.
 func harnessStatuses(stateDir string, opts StatusOptions, grants grantsResult) []HarnessStatus {
-	detections, err := opts.HarnessLocator.DetectAll()
-	if err != nil {
-		rows := make([]HarnessStatus, 0, len(harness.Known()))
-		for _, name := range harness.Known() {
-			rows = append(rows, HarnessStatus{
-				Harness: name, State: HarnessNotDetected,
-				Detail: "this harness could not be inspected: " + err.Error(),
-			})
+	// Detected ONE AT A TIME. DetectAll fails the whole batch on the first
+	// error, so a single unresolvable path — a CLAUDE_CONFIG_DIR pointing at a
+	// directory this process cannot stat — would erase every other harness from
+	// the report and call them all absent.
+	var detections []harness.Detection
+	failures := map[string]string{}
+	for _, name := range harness.Known() {
+		d, err := opts.HarnessLocator.Detect(name)
+		if err != nil {
+			failures[name] = err.Error()
+			continue
 		}
-		return rows
+		detections = append(detections, d)
 	}
-	records, err := harness.LoadRecords(stateDir)
-	if err != nil {
-		records = nil
-	}
+	records, recordsErr := harness.LoadRecords(stateDir)
 	// The grants component reads `unknown` exactly when the server could not be
 	// asked, which is the one case a missing grant must not be read as a
 	// revocation.
 	grantsKnown := grants.component.State != StateUnknown
-	return reconcileHarnesses(detections, records, grants.grants, grantsKnown)
+	rows := reconcileHarnesses(detections, records, grants.grants, grantsKnown, recordsErr)
+	for i := range rows {
+		if reason, failed := failures[rows[i].Harness]; failed {
+			// Not "absent": we did not establish absence, we failed to look.
+			rows[i].State = HarnessNotDetected
+			rows[i].Detail = "this harness could not be inspected, so nothing is claimed about it: " + reason
+		}
+	}
+	return rows
 }
 
 func enrolmentComponent(hasState bool, state State, credential string) ComponentReport {
@@ -522,17 +534,40 @@ func skillsComponent(state State) ComponentReport {
 // succeeded and Codex failed leaves exactly the same list as a run where only
 // Claude Code was attempted, and reporting the first as ok would tell an
 // operator their machine is fine while half of it cannot reach the plane.
-func harnessComponent(state State) ComponentReport {
+func harnessComponent(state State, rows []HarnessStatus) ComponentReport {
 	c := listComponent(ComponentHarnesses, state.Harnesses, "no harness is configured yet")
-	if state.Harness == nil || state.Harness.State != StateDegraded {
+	if state.Harness != nil && state.Harness.State == StateDegraded {
+		c.State = StateDegraded
+		if c.Detail == "" || len(state.Harnesses) == 0 {
+			c.Detail = state.Harness.Detail
+		} else {
+			c.Detail = "configured: " + c.Detail + "; " + state.Harness.Detail
+		}
+	}
+
+	// The live reconciliation gets the last word, because it observes things
+	// the persisted list cannot: a harness that is installed and unwired, one
+	// running an unverified version, and one whose grant the SERVER revoked —
+	// none of which change anything on this disk. Leaving the component `ok`
+	// while a row says `revoked` would report a machine as healthy at exactly
+	// the moment a revocation was supposed to make it not.
+	actionable := DegradedHarnesses(rows)
+	if len(actionable) == 0 {
 		return c
+	}
+	reasons := make([]string, 0, len(actionable))
+	for _, r := range rows {
+		switch r.State {
+		case HarnessDetectedUnconfigured, HarnessDetectedUnsupported, HarnessRevoked:
+			reasons = append(reasons, r.Harness+" is "+r.State)
+		}
 	}
 	c.State = StateDegraded
-	if c.Detail == "" || len(state.Harnesses) == 0 {
-		c.Detail = state.Harness.Detail
-		return c
+	if c.Detail == "" {
+		c.Detail = strings.Join(reasons, "; ")
+	} else {
+		c.Detail = c.Detail + "; " + strings.Join(reasons, "; ")
 	}
-	c.Detail = "configured: " + c.Detail + "; " + state.Harness.Detail
 	return c
 }
 

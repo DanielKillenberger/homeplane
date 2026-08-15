@@ -11,6 +11,12 @@ import (
 // GROK_HOME, no real PATH, and a version seam that answers whatever the test
 // says. Nothing here may touch the operator's ~/.grok.
 func grokLocator(t *testing.T, versionOutput string, versionErr error, onPath bool) (Locator, string) {
+	return grokLocatorWithSurface(t, versionOutput, versionErr, onPath, nil)
+}
+
+// grokLocatorWithSurface adds the read-only surface probe's answer. Nil means
+// the surface is there, which is the ordinary case.
+func grokLocatorWithSurface(t *testing.T, versionOutput string, versionErr error, onPath bool, surfaceErr error) (Locator, string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv(EnvGrokHome, "")
@@ -24,6 +30,7 @@ func grokLocator(t *testing.T, versionOutput string, versionErr error, onPath bo
 			return "", errors.New("not on PATH")
 		},
 		Version: func(string) (string, error) { return versionOutput, versionErr },
+		Surface: func(string, ...string) error { return surfaceErr },
 	}
 	return l, filepath.Join(home, ".grok", "config.toml")
 }
@@ -113,6 +120,7 @@ func TestGrokVersionVerdicts(t *testing.T) {
 		output      string
 		err         error
 		onPath      bool
+		surfaceErr  error
 		wantVersion string
 		wantSupport string
 		usable      bool
@@ -138,6 +146,11 @@ func TestGrokVersionVerdicts(t *testing.T) {
 			wantVersion: "2.0.0", wantSupport: SupportUnsupported, usable: false,
 		},
 		{
+			name:   "a same-major release that no longer answers `mcp list` is refused",
+			output: "grok 1.4.0 (deadbeef)\n", onPath: true, surfaceErr: errors.New("unknown subcommand `mcp`"),
+			wantVersion: "1.4.0", wantSupport: SupportUnsupported, usable: false,
+		},
+		{
 			name:   "an unreadable version line is unknown, never unsupported",
 			output: "grok, the build tui\n", onPath: true,
 			wantSupport: SupportUnknown, usable: true,
@@ -155,7 +168,7 @@ func TestGrokVersionVerdicts(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			l, configPath := grokLocator(t, c.output, c.err, c.onPath)
+			l, configPath := grokLocatorWithSurface(t, c.output, c.err, c.onPath, c.surfaceErr)
 			if !c.onPath {
 				if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
 					t.Fatal(err)

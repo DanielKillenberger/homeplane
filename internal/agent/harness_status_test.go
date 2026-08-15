@@ -24,8 +24,8 @@ func TestTheFiveHarnessStatesRenderDistinctly(t *testing.T) {
 	detections := []harness.Detection{
 		{Harness: harness.ClaudeCode, Installed: false, ConfigPath: "/h/.claude.json",
 			Reason: "no claude executable on PATH and no configuration at /h/.claude.json", Support: harness.SupportUnknown},
-		{Harness: harness.Codex, Installed: true, ConfigPath: "/h/.codex/config.toml", Support: harness.SupportUnknown},
-		{Harness: harness.Grok, Installed: true, ConfigPath: "/h/.grok/config.toml", Version: "2.0.0",
+		{Harness: harness.Codex, Installed: true, ConfigExists: true, ConfigPath: "/h/.codex/config.toml", Support: harness.SupportUnknown},
+		{Harness: harness.Grok, Installed: true, ConfigExists: true, ConfigPath: "/h/.grok/config.toml", Version: "2.0.0",
 			Support: harness.SupportUnsupported, SupportReason: "grok 2.0.0 is a different major version than the captured contract"},
 	}
 	records := []harness.Record{
@@ -33,7 +33,7 @@ func TestTheFiveHarnessStatesRenderDistinctly(t *testing.T) {
 	}
 	grants := []GrantReport{{GrantID: "g-codex", Harness: harness.Codex, State: grantStateActive}}
 
-	rows := reconcileHarnesses(detections, records, grants, true)
+	rows := reconcileHarnesses(detections, records, grants, true, nil)
 	got := map[string]HarnessStatus{}
 	for _, r := range rows {
 		got[r.Harness] = r
@@ -54,9 +54,9 @@ func TestTheFiveHarnessStatesRenderDistinctly(t *testing.T) {
 	// The same machine, one harness detected and never wired: a state the
 	// persisted list cannot express at all, because "not in the list" is where
 	// "not installed" also lives.
-	detections[2] = harness.Detection{Harness: harness.Grok, Installed: true,
+	detections[2] = harness.Detection{Harness: harness.Grok, Installed: true, ConfigExists: true,
 		ConfigPath: "/h/.grok/config.toml", Version: "1.0.3", Support: harness.SupportSupported}
-	rows = reconcileHarnesses(detections, records, grants, true)
+	rows = reconcileHarnesses(detections, records, grants, true, nil)
 	if s := rows[2]; s.State != HarnessDetectedUnconfigured || !strings.Contains(s.Detail, "configure-harnesses") {
 		t.Errorf("grok = %+v, want detected_unconfigured with the command to run", s)
 	}
@@ -64,14 +64,14 @@ func TestTheFiveHarnessStatesRenderDistinctly(t *testing.T) {
 	// And the same machine after the server revoked codex's grant. Nothing on
 	// disk changed; the row must.
 	revoked := []GrantReport{{GrantID: "g-codex", Harness: harness.Codex, State: "revoked", RevokedAt: "2026-08-15T00:00:00Z"}}
-	rows = reconcileHarnesses(detections, records, revoked, true)
+	rows = reconcileHarnesses(detections, records, revoked, true, nil)
 	if s := rows[1]; s.State != HarnessRevoked || !strings.Contains(s.Detail, "g-codex") {
 		t.Errorf("codex = %+v, want revoked naming the dead grant", s)
 	}
 
 	// A grant the server does not list at all is equally dead: forgetting is a
 	// perfectly good way to revoke.
-	rows = reconcileHarnesses(detections, records, nil, true)
+	rows = reconcileHarnesses(detections, records, nil, true, nil)
 	if s := rows[1]; s.State != HarnessRevoked {
 		t.Errorf("codex = %+v, want revoked when the server lists no such grant", s)
 	}
@@ -82,11 +82,11 @@ func TestTheFiveHarnessStatesRenderDistinctly(t *testing.T) {
 // admits the grant was not checked, rather than inventing a revocation from a
 // network failure.
 func TestAnUnreachableServerDoesNotFabricateARevocation(t *testing.T) {
-	detections := []harness.Detection{{Harness: harness.Codex, Installed: true,
+	detections := []harness.Detection{{Harness: harness.Codex, Installed: true, ConfigExists: true,
 		ConfigPath: "/h/.codex/config.toml", Support: harness.SupportUnknown}}
 	records := []harness.Record{{Harness: harness.Codex, ConfigPath: "/h/.codex/config.toml", GrantID: "g-codex"}}
 
-	rows := reconcileHarnesses(detections, records, nil, false)
+	rows := reconcileHarnesses(detections, records, nil, false, nil)
 	var codex HarnessStatus
 	for _, r := range rows {
 		if r.Harness == harness.Codex {
@@ -106,13 +106,13 @@ func TestAnUnreachableServerDoesNotFabricateARevocation(t *testing.T) {
 // user-config compat cells; the project-scope one cannot be closed from user
 // config, so it stays visible instead of being assumed away.
 func TestCompatSourcesTravelWithTheHarnessRow(t *testing.T) {
-	detections := []harness.Detection{{Harness: harness.Grok, Installed: true,
+	detections := []harness.Detection{{Harness: harness.Grok, Installed: true, ConfigExists: true,
 		ConfigPath: "/h/.grok/config.toml", Version: "1.0.3", Support: harness.SupportSupported,
 		CompatSources: []string{harness.CompatSourceProject}}}
 	records := []harness.Record{{Harness: harness.Grok, ConfigPath: "/h/.grok/config.toml", GrantID: "g-grok"}}
 	grants := []GrantReport{{GrantID: "g-grok", Harness: harness.Grok, State: grantStateActive}}
 
-	rows := reconcileHarnesses(detections, records, grants, true)
+	rows := reconcileHarnesses(detections, records, grants, true, nil)
 	var grok HarnessStatus
 	for _, r := range rows {
 		if r.Harness == harness.Grok {
@@ -149,5 +149,101 @@ func TestDegradedHarnessesNamesTheActionableRows(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("degraded = %v, want %v", got, want)
 		}
+	}
+}
+
+// A record is a memory; the config FILE is what the harness reads. Deleting it
+// — or relocating GROK_HOME so the harness now loads a different file — means
+// grok reads no Homeplane configuration at all, whatever the record and the
+// server still agree about.
+func TestARecordWithoutItsConfigFileIsNotConfigured(t *testing.T) {
+	records := []harness.Record{{Harness: harness.Grok, ConfigPath: "/h/.grok/config.toml", GrantID: "g-grok"}}
+	grants := []GrantReport{{GrantID: "g-grok", Harness: harness.Grok, State: grantStateActive}}
+
+	deleted := []harness.Detection{{Harness: harness.Grok, Installed: true, ConfigExists: false,
+		ConfigPath: "/h/.grok/config.toml", Support: harness.SupportSupported}}
+	if got := rowFor(t, reconcileHarnesses(deleted, records, grants, true, nil), harness.Grok); got.State != HarnessDetectedUnconfigured ||
+		!strings.Contains(got.Detail, "no longer exists") {
+		t.Errorf("deleted config = %+v, want detected_unconfigured", got)
+	}
+
+	relocated := []harness.Detection{{Harness: harness.Grok, Installed: true, ConfigExists: true,
+		ConfigPath: "/elsewhere/config.toml", Support: harness.SupportSupported}}
+	got := rowFor(t, reconcileHarnesses(relocated, records, grants, true, nil), harness.Grok)
+	if got.State != HarnessDetectedUnconfigured {
+		t.Errorf("relocated config = %+v, want detected_unconfigured", got)
+	}
+	if !strings.Contains(got.Detail, "/elsewhere/config.toml") || !strings.Contains(got.Detail, "/h/.grok/config.toml") {
+		t.Errorf("detail = %q, which does not say which file it now reads", got.Detail)
+	}
+}
+
+// Records we could not READ are not records that say "unconfigured". The row
+// has to carry the machine-side fault, or an operator chases a configuration
+// problem that is really a permissions problem.
+func TestUnreadableRecordsAreSurfacedRatherThanReadAsUnconfigured(t *testing.T) {
+	detections := []harness.Detection{{Harness: harness.Codex, Installed: true, ConfigExists: true,
+		ConfigPath: "/h/.codex/config.toml", Support: harness.SupportUnknown}}
+
+	got := rowFor(t, reconcileHarnesses(detections, nil, nil, true, errStubRecords), harness.Codex)
+	if got.State != HarnessDetectedUnconfigured {
+		t.Fatalf("codex = %+v", got)
+	}
+	if !strings.Contains(got.Detail, "could not be read") {
+		t.Errorf("detail = %q, which hides the record-read failure", got.Detail)
+	}
+}
+
+var errStubRecords = stubError("permission denied reading ~/.homeplane/harnesses")
+
+type stubError string
+
+func (e stubError) Error() string { return string(e) }
+
+func rowFor(t *testing.T, rows []HarnessStatus, name string) HarnessStatus {
+	t.Helper()
+	for _, r := range rows {
+		if r.Harness == name {
+			return r
+		}
+	}
+	t.Fatalf("no row for %s", name)
+	return HarnessStatus{}
+}
+
+// An actionable row must move the whole machine off `ok`. Reporting `homeplane:
+// ok` with exit 0 while a harness row reads `revoked` would be the report
+// contradicting itself — and the exit code is what a script reads.
+func TestActionableHarnessRowsDegradeTheComponentAndTheReport(t *testing.T) {
+	state := State{Harnesses: []string{harness.Codex}, Harness: &ComponentState{State: StateOK}}
+	for _, actionable := range []string{HarnessRevoked, HarnessDetectedUnconfigured, HarnessDetectedUnsupported} {
+		rows := []HarnessStatus{
+			{Harness: harness.ClaudeCode, State: HarnessNotDetected},
+			{Harness: harness.Codex, State: HarnessConfigured},
+			{Harness: harness.Grok, State: actionable, Detail: "…"},
+		}
+		c := harnessComponent(state, rows)
+		if c.State != StateDegraded {
+			t.Errorf("%s: component = %+v, want degraded", actionable, c)
+		}
+		if !strings.Contains(c.Detail, "grok is "+actionable) {
+			t.Errorf("%s: detail = %q, which does not name the actionable harness", actionable, c.Detail)
+		}
+		// And the report-level rollup follows the component, which is what the
+		// exit code is derived from.
+		r := Report{Status: OverallOK, Components: []ComponentReport{c}}
+		if len(r.Degraded()) == 0 {
+			t.Errorf("%s: the degraded component did not reach the report", actionable)
+		}
+	}
+
+	// The mirror image: nothing actionable leaves the component alone.
+	healthy := []HarnessStatus{
+		{Harness: harness.ClaudeCode, State: HarnessNotDetected},
+		{Harness: harness.Codex, State: HarnessConfigured},
+		{Harness: harness.Grok, State: HarnessConfigured},
+	}
+	if c := harnessComponent(state, healthy); c.State != StateOK {
+		t.Errorf("a healthy machine was degraded: %+v", c)
 	}
 }

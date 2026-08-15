@@ -259,3 +259,84 @@ func TestCommitTakesAFreshBackupWhenTheFileChangedAfterPrepare(t *testing.T) {
 		t.Error("the edit made between the phases was discarded")
 	}
 }
+
+// The copy Prepare took must reach the operator even when the run then refuses
+// to write. A backup nobody is told about is a backup they do not have.
+func TestAFailedPreparationStillReportsWhereTheCopyIs(t *testing.T) {
+	m := newMachine(t, true)
+	// A compat shape the writer cannot edit at key granularity: Prepare backs
+	// the file up, then refuses.
+	body := "# mine\n[compat]\nclaude.mcps = true\n"
+	if err := os.WriteFile(m.grokPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	issuer := newFakeIssuer("https://server.ts.net/mcp")
+	out := configureGrokOnly(t, m, issuer)
+
+	if issuer.count() != 0 {
+		t.Fatalf("%d grants minted for a run that never wrote", issuer.count())
+	}
+	if out.BackupPath == "" {
+		t.Fatal("the outcome does not say where the copy of the config is")
+	}
+	if got := string(mustRead(t, out.BackupPath)); got != body {
+		t.Errorf("the reported backup does not hold the original bytes:\n%s", got)
+	}
+	if !strings.Contains(out.Message, out.BackupPath) {
+		t.Errorf("message = %q, which does not mention the backup", out.Message)
+	}
+	if got := string(mustRead(t, m.grokPath)); got != body {
+		t.Error("the config was modified by a refused run")
+	}
+}
+
+// A config DELETED between the two phases has "absent" as the state a rollback
+// must restore. Reusing the phase-one copy would resurrect bytes the user threw
+// away — the opposite of putting things back.
+func TestAConfigDeletedBetweenThePhasesIsNotResurrectedByARollback(t *testing.T) {
+	path := grokConfigAt(t, grokFixture)
+	// A writer that passes the dry merge and then fails verification at COMMIT
+	// time, so the rollback path is the one under test. (Failing in phase one
+	// would prove nothing: nothing has been written to roll back.)
+	merges := 0
+	w := fileWriter{harness: Grok, path: path, format: format{
+		container: grokContainer,
+		parse:     parseTOMLTree,
+		rewrite: func(before []byte, entries []Entry, managed []string) ([]byte, error) {
+			out, err := rewriteGrok(before, entries, managed)
+			if err != nil {
+				return nil, err
+			}
+			merges++
+			if merges == 1 {
+				return out, nil // the dry merge in Prepare
+			}
+			// Something no preservation check can accept: an unrelated key
+			// invented by the writer.
+			return append(out, []byte("\n[unrelated]\ninvented = true\n")...), nil
+		},
+		exempt:      [][]string{{"compat", "claude", "mcps"}, {"compat", "cursor", "mcps"}},
+		assertAfter: assertGrokCompatClosed,
+	}}
+
+	plan, err := w.Prepare(grokEntries("placeholder"), nil)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := w.Commit(plan, grokEntries("real")); err == nil {
+		t.Fatal("a write that invents an unrelated key was accepted")
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Fatalf("the rollback resurrected a file the user deleted:\n%s", mustRead(t, path))
+	}
+	// The phase-one copy still exists on disk; it just is not what "before"
+	// means any more.
+	if _, err := os.Stat(plan.BackupPath); err != nil {
+		t.Errorf("the operator's copy was removed too: %v", err)
+	}
+}

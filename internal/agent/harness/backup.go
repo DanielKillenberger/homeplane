@@ -89,9 +89,13 @@ func ensureBackup(path, existing string) (string, error) {
 	current, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			// The file has been deleted since phase one. The existing copy is
-			// still what was there, and there is nothing new to copy.
-			return existing, nil
+			// The file was DELETED between the phases, so the state this write
+			// replaces is "absent" — and the phase-one copy is no longer it.
+			// Returning it would let a rollback resurrect bytes the user threw
+			// away; returning none makes the rollback remove what we created,
+			// which is what putting things back actually means here. The copy
+			// itself stays on disk, and the outcome still reports its path.
+			return "", nil
 		}
 		return "", fmt.Errorf("read %s: %w", path, err)
 	}

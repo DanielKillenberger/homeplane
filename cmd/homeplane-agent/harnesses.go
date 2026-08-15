@@ -192,10 +192,13 @@ func reportDetection(locator harness.Locator, asJSON bool, stdout, stderr io.Wri
 		if d.Reason != "" {
 			fmt.Fprintf(stdout, "%-12s %s\n", "", d.Reason)
 		}
-		// The support verdict is printed whenever it is not a plain "supported",
-		// because "we could not check" and "we checked and it drifted" are
-		// different things an operator must be able to tell apart.
-		if d.SupportReason != "" {
+		// The verdict is ALWAYS printed, including a plain "supported". R1 asks
+		// for the support verdict in both output forms, and a row that shows a
+		// version and no verdict leaves the reader to infer one — which is the
+		// inference this whole field exists to replace.
+		if d.SupportReason == "" {
+			fmt.Fprintf(stdout, "%-12s support: %s\n", "", d.Support)
+		} else {
 			fmt.Fprintf(stdout, "%-12s support: %s — %s\n", "", d.Support, d.SupportReason)
 		}
 		// Inherited MCP sources are reported even when Homeplane has closed the
