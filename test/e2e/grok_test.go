@@ -603,8 +603,12 @@ func stageGrokSkills(s *stage) {
 	// instead of the key would answer identically.
 	const dropped = "homeplane-capabilities"
 	mutatedBody, ok := dropFromGrokBlock(string(body), dropped)
+	// The detail describes what happened rather than what would have gone
+	// wrong: an evidence file where a PASSING claim reads "could not find …"
+	// makes a reader distrust the claim or, worse, the file.
 	if !s.assert("the falsification copy could be produced by editing only grok's block", ok,
-		"could not find %q inside [harness.grok] in %s", dropped, profile) {
+		"%s: %q %s [harness.grok]", profile, dropped,
+		map[bool]string{true: "removed from", false: "NOT FOUND inside"}[ok]) {
 		return
 	}
 	_ = os.WriteFile(mutated, []byte(mutatedBody), 0o600)
@@ -889,8 +893,11 @@ func activeGrants(s *stage) map[string]string {
 // observed before the write, in the harness stage). The other three are
 // produced here rather than asserted about:
 //
-//   - `revoked` from a grant the revocation stage really revoked, carried into
-//     a COPY of this machine's state so nothing live is disturbed;
+//   - `revoked` from a grok grant the SERVER really revoked — either an
+//     explicit operator revocation or the supersede that every re-run of
+//     configure performs — carried into a COPY of this machine's state so
+//     nothing live is disturbed. A fabricated grant id would prove only that
+//     an unknown id reconciles as dead;
 //   - `not_detected` by pointing detection at a home with no grok and a PATH
 //     with no grok binary — the product's own inputs, not a test hook;
 //   - `detected_unsupported` by putting a grok on PATH that reports a major

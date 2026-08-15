@@ -1,0 +1,837 @@
+{
+  "commit": "7ba2fe687266271baa6150f1567fab54bb27dcd8",
+  "deployment": {
+    "account": "daniel.killenberger@gmail.com",
+    "agent": "/Users/daniel/.homeplane/bin/homeplane-agent",
+    "calendar_id": "primary",
+    "server_host": "clawniel",
+    "server_url": "http://homeplane.tailab4e9b.ts.net",
+    "vault": "/Users/daniel/Documents/daniel-os"
+  },
+  "kind": "live_e2e_proof",
+  "schema_version": 1,
+  "stages": [
+    {
+      "stage": "install",
+      "status": "pass",
+      "started_at": "2026-08-15T00:39:30Z",
+      "finished_at": "2026-08-15T00:39:41Z",
+      "steps": [
+        {
+          "what": "scripts/stage-release.sh (checksummed release-form artifacts)",
+          "command": [
+            "/Users/daniel/Projects/homeplane/scripts/stage-release.sh",
+            "/Users/daniel/Projects/homeplane/dist"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "stage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-darwin-arm64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-darwin-amd64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-linux-amd64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-server-linux-amd64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-agent-linux-arm64\nstage-release.sh: building /Users/daniel/Projects/homeplane/dist/homeplane-server-linux-arm64\nstage-release.sh: staging node v22.11.0 (pinned in /Users/daniel/Projects/homeplane/scripts/node-pinned.sha256)\nstage-release.sh: staged node-v22.11.0-darwin-arm64.tar.gz\nstage-release.sh: staged node-v22.11.0-darwin-x64.tar.gz\nstage-release.sh: staged node-v22.11.0-linux-x64.tar.gz\nstage-release.sh: staged node-v22.11.0-linux-arm64.tar.gz\nstage-release.sh: staging bun v1.3.11 (pinned in /Users/daniel/Projects/homeplane/scripts/bun-pinned.sha256)\nstage-release.sh: staged bun-v1.3.11-darwin-aarch64.zip\nstage-release.sh: staged bun-v1.3.11-darwin-x64.zip\nstage-release.sh: staged bun-v1.3.11-linux-x64.zip\nstage-release.sh: staged bun-v1.3.11-linux-aarch64.zip\n\nstage-release.sh: staged /Users/daniel/Projects/homeplane/dist (agent version c3a17b6):\nda70304f9b57b2527d2940caf4a74c1a68ca0cd4e7ea6e12e9e0a04ae7364a74  homeplane-agent-darwin-amd64\n2b4b2e8b291a4639b9dacfaeebaa123f34fee2f4e103b0ac6a58d430440522a9  homeplane-agent-darwin-arm64\n6b2f3efce7020fabd24af6eb8fec31744cb2de3be06947f7bed14bdba9b44257  homeplane-agent-linux-amd64\ne0fe5080e8b7fe672cc6be45652addf86c8f2dcec84eeedd5a9d41131bae8419  homeplane-agent-linux-arm64\n5dea065c78959b3e348abcd88c40a918b46333ed3d493e37203c8fc3f6fd4c34  homeplane-server-linux-amd64\n37bc1dee343b351fecc66fca249d67537a01eac29423bf2b20006ddff8968089  homeplane-server-linux-arm64\n2e89afe6f4e3aa6c7e21c560d8a0453d84807e97850bbb819b998531a22bdfde  node-v22.11.0-darwin-arm64.tar.gz\n668d30b9512137b5f5baeef6c1bb4c46efff9a761ba990a034fb6b28b9da2465  node-v22.11.0-darwin-x64.tar.gz\n27453f7a0dd6b9e6738f1f6ea6a09b102ec7aa484de1e39d6a1c3608ad47aa6a  node-v22.11.0-linux-arm64.tar.gz\n4f862bab52039835efbe613b532238b6e4dde98d139a34e6923193e073438b13  node-v22.11.0-linux-x64.tar.gz\n6f5a3467ed9caec4795bf78cd476507d9f870c7d57b86c945fcb338126772ffc  bun-v1.3.11-darwin-aarch64.zip\nc4fe2b9247218b0295f24e895aaec8fee62e74452679a9026b67eacbd611a286  bun-v1.3.11-darwin-x64.zip\nd13944da12a53ecc74bf6a720bd1d04c4555c038dfe422365356a7be47691fdf  bun-v1.3.11-linux-aarch64.zip\n8611ba935af886f05a6f38740a15160326c15e5d5d07adef966130b4493607ed  bun-v1.3.11-linux-x64.zip\n\ninstall with: ./install.sh --stage-dir /Users/daniel/Projects/homeplane/dist",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T00:39:30Z",
+          "duration": "10.017s"
+        },
+        {
+          "what": "./install.sh (one command, from the staged artifacts)",
+          "command": [
+            "/Users/daniel/Projects/homeplane/install.sh",
+            "--stage-dir",
+            "/Users/daniel/Projects/homeplane/dist"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "install.sh: platform darwin/arm64 supervised by launchd\ninstall.sh: verified homeplane-agent-darwin-arm64 (2b4b2e8b291a4639b9dacfaeebaa123f34fee2f4e103b0ac6a58d430440522a9)\ninstall.sh: node 22+ already present\ninstall.sh: bun 1.3+ already present\ninstall.sh: installed /Users/daniel/.homeplane/bin/homeplane-agent\n\nHomeplane agent installed.\n\n  /Users/daniel/.homeplane/bin/homeplane-agent\n\nNext:\n  1. add /Users/daniel/.homeplane/bin to your PATH\n  2. enrol this machine:  homeplane-agent enrol -server https://\u003cserver\u003e.ts.net\n  3. check it:            homeplane-agent status\n\nEnrolment state lives in ~/.homeplane and is untouched by re-running this\ninstaller.",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T00:39:40Z",
+          "duration": "780ms"
+        },
+        {
+          "what": "the INSTALLED agent runs",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "version"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "homeplane-agent c3a17b6",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T00:39:41Z",
+          "duration": "247ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "the staged release carries a checksum manifest",
+          "ok": true,
+          "detail": "dist/SHA256SUMS: 1340 bytes"
+        },
+        {
+          "claim": "the installer completes on this machine",
+          "ok": true,
+          "detail": "exit 0"
+        },
+        {
+          "claim": "the installed agent reports its version",
+          "ok": true,
+          "detail": "homeplane-agent c3a17b6"
+        }
+      ]
+    },
+    {
+      "stage": "grok-harness",
+      "status": "pass",
+      "started_at": "2026-08-15T09:14:19Z",
+      "finished_at": "2026-08-15T09:14:21Z",
+      "steps": [
+        {
+          "what": "homeplane-agent configure-harnesses -detect (before any write)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "configure-harnesses",
+            "-detect",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"config_exists\": true,\n      \"binary_path\": \"/Users/daniel/.local/bin/claude\",\n      \"support\": \"unknown\",\n      \"support_reason\": \"no version contract is pinned for claude-code, so its CLI surface is not version-gated\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"config_exists\": true,\n      \"binary_path\": \"/Users/daniel/.local/bin/codex\",\n      \"support\": \"unknown\",\n      \"support_reason\": \"no version contract is pinned for codex, so its CLI surface is not version-gated\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.grok/config.toml\",\n      \"config_exists\": true,\n      \"binary_path\": \"/Users/daniel/.local/bin/grok\",\n      \"version\": \"1.0.3\",\n      \"support\": \"supported\",\n      \"compat_sources\": [\n        \"claude\",\n        \"cursor\",\n        \"project(.mcp.json)\"\n      ]\n    }\n  ]\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:14:19Z",
+          "duration": "53ms"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T09:14:19.485463Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"degraded\",\n      \"detail\": \"configured: claude-code, codex; grok is installed but NOT configured (failed); grok is detected_unconfigured\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c085ad4a2d08346f, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-63b8db515f635d47, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-32d74930f4a4790f\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-60635c74d0efbefd\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"state\": \"dete\n…[16103 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:14:19Z",
+          "duration": "529ms"
+        },
+        {
+          "what": "homeplane-agent configure-harnesses (all three harnesses)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "configure-harnesses",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"status\": \"configured\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"backup_path\": \"/Users/daniel/.claude.json.homeplane-backup-20260815T091420Z\",\n      \"managed_servers\": [\n        \"gno\",\n        \"homeplane\"\n      ],\n      \"grant_id\": \"g-633b1d8872079fb2\",\n      \"superseded_grant_id\": \"g-32d74930f4a4790f\",\n      \"endpoint_url\": \"http://homeplane.tailab4e9b.ts.net/mcp\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"changed\": true,\n      \"configured_at\": \"2026-08-15T11:14:20.015641+02:00\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"status\": \"configured\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"backup_path\": \"/Users/daniel/.codex/config.toml.homeplane-backup-20260815T091420Z\",\n      \"managed_servers\": [\n        \"gno\",\n        \"homeplane\"\n      ],\n      \"grant_id\": \"g-9eabff2ce164f5ce\",\n      \"superseded_grant_id\": \"g-60635c74d0efbefd\",\n      \"endpoint_url\": \"http://homeplane.tailab4e9b.ts.net/mcp\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"changed\": true,\n      \"configured_at\": \"2026-08-15T11:14:20.301576+02:00\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"status\": \"configured\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.grok/config.toml\",\n      \"backup_path\": \"/Users/daniel/.grok/config.toml.homeplane-backup-20260815T091420Z\",\n      \"managed_servers\": [\n        \"gno\",\n        \"homeplane\"\n      ],\n      \"grant_id\": \"g-639aa8e7fd631100\",\n      \"endpoint_url\": \"http://homeplane.tailab4e9b.ts.net/mcp\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"changed\": true,\n      \"configured_at\": \"2026-08-15T11:14:20.455217+02:00\"\n    }\n  ]\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:14:20Z",
+          "duration": "616ms"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T09:14:20.630576Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"ok\",\n      \"detail\": \"claude-code, codex, grok\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex, grok (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-32d74930f4a4790f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c085ad4a2d08346f, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-60635c74d0efbefd, codex/g-63b8db515f635d47, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-633b1d8872079fb2\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-9eabff2ce164f5ce\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"state\": \"configured\",\n      \"detail\": \"\n…[16763 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:14:20Z",
+          "duration": "512ms"
+        },
+        {
+          "what": "homeplane-agent configure-harnesses again (idempotent convergence)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "configure-harnesses",
+            "-harness",
+            "grok",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"harnesses\": [\n    {\n      \"harness\": \"grok\",\n      \"status\": \"configured\",\n      \"installed\": true,\n      \"config_path\": \"/Users/daniel/.grok/config.toml\",\n      \"backup_path\": \"/Users/daniel/.grok/config.toml.homeplane-backup-20260815T091421Z\",\n      \"managed_servers\": [\n        \"gno\",\n        \"homeplane\"\n      ],\n      \"grant_id\": \"g-bc17b426a960c6e9\",\n      \"superseded_grant_id\": \"g-639aa8e7fd631100\",\n      \"endpoint_url\": \"http://homeplane.tailab4e9b.ts.net/mcp\",\n      \"capabilities\": [\n        \"connector.delete\",\n        \"connector.read\",\n        \"connector.write\"\n      ],\n      \"changed\": true,\n      \"configured_at\": \"2026-08-15T11:14:21.143768+02:00\"\n    }\n  ]\n}",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:14:21Z",
+          "duration": "335ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "grok's configuration is readable and its pre-run bytes are recorded",
+          "ok": true,
+          "detail": "/Users/daniel/.grok/config.toml sha256 9b8cdca91818bab0a3a341465af7c7d11461dba863b6af80c0c26b974819cd51 (\u003cnil\u003e)"
+        },
+        {
+          "claim": "the proof holds its own restorable copy of grok's configuration",
+          "ok": true,
+          "detail": "/Users/daniel/.homeplane/fn3-grok-backup/config.toml.20260815T091419Z (\u003cnil\u003e/\u003cnil\u003e)"
+        },
+        {
+          "claim": "detection reports grok alongside the other harnesses, with an observed version and a support verdict",
+          "ok": true,
+          "detail": "exit 0; grok installed=true version=\"1.0.3\" support=\"supported\" config=/Users/daniel/.grok/config.toml binary=/Users/daniel/.local/bin/grok"
+        },
+        {
+          "claim": "detection reports the compat sources grok would still inherit MCP servers from",
+          "ok": true,
+          "detail": "compat_sources [claude cursor project(.mcp.json)]"
+        },
+        {
+          "claim": "before configuration, status reports grok as detected-unconfigured (R6 state 2 of 5)",
+          "ok": true,
+          "detail": "grok: state=detected_unconfigured detail=grok is installed but Homeplane has not configured it — run `homeplane-agent configure-harnesses`; still inherits MCP servers from: claude, cursor, project(.mcp.json)"
+        },
+        {
+          "claim": "configure-harnesses completes",
+          "ok": true,
+          "detail": "exit 0"
+        },
+        {
+          "claim": "grok is configured with both Homeplane surfaces and its own endpoint",
+          "ok": true,
+          "detail": "status=\"configured\" managed=[gno homeplane] endpoint=http://homeplane.tailab4e9b.ts.net/mcp"
+        },
+        {
+          "claim": "a timestamped backup precedes the write to grok's configuration",
+          "ok": true,
+          "detail": "/Users/daniel/.grok/config.toml.homeplane-backup-20260815T091420Z"
+        },
+        {
+          "claim": "each of the three harnesses holds its own distinct active grant",
+          "ok": true,
+          "detail": "claude-code g-633b1d8872079fb2, codex g-9eabff2ce164f5ce, grok g-639aa8e7fd631100"
+        },
+        {
+          "claim": "after configuration, status reports grok as configured (R6 state 4 of 5)",
+          "ok": true,
+          "detail": "grok: state=configured grant=g-639aa8e7fd631100 detail=configured at /Users/daniel/.grok/config.toml; still inherits MCP servers from: project(.mcp.json)"
+        },
+        {
+          "claim": "grok's configuration is 0600 after the write",
+          "ok": true,
+          "detail": "/Users/daniel/.grok/config.toml mode 600"
+        },
+        {
+          "claim": "grok's configuration can be re-read after the write",
+          "ok": true,
+          "detail": "\u003cnil\u003e"
+        },
+        {
+          "claim": "both Homeplane entries are present under grok's own MCP scope",
+          "ok": true,
+          "detail": "homeplane entry present=true, gno entry present=true"
+        },
+        {
+          "claim": "the Claude and Cursor MCP compat sources are closed (D4, D4b)",
+          "ok": true,
+          "detail": "[compat.claude] mcps closed=true; [compat.cursor] mcps closed=true"
+        },
+        {
+          "claim": "grok's pre-existing configuration and comments survive the write",
+          "ok": true,
+          "detail": "0 line(s) lost: "
+        },
+        {
+          "claim": "grok's configuration changed, and both its before and after bytes are recorded",
+          "ok": true,
+          "detail": "sha256 before 9b8cdca91818bab0a3a341465af7c7d11461dba863b6af80c0c26b974819cd51 → after 0bded8282b93316cfad2036e485aede87e628119bd8862095741c55bd7a658be"
+        },
+        {
+          "claim": "a repeat configure of grok converges and leaves a re-parseable 0600 file",
+          "ok": true,
+          "detail": "exit 0; sha256 0bded8282b93316cfad2036e485aede87e628119bd8862095741c55bd7a658be → 11f2c7c15676a675d2ce8a54aea1ab0f3f8f4e3c648f16dfd3bbf0ba35a0c49a"
+        },
+        {
+          "claim": "0600 is re-asserted by the repeat run",
+          "ok": true,
+          "detail": "mode 600"
+        },
+        {
+          "claim": "the compat isolation is re-asserted by the repeat run",
+          "ok": true,
+          "detail": "claude closed=true cursor closed=true"
+        }
+      ]
+    },
+    {
+      "stage": "grok-gno",
+      "status": "fail",
+      "started_at": "2026-08-15T09:18:24Z",
+      "finished_at": "2026-08-15T09:18:27Z",
+      "steps": [
+        {
+          "what": "grok leader list (there must be no resident leader to defeat)",
+          "command": [
+            "grok",
+            "--leader-socket",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-gno2153084427/001/no-such-leader.sock",
+            "leader",
+            "list"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "No leader candidates found.",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:24Z",
+          "duration": "139ms"
+        },
+        {
+          "what": "wait for the previous harness session's engine to exit",
+          "command": [
+            "sh",
+            "-c",
+            "for i in $(seq 1 60); do pgrep -f /Users/daniel/.homeplane/gno/data/.resident-owner.lock \u003e/dev/null 2\u003e\u00261 || exit 0; sleep 1; done; exit 0"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:24Z",
+          "duration": "38ms"
+        },
+        {
+          "what": "grok → local retrieval engine [grok -p]",
+          "command": [
+            "grok",
+            "--leader-socket",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-gno2153084427/002/no-such-leader.sock",
+            "--always-approve",
+            "-p",
+            "Use the gno MCP server to search the vault for \"homeplane\". Call exactly one search tool, then reply with the first result's file path and nothing else. Run no shell commands."
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "",
+          "stderr_excerpt": "Internal error: {\n  \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\",\n  \"http_status\": 402\n}\nError: Internal error: {\n  \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\",\n  \"http_status\": 402\n}",
+          "at": "2026-08-15T09:18:24Z",
+          "duration": "3.265s"
+        },
+        {
+          "what": "wait for the previous harness session's engine to exit",
+          "command": [
+            "sh",
+            "-c",
+            "for i in $(seq 1 60); do pgrep -f /Users/daniel/.homeplane/gno/data/.resident-owner.lock \u003e/dev/null 2\u003e\u00261 || exit 0; sleep 1; done; exit 0"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:27Z",
+          "duration": "37ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "grok runs no resident leader, and every proof invocation names a socket that does not exist",
+          "ok": true,
+          "detail": "`grok leader list` exit 0: No leader candidates found.; proof socket: /var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-gno2153084427/001/no-such-leader.sock"
+        },
+        {
+          "claim": "grok retrieves real vault content through the local engine",
+          "ok": false,
+          "detail": "Internal error: {"
+        }
+      ]
+    },
+    {
+      "stage": "grok-connector",
+      "status": "fail",
+      "started_at": "2026-08-15T09:18:27Z",
+      "finished_at": "2026-08-15T09:18:36Z",
+      "steps": [
+        {
+          "what": "grok leader list (there must be no resident leader to defeat)",
+          "command": [
+            "grok",
+            "--leader-socket",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-connector1440780206/001/no-such-leader.sock",
+            "leader",
+            "list"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "No leader candidates found.",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:27Z",
+          "duration": "152ms"
+        },
+        {
+          "what": "Drive read via grok [grok -p]",
+          "command": [
+            "grok",
+            "--leader-socket",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-connector1440780206/002/no-such-leader.sock",
+            "--always-approve",
+            "-p",
+            "Call the MCP tool `homeplane/search_drive_files` — the tool named `search_drive_files` on the MCP server named `homeplane`. That server exposes many tools; call only this one, and do not look for another server or a differently named tool.\n\nUse EXACTLY these arguments:\n\n```json\n{\n  \"page_size\": 3,\n  \"query\": \"trashed = false\",\n  \"user_google_email\": \"daniel.killenberger@gmail.com\"\n}\n```\n\nDo not add, remove or change any argument. Make exactly one tool call and run no shell commands. Then reply with the tool's raw result text and nothing else. If the call is refused or errors, reply with that text verbatim — an error IS the answer here, and must not be turned into a refusal to call."
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "",
+          "stderr_excerpt": "Internal error: {\n  \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\",\n  \"http_status\": 402\n}\nError: Internal error: {\n  \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\",\n  \"http_status\": 402\n}",
+          "at": "2026-08-15T09:18:27Z",
+          "duration": "3.212s"
+        },
+        {
+          "what": "server audit after grok's Drive read",
+          "command": [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "clawniel",
+            "/home/claw/homeplane/bin/homeplane-server admin audit -state-dir /home/claw/homeplane/var -json -since 2026-08-15T09:17:57Z -limit 2000"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:30Z",
+          "duration": "1.007s"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T09:18:31.901464Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"ok\",\n      \"detail\": \"claude-code, codex, grok\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex, grok (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-32d74930f4a4790f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c085ad4a2d08346f, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-60635c74d0efbefd, codex/g-63b8db515f635d47, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15, grok/g-639aa8e7fd631100)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-633b1d8872079fb2\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-9eabff2ce164f5ce\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"state\": \"confi\n…[17058 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:31Z",
+          "duration": "547ms"
+        },
+        {
+          "what": "Drive write (must be refused) via grok [grok -p]",
+          "command": [
+            "grok",
+            "--leader-socket",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-connector1440780206/003/no-such-leader.sock",
+            "--always-approve",
+            "-p",
+            "Call the MCP tool `homeplane/create_drive_file` — the tool named `create_drive_file` on the MCP server named `homeplane`. That server exposes many tools; call only this one, and do not look for another server or a differently named tool.\n\nUse EXACTLY these arguments:\n\n```json\n{\n  \"content\": \"this call must never reach Google\",\n  \"file_name\": \"homeplane-e2e-must-not-exist.txt\",\n  \"mime_type\": \"text/plain\",\n  \"user_google_email\": \"daniel.killenberger@gmail.com\"\n}\n```\n\nDo not add, remove or change any argument. Make exactly one tool call and run no shell commands. Then reply with the tool's raw result text and nothing else. If the call is refused or errors, reply with that text verbatim — an error IS the answer here, and must not be turned into a refusal to call."
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "",
+          "stderr_excerpt": "Internal error: {\n  \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\",\n  \"http_status\": 402\n}\nError: Internal error: {\n  \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\",\n  \"http_status\": 402\n}",
+          "at": "2026-08-15T09:18:32Z",
+          "duration": "3.099s"
+        },
+        {
+          "what": "server audit after grok's Drive write attempt",
+          "command": [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "clawniel",
+            "/home/claw/homeplane/bin/homeplane-server admin audit -state-dir /home/claw/homeplane/var -json -since 2026-08-15T09:18:27Z -limit 2000"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\"ID\":1003,\"TS\":\"2026-08-15T09:18:31.978566132Z\",\"Event\":\"audit_queried\",\"ActorKind\":\"operator\",\"ObservedNodeID\":\"\",\"ObservedNodeName\":\"\",\"AuthMachineID\":\"\",\"Harness\":\"\",\"GrantID\":\"\",\"ActionClass\":\"\",\"Tool\":\"\",\"ArtifactID\":\"\",\"Outcome\":\"allowed\",\"Reason\":\"\",\"TokenFingerprint\":\"\",\"Detail\":{\"limit\":\"2000\",\"since\":\"2026-08-15T09:17:57Z\"}}",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:35Z",
+          "duration": "1.002s"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "grok runs no resident leader, and every proof invocation names a socket that does not exist",
+          "ok": true,
+          "detail": "`grok leader list` exit 0: No leader candidates found.; proof socket: /var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-connector1440780206/001/no-such-leader.sock"
+        },
+        {
+          "claim": "grok: a Drive read reaches real Google through the edge, under grok's own grant",
+          "ok": false,
+          "detail": "audit: outcome= class= grant= harness= | grok said: Internal error: {"
+        },
+        {
+          "claim": "the call is attributed to grok's grant, not to another harness's",
+          "ok": false,
+          "detail": "audited grant ; grok's active grant g-bc17b426a960c6e9"
+        },
+        {
+          "claim": "grok: the Drive read is audited against the file it returned",
+          "ok": false,
+          "detail": "audit: artifact= | grok said: Internal error: {"
+        },
+        {
+          "claim": "grok: a Drive write is refused fail-closed and audited as a policy violation",
+          "ok": false,
+          "detail": "audit: event= outcome= reason= | grok said: Internal error: {"
+        }
+      ]
+    },
+    {
+      "stage": "grok-rollout-gate",
+      "status": "pass",
+      "started_at": "2026-08-15T09:16:52Z",
+      "finished_at": "2026-08-15T09:16:54Z",
+      "steps": [
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T09:16:52.152337Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"ok\",\n      \"detail\": \"claude-code, codex, grok\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex, grok (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-32d74930f4a4790f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c085ad4a2d08346f, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-60635c74d0efbefd, codex/g-63b8db515f635d47, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15, grok/g-639aa8e7fd631100)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-633b1d8872079fb2\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-9eabff2ce164f5ce\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"state\": \"confi\n…[17058 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:16:52Z",
+          "duration": "625ms"
+        },
+        {
+          "what": "server: the enrolled-machine list (read-only)",
+          "command": [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "clawniel",
+            "sqlite3 -readonly /home/claw/homeplane/var/homeplane.db \"select id || '|' || name || '|' || node_name from machines order by id;\""
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "m-1bc11c520f7c59e2|Daniels-MacBook-Pro.local|daniels-macbook-pro",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:16:52Z",
+          "duration": "998ms"
+        },
+        {
+          "what": "homeplane-agent skills list -json (the edited profile is read by the product)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "skills",
+            "list",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"vault_skills_root\": \"/Users/daniel/Documents/daniel-os/skills\",\n  \"profile\": \"daniel-skeleton\",\n  \"profile_path\": \"/Users/daniel/Documents/daniel-os/skills/homeplane.skills.toml\",\n  \"machine\": \"Daniels-MacBook-Pro.local\",\n  \"skills\": [\n    {\n      \"slug\": \"casual-writing\",\n      \"name\": \"casual-writing\",\n      \"description\": \"How Daniel Killenberger writes CASUALLY — to close friends (Gordon), mates, and in relaxed chat. The informal end of his voice, below the business-casual register that professional-writing covers. Load this when drafting or editing a message to a friend or close collaborator, or any deliberately loose, off-the-cuff message in his voice. Trigger phrases include \\\"casual\\\", \\\"the way I talk to him\\\", \\\"to Gordon\\\", \\\"text my friend\\\", \\\"keep it loose\\\".\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/casual-writing\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/casual-writing/SKILL.md\"\n    },\n    {\n      \"slug\": \"homeplane-capabilities\",\n      \"name\": \"homeplane-capabilities\",\n      \"description\": \"How to use Daniel's Homeplane capability plane: retrieve from his Daniel-OS vault via gno before guessing about his life, notes, projects, or people; read his Google Drive and read/write his Calendar through the homeplane MCP server. Load whenever a request involves Daniel's personal context — his schedule, his notes, something \\\"I wrote\\\", a project or person he mentions, a file in his Drive, an appointment — or when you are about to answer a question about Daniel from memory instead of from his data.\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/homeplane-capabilities\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/homeplane-capabilities/SKILL.md\"\n    },\n    {\n      \"slug\": \"karpathy-guidelines\",\n      \"name\": \"karpathy-guidelines\",\n      \"description\": \"Behavioral guidelines to reduce common LLM coding mistakes. Use when writing, reviewing, or refactoring code to avoid overcomplication, make surgical changes, surface assumptions, and define verifiable success criteria.\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines/SKILL.md\"\n    },\n    {\n      \"slug\": \"negotiation\",\n      \"name\": \"negotiation\",\n      \"description\": \"Daniel's own negotiation playbook, mined from his real deals (Collecteur.AI / Zero Knowledge, SHD/Gordon, CoinPoker reinstatement, Obligate options, Nestermind). Load this as a PRE-COMMIT reminder BEFORE he locks any terms, so his hard-won lessons and past misses surface before he repeats them, not after. Trigger whenever Daniel is setting a rate, pricing a deal, structuring an engagement, countering an offer, deciding walk-away, or chasing payment. Trigger phrases: \\\"what should I charge\\\", \\\"how do I price this\\\", \\\"how much for\\\", \\\"negotiating with X\\\", \\\"they offered\\\", \\\"should I take this deal\\\", \\\"counter their offer\\\", \\\"day rate\\\", \\\"quote them\\\", \\\"set my rate\\\", \\\"structure the engagement\\\", \\\"walk away or\\\", \\\"chase the payment\\\", \\\"he pushed back on price\\\". Fires early: better to raise the anchor and the fragmentation premium before the number leaves his mouth than to log the regret afterward.\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/negotiation\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/negotiation/SKILL.md\"\n    },\n    {\n      \"slug\": \"phone-home-coordinator\",\n      \"name\": \"phone-home-coordinator\",\n      \"description\": \"Clawniel's behavior when a phone-home request or completion-report surfaces from the palantir bus (a channel turn with source=palantir:\\u003cauthor\\u003e). Act as the owner's representative, judge intent against the owner profile, answer or approve autonomously when confident and the act is not veto-class, escalate to the owner on Telegram when not, ALWAYS persist the request and the decision first, and report every decision to the owner. Use this whenever a mach\n…[7930 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:16:53Z",
+          "duration": "358ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "this machine's identity is known, so the enrolled-machine list can be checked against it",
+          "ok": true,
+          "detail": "machine_id \"m-1bc11c520f7c59e2\" name \"Daniels-MacBook-Pro.local\""
+        },
+        {
+          "claim": "every machine consuming the synced profile is this one, so naming grok in it can break nothing else",
+          "ok": true,
+          "detail": "1 enrolled machine(s): m-1bc11c520f7c59e2|Daniels-MacBook-Pro.local|daniels-macbook-pro | this machine: m-1bc11c520f7c59e2"
+        },
+        {
+          "claim": "the profile's pre-edit bytes and its current bytes are both readable",
+          "ok": true,
+          "detail": "backup /Users/daniel/.homeplane/fn3-vault-profile-backup/homeplane.skills.toml.pre-fn3 (\u003cnil\u003e); active /Users/daniel/Documents/daniel-os/skills/homeplane.skills.toml (\u003cnil\u003e)"
+        },
+        {
+          "claim": "the vault edit preserves every pre-existing assignment byte-for-byte",
+          "ok": true,
+          "detail": "1 line(s) removed: harnesses = [\"claude-code\", \"codex\"]"
+        },
+        {
+          "claim": "the vault edit adds grok's own harness block",
+          "ok": true,
+          "detail": "24 line(s) added: # grok (added 2026-08-15, fn-3): the third harness, named EXPLICITLY rather | # than left to [defaults]. | # Naming it is the point. A harness key in this file is what makes the | # assignment Daniel's decision instead of a fallback, and it is what a machine | # proves it read: change this list and grok's set changes with it, while the | # other two harnesses' sets do not move. Left to [defaults], grok would receive | # the same four skills and nothing would distinguish \"assigned\" from \"not | # considered\". | # This block is safe to add only because every machine consuming this profile | # runs a grok-aware agent: an older agent REFUSES an unknown harness key | # outright (fail-closed, which is the correct behaviour and is tested), so | # adding it before the fleet is upgraded would break skills provisioning | # everywhere. The rollout gate is the server's enrolled-machine list, checked | # on 2026-08-15: exactly one machine (m-1bc11c520f7c59e2). | [harness.grok] | skills = [ | \"professional-writing\", | \"casual-writing\", | \"karpathy-guidelines\", | \"homeplane-capabilities\", | ] | # | # | harnesses = [\"claude-code\", \"codex\", \"grok\"]"
+        },
+        {
+          "claim": "the edited profile parses and assigns a skill set to grok",
+          "ok": true,
+          "detail": "exit 0; profile /Users/daniel/Documents/daniel-os/skills/homeplane.skills.toml; grok assigned [casual-writing homeplane-capabilities karpathy-guidelines professional-writing]"
+        }
+      ]
+    },
+    {
+      "stage": "grok-skills",
+      "status": "pass",
+      "started_at": "2026-08-15T09:17:52Z",
+      "finished_at": "2026-08-15T09:17:59Z",
+      "steps": [
+        {
+          "what": "grok leader list (there must be no resident leader to defeat)",
+          "command": [
+            "grok",
+            "--leader-socket",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-skills3136499492/001/no-such-leader.sock",
+            "leader",
+            "list"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "No leader candidates found.",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:17:52Z",
+          "duration": "145ms"
+        },
+        {
+          "what": "homeplane-agent skills provision -verify",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "skills",
+            "provision",
+            "-verify",
+            "-json"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"profile\": \"daniel-skeleton\",\n  \"profile_path\": \"/Users/daniel/Documents/daniel-os/skills/homeplane.skills.toml\",\n  \"machine\": \"Daniels-MacBook-Pro.local\",\n  \"vault_skills_root\": \"/Users/daniel/Documents/daniel-os/skills\",\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"skills_dir\": \"/Users/daniel/.claude/skills\",\n      \"results\": [\n        {\n          \"harness\": \"claude-code\",\n          \"slug\": \"casual-writing\",\n          \"action\": \"unchanged\",\n          \"link_path\": \"/Users/daniel/.claude/skills/casual-writing\",\n          \"target\": \"/Users/daniel/Documents/daniel-os/skills/casual-writing\"\n        },\n        {\n          \"harness\": \"claude-code\",\n          \"slug\": \"homeplane-capabilities\",\n          \"action\": \"unchanged\",\n          \"link_path\": \"/Users/daniel/.claude/skills/homeplane-capabilities\",\n          \"target\": \"/Users/daniel/Documents/daniel-os/skills/homeplane-capabilities\"\n        },\n        {\n          \"harness\": \"claude-code\",\n          \"slug\": \"karpathy-guidelines\",\n          \"action\": \"unchanged\",\n          \"link_path\": \"/Users/daniel/.claude/skills/karpathy-guidelines\",\n          \"target\": \"/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines\"\n        },\n        {\n          \"harness\": \"claude-code\",\n          \"slug\": \"professional-writing\",\n          \"action\": \"unchanged\",\n          \"link_path\": \"/Users/daniel/.claude/skills/professional-writing\",\n          \"target\": \"/Users/daniel/Documents/daniel-os/skills/professional-writing\"\n        }\n      ],\n      \"verified\": [\n        \"artifact-capabilities\",\n        \"artifact-design\",\n        \"artifact-diagramming\",\n        \"batch\",\n        \"casual-writing\",\n        \"claude-api\",\n        \"code-review\",\n        \"composio-cli\",\n        \"council\",\n        \"dataviz\",\n        \"debug\",\n        \"deep-research\",\n        \"design-sync\",\n        \"doctor\",\n        \"fewer-permission-prompts\",\n        \"find-skills\",\n        \"flow-next:flow-next\",\n        \"flow-next:flow-next-deps\",\n        \"flow-next:flow-next-drive\",\n        \"flow-next:flow-next-export-context\",\n        \"flow-next:flow-next-worktree-kit\",\n        \"frontend-design:frontend-design\",\n        \"homeplane-capabilities\",\n        \"karpathy-guidelines\",\n        \"loop\",\n        \"phone-home\",\n        \"professional-writing\",\n        \"run\",\n        \"run-skill-generator\",\n        \"schedule\",\n        \"simplify\",\n        \"solana-dev\",\n        \"update-config\",\n        \"verify\"\n      ]\n    },\n    {\n      \"harness\": \"codex\",\n      \"skills_dir\": \"/Users/daniel/.codex/skills\",\n      \"results\": [\n        {\n          \"harness\": \"codex\",\n          \"slug\": \"casual-writing\",\n          \"action\": \"unchanged\",\n          \"link_path\": \"/Users/daniel/.codex/skills/casual-writing\",\n          \"target\": \"/Users/daniel/Documents/daniel-os/skills/casual-writing\"\n        },\n        {\n          \"harness\": \"codex\",\n          \"slug\": \"homeplane-capabilities\",\n          \"action\": \"unchanged\",\n          \"link_path\": \"/Users/daniel/.codex/skills/homeplane-capabilities\",\n          \"target\": \"/Users/daniel/Documents/daniel-os/skills/homeplane-capabilities\"\n        },\n        {\n          \"harness\": \"codex\",\n          \"slug\": \"karpathy-guidelines\",\n          \"action\": \"unchanged\",\n          \"link_path\": \"/Users/daniel/.codex/skills/karpathy-guidelines\",\n          \"target\": \"/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines\"\n        },\n        {\n          \"harness\": \"codex\",\n          \"slug\": \"professional-writing\",\n          \"action\": \"unchanged\",\n          \"link_path\": \"/Users/daniel/.codex/skills/professional-writing\",\n          \"target\": \"/Users/daniel/Documents/daniel-os/skills/professional-writing\"\n        }\n      ],\n      \"verified\": [\n        \"casual-writing\",\n        \"composio-cli\",\n        \"find-skills\",\n        \"flow-next\",\n        \"flow-next-audit\",\n        \"flow-next-capture\",\n        \"flow-next-chart\",\n        \"flow-next-guide\",\n        \"flow-next-impl-review\",\n        \"flow-next-interview\",\n        \"flow-next-lan\n…[7278 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:17:52Z",
+          "duration": "5.587s"
+        },
+        {
+          "what": "homeplane-agent skills list -json (a verbatim copy of the active profile)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "skills",
+            "list",
+            "-json",
+            "-profile",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-skills3136499492/002/verbatim.toml"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"vault_skills_root\": \"/Users/daniel/Documents/daniel-os/skills\",\n  \"profile\": \"daniel-skeleton\",\n  \"profile_path\": \"/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-skills3136499492/002/verbatim.toml\",\n  \"machine\": \"Daniels-MacBook-Pro.local\",\n  \"skills\": [\n    {\n      \"slug\": \"casual-writing\",\n      \"name\": \"casual-writing\",\n      \"description\": \"How Daniel Killenberger writes CASUALLY — to close friends (Gordon), mates, and in relaxed chat. The informal end of his voice, below the business-casual register that professional-writing covers. Load this when drafting or editing a message to a friend or close collaborator, or any deliberately loose, off-the-cuff message in his voice. Trigger phrases include \\\"casual\\\", \\\"the way I talk to him\\\", \\\"to Gordon\\\", \\\"text my friend\\\", \\\"keep it loose\\\".\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/casual-writing\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/casual-writing/SKILL.md\"\n    },\n    {\n      \"slug\": \"homeplane-capabilities\",\n      \"name\": \"homeplane-capabilities\",\n      \"description\": \"How to use Daniel's Homeplane capability plane: retrieve from his Daniel-OS vault via gno before guessing about his life, notes, projects, or people; read his Google Drive and read/write his Calendar through the homeplane MCP server. Load whenever a request involves Daniel's personal context — his schedule, his notes, something \\\"I wrote\\\", a project or person he mentions, a file in his Drive, an appointment — or when you are about to answer a question about Daniel from memory instead of from his data.\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/homeplane-capabilities\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/homeplane-capabilities/SKILL.md\"\n    },\n    {\n      \"slug\": \"karpathy-guidelines\",\n      \"name\": \"karpathy-guidelines\",\n      \"description\": \"Behavioral guidelines to reduce common LLM coding mistakes. Use when writing, reviewing, or refactoring code to avoid overcomplication, make surgical changes, surface assumptions, and define verifiable success criteria.\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines/SKILL.md\"\n    },\n    {\n      \"slug\": \"negotiation\",\n      \"name\": \"negotiation\",\n      \"description\": \"Daniel's own negotiation playbook, mined from his real deals (Collecteur.AI / Zero Knowledge, SHD/Gordon, CoinPoker reinstatement, Obligate options, Nestermind). Load this as a PRE-COMMIT reminder BEFORE he locks any terms, so his hard-won lessons and past misses surface before he repeats them, not after. Trigger whenever Daniel is setting a rate, pricing a deal, structuring an engagement, countering an offer, deciding walk-away, or chasing payment. Trigger phrases: \\\"what should I charge\\\", \\\"how do I price this\\\", \\\"how much for\\\", \\\"negotiating with X\\\", \\\"they offered\\\", \\\"should I take this deal\\\", \\\"counter their offer\\\", \\\"day rate\\\", \\\"quote them\\\", \\\"set my rate\\\", \\\"structure the engagement\\\", \\\"walk away or\\\", \\\"chase the payment\\\", \\\"he pushed back on price\\\". Fires early: better to raise the anchor and the fragmentation premium before the number leaves his mouth than to log the regret afterward.\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/negotiation\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/negotiation/SKILL.md\"\n    },\n    {\n      \"slug\": \"phone-home-coordinator\",\n      \"name\": \"phone-home-coordinator\",\n      \"description\": \"Clawniel's behavior when a phone-home request or completion-report surfaces from the palantir bus (a channel turn with source=palantir:\\u003cauthor\\u003e). Act as the owner's representative, judge intent against the owner profile, answer or approve autonomously when confident and the act is not veto-class, escalate to the owner on Telegram when not, ALWAYS persist the request and the decision first, and report every deci\n…[7973 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:17:57Z",
+          "duration": "328ms"
+        },
+        {
+          "what": "homeplane-agent skills list -json (the same profile with ONLY grok's block changed)",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "skills",
+            "list",
+            "-json",
+            "-profile",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-skills3136499492/002/mutated.toml"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "{\n  \"vault_skills_root\": \"/Users/daniel/Documents/daniel-os/skills\",\n  \"profile\": \"daniel-skeleton\",\n  \"profile_path\": \"/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-skills3136499492/002/mutated.toml\",\n  \"machine\": \"Daniels-MacBook-Pro.local\",\n  \"skills\": [\n    {\n      \"slug\": \"casual-writing\",\n      \"name\": \"casual-writing\",\n      \"description\": \"How Daniel Killenberger writes CASUALLY — to close friends (Gordon), mates, and in relaxed chat. The informal end of his voice, below the business-casual register that professional-writing covers. Load this when drafting or editing a message to a friend or close collaborator, or any deliberately loose, off-the-cuff message in his voice. Trigger phrases include \\\"casual\\\", \\\"the way I talk to him\\\", \\\"to Gordon\\\", \\\"text my friend\\\", \\\"keep it loose\\\".\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/casual-writing\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/casual-writing/SKILL.md\"\n    },\n    {\n      \"slug\": \"homeplane-capabilities\",\n      \"name\": \"homeplane-capabilities\",\n      \"description\": \"How to use Daniel's Homeplane capability plane: retrieve from his Daniel-OS vault via gno before guessing about his life, notes, projects, or people; read his Google Drive and read/write his Calendar through the homeplane MCP server. Load whenever a request involves Daniel's personal context — his schedule, his notes, something \\\"I wrote\\\", a project or person he mentions, a file in his Drive, an appointment — or when you are about to answer a question about Daniel from memory instead of from his data.\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/homeplane-capabilities\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/homeplane-capabilities/SKILL.md\"\n    },\n    {\n      \"slug\": \"karpathy-guidelines\",\n      \"name\": \"karpathy-guidelines\",\n      \"description\": \"Behavioral guidelines to reduce common LLM coding mistakes. Use when writing, reviewing, or refactoring code to avoid overcomplication, make surgical changes, surface assumptions, and define verifiable success criteria.\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/karpathy-guidelines/SKILL.md\"\n    },\n    {\n      \"slug\": \"negotiation\",\n      \"name\": \"negotiation\",\n      \"description\": \"Daniel's own negotiation playbook, mined from his real deals (Collecteur.AI / Zero Knowledge, SHD/Gordon, CoinPoker reinstatement, Obligate options, Nestermind). Load this as a PRE-COMMIT reminder BEFORE he locks any terms, so his hard-won lessons and past misses surface before he repeats them, not after. Trigger whenever Daniel is setting a rate, pricing a deal, structuring an engagement, countering an offer, deciding walk-away, or chasing payment. Trigger phrases: \\\"what should I charge\\\", \\\"how do I price this\\\", \\\"how much for\\\", \\\"negotiating with X\\\", \\\"they offered\\\", \\\"should I take this deal\\\", \\\"counter their offer\\\", \\\"day rate\\\", \\\"quote them\\\", \\\"set my rate\\\", \\\"structure the engagement\\\", \\\"walk away or\\\", \\\"chase the payment\\\", \\\"he pushed back on price\\\". Fires early: better to raise the anchor and the fragmentation premium before the number leaves his mouth than to log the regret afterward.\",\n      \"dir\": \"/Users/daniel/Documents/daniel-os/skills/negotiation\",\n      \"skill_md\": \"/Users/daniel/Documents/daniel-os/skills/negotiation/SKILL.md\"\n    },\n    {\n      \"slug\": \"phone-home-coordinator\",\n      \"name\": \"phone-home-coordinator\",\n      \"description\": \"Clawniel's behavior when a phone-home request or completion-report surfaces from the palantir bus (a channel turn with source=palantir:\\u003cauthor\\u003e). Act as the owner's representative, judge intent against the owner profile, answer or approve autonomously when confident and the act is not veto-class, escalate to the owner on Telegram when not, ALWAYS persist the request and the decision first, and report every decis\n…[7940 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:17:58Z",
+          "duration": "287ms"
+        },
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T09:17:58.570985Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"ok\",\n      \"detail\": \"claude-code, codex, grok\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex, grok (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-32d74930f4a4790f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c085ad4a2d08346f, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-60635c74d0efbefd, codex/g-63b8db515f635d47, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15, grok/g-639aa8e7fd631100)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-633b1d8872079fb2\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-9eabff2ce164f5ce\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"state\": \"confi\n…[17058 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:17:58Z",
+          "duration": "518ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "grok runs no resident leader, and every proof invocation names a socket that does not exist",
+          "ok": true,
+          "detail": "`grok leader list` exit 0: No leader candidates found.; proof socket: /var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-skills3136499492/001/no-such-leader.sock"
+        },
+        {
+          "claim": "skills provision with fresh-process verification completes",
+          "ok": true,
+          "detail": "exit 0"
+        },
+        {
+          "claim": "provisioning reports grok as a third harness with its own skills directory",
+          "ok": true,
+          "detail": "grok report present=true dir=/Users/daniel/.grok/skills"
+        },
+        {
+          "claim": "vault-authored skills are LINKED into grok, never copied",
+          "ok": true,
+          "detail": "4 linked ([casual-writing homeplane-capabilities karpathy-guidelines professional-writing]), 4 resolving into the vault at /Users/daniel/Documents/daniel-os"
+        },
+        {
+          "claim": "a fresh grok process enumerated the skills that were linked into it",
+          "ok": true,
+          "detail": "verified [casual-writing composio-cli find-skills homeplane-capabilities karpathy-guidelines phone-home professional-writing solana-dev]; error \"\""
+        },
+        {
+          "claim": "the vault's Homeplane capability skill is among what grok discovered",
+          "ok": true,
+          "detail": "grok discovered [casual-writing composio-cli find-skills homeplane-capabilities karpathy-guidelines phone-home professional-writing solana-dev]"
+        },
+        {
+          "claim": "the active profile can be copied for the falsification",
+          "ok": true,
+          "detail": "\u003cnil\u003e"
+        },
+        {
+          "claim": "the falsification copy could be produced by editing only grok's block",
+          "ok": true,
+          "detail": "/Users/daniel/Documents/daniel-os/skills/homeplane.skills.toml: \"homeplane-capabilities\" removed from [harness.grok]"
+        },
+        {
+          "claim": "grok's assignment comes from the profile's [harness.grok] key: changing that key alone changes it",
+          "ok": true,
+          "detail": "verbatim grok=[casual-writing homeplane-capabilities karpathy-guidelines professional-writing]; mutated grok=[casual-writing karpathy-guidelines professional-writing]"
+        },
+        {
+          "claim": "and the change is confined to grok: the other harnesses' assignments are untouched",
+          "ok": true,
+          "detail": "claude-code [casual-writing homeplane-capabilities karpathy-guidelines professional-writing] → [casual-writing homeplane-capabilities karpathy-guidelines professional-writing]; codex [casual-writing homeplane-capabilities karpathy-guidelines professional-writing] → [casual-writing homeplane-capabilities karpathy-guidelines professional-writing]"
+        },
+        {
+          "claim": "status reports the provisioned skills",
+          "ok": true,
+          "detail": "skills: ok (casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing)"
+        }
+      ]
+    },
+    {
+      "stage": "grok-status-truth",
+      "status": "pass",
+      "started_at": "2026-08-15T09:17:59Z",
+      "finished_at": "2026-08-15T09:18:02Z",
+      "steps": [
+        {
+          "what": "homeplane-agent status -json",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T09:17:59.089008Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"ok\",\n      \"detail\": \"claude-code, codex, grok\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex, grok (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-32d74930f4a4790f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c085ad4a2d08346f, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-60635c74d0efbefd, codex/g-63b8db515f635d47, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15, grok/g-639aa8e7fd631100)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-633b1d8872079fb2\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-9eabff2ce164f5ce\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"state\": \"confi\n…[17058 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:17:59Z",
+          "duration": "512ms"
+        },
+        {
+          "what": "copy the agent state for the grok-unconfigured mode",
+          "command": [
+            "cp",
+            "-R",
+            "/Users/daniel/.homeplane",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-status-truth3999754963/001/grok-unconfigured"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:17:59Z",
+          "duration": "142ms"
+        },
+        {
+          "what": "homeplane-agent status with no grok configuration record",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json",
+            "-state-dir",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-status-truth3999754963/001/grok-unconfigured"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-status-truth3999754963/001/grok-unconfigured\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T09:17:59.744023Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"degraded\",\n      \"detail\": \"claude-code, codex, grok; grok is detected_unconfigured\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex, grok (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-32d74930f4a4790f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c085ad4a2d08346f, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-60635c74d0efbefd, codex/g-63b8db515f635d47, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15, grok/g-639aa8e7fd631100)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-633b1d8872079fb2\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\"\n…[17211 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:17:59Z",
+          "duration": "508ms"
+        },
+        {
+          "what": "copy the agent state for the grok-revoked mode",
+          "command": [
+            "cp",
+            "-R",
+            "/Users/daniel/.homeplane",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-status-truth3999754963/002/grok-revoked"
+          ],
+          "exit_code": 0,
+          "stdout_excerpt": "",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:00Z",
+          "duration": "135ms"
+        },
+        {
+          "what": "homeplane-agent status against a REVOKED grok grant",
+          "command": [
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json",
+            "-state-dir",
+            "/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-status-truth3999754963/002/grok-revoked"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-status-truth3999754963/002/grok-revoked\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T09:18:00.389953Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"degraded\",\n      \"detail\": \"claude-code, codex, grok; grok is revoked\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex, grok (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-32d74930f4a4790f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c085ad4a2d08346f, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-60635c74d0efbefd, codex/g-63b8db515f635d47, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15, grok/g-639aa8e7fd631100)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-633b1d8872079fb2\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"support\": \n…[17300 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:00Z",
+          "duration": "582ms"
+        },
+        {
+          "what": "homeplane-agent status on a machine without grok",
+          "command": [
+            "env",
+            "GROK_HOME=/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-status-truth3999754963/003/grok-home-absent",
+            "PATH=/usr/bin:/bin",
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T09:18:00.974828Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"ok\",\n      \"detail\": \"claude-code, codex, grok\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex, grok (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-32d74930f4a4790f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c085ad4a2d08346f, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-60635c74d0efbefd, codex/g-63b8db515f635d47, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15, grok/g-639aa8e7fd631100)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-633b1d8872079fb2\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-9eabff2ce164f5ce\"\n    },\n    {\n      \"harness\": \"grok\",\n      \"state\": \"not_d\n…[17102 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:00Z",
+          "duration": "521ms"
+        },
+        {
+          "what": "homeplane-agent status against a grok major version this build never captured",
+          "command": [
+            "env",
+            "GROK_HOME=/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-status-truth3999754963/003/grok-home-absent",
+            "PATH=/var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-status-truth3999754963/004/stub-bin:/usr/bin:/bin",
+            "/Users/daniel/.homeplane/bin/homeplane-agent",
+            "status",
+            "-json"
+          ],
+          "exit_code": 1,
+          "stdout_excerpt": "{\n  \"status\": \"degraded\",\n  \"state_dir\": \"/Users/daniel/.homeplane\",\n  \"enroled\": true,\n  \"server_url\": \"http://homeplane.tailab4e9b.ts.net\",\n  \"machine_id\": \"m-1bc11c520f7c59e2\",\n  \"os\": \"darwin\",\n  \"machine_name\": \"Daniels-MacBook-Pro.local\",\n  \"checked_at\": \"2026-08-15T09:18:01.497471Z\",\n  \"components\": [\n    {\n      \"name\": \"enrolment\",\n      \"state\": \"ok\",\n      \"detail\": \"machine m-1bc11c520f7c59e2 (Daniels-MacBook-Pro.local) enrolled at http://homeplane.tailab4e9b.ts.net, credential version 14\"\n    },\n    {\n      \"name\": \"vault\",\n      \"state\": \"ok\",\n      \"detail\": \"/Users/daniel/Documents/daniel-os\"\n    },\n    {\n      \"name\": \"sync\",\n      \"state\": \"not_configured\",\n      \"detail\": \"vault sync is not configured yet\"\n    },\n    {\n      \"name\": \"gno\",\n      \"state\": \"degraded\",\n      \"detail\": \"supervision unit installed but not loaded — the index is NOT being kept current; unit installed but not loaded — run `homeplane-agent gno apply`; /Users/daniel/Documents/daniel-os → collection \\\"daniel-os\\\" (gno 1.29.6); index /Users/daniel/.homeplane/gno/data/index-default.sqlite; 9/13 checks ok (embed-model warn, rerank-model warn, gen-model warn, embedding-fingerprint warn); last stdio launch ok at 2026-08-14T16:22:29Z (gno 1.29.6, 30 tools)\"\n    },\n    {\n      \"name\": \"harnesses\",\n      \"state\": \"degraded\",\n      \"detail\": \"claude-code, codex, grok; grok is detected_unsupported\"\n    },\n    {\n      \"name\": \"skills\",\n      \"state\": \"ok\",\n      \"detail\": \"casual-writing, homeplane-capabilities, karpathy-guidelines, professional-writing\"\n    },\n    {\n      \"name\": \"grants\",\n      \"state\": \"ok\",\n      \"detail\": \"active: claude-code, codex, grok (revoked: claude-code/g-01522c231a20498c, claude-code/g-12cdbfa5295e0442, claude-code/g-1fe7a964c7b44b3f, claude-code/g-2844c31b144cba45, claude-code/g-29899f0280173fd7, claude-code/g-2d86511387cb1e4f, claude-code/g-32d74930f4a4790f, claude-code/g-4400b6ca888d6032, claude-code/g-514a82d8050fd757, claude-code/g-6297b53034e18c73, claude-code/g-6df3d19eb8fe73c2, claude-code/g-79decdeaca336d13, claude-code/g-7e22fef10f8b8ee7, claude-code/g-89ac3861965e1422, claude-code/g-94bd57029befe9c3, claude-code/g-9688189322f31a05, claude-code/g-a359c396a9605a25, claude-code/g-a49c929f72c8b877, claude-code/g-a84792f869e3fc4d, claude-code/g-a8dd1f84abd0ffeb, claude-code/g-bdb20d55d6386da6, claude-code/g-bde864c040d84a2c, claude-code/g-be8df289bdba3f77, claude-code/g-c085ad4a2d08346f, claude-code/g-c28d6646f05d3921, claude-code/g-d11f646d4c16409a, claude-code/g-da5a65f3a7482ced, claude-code/g-f3784bcab0b2a4fb, codex/g-0b957ef418aa6471, codex/g-0bae4f8284e91a7a, codex/g-1784c82c005c3095, codex/g-1af3ca7219f3d090, codex/g-1d6baef138db511b, codex/g-2f083f700302a7da, codex/g-2f5b0051322b09ef, codex/g-3e71920a898f78a7, codex/g-5c30d9e3653702dd, codex/g-5d61c08737fb1611, codex/g-60635c74d0efbefd, codex/g-63b8db515f635d47, codex/g-66db05c0bf50a726, codex/g-66f220c9ab3b4f2e, codex/g-7988348586668ddc, codex/g-86f60bcea88f422a, codex/g-8d152b1663aeb0bd, codex/g-90c3fdea9c1d5e39, codex/g-a046e1ac11c50c48, codex/g-a0959ce34bee986f, codex/g-a76ba895eda63a01, codex/g-b240c6f86595c45a, codex/g-b90972b57ef659fb, codex/g-bc1102d86c957ce4, codex/g-cbc10aaaf4752222, codex/g-da2290f0d29c06af, codex/g-efdf9eb2ebb7ec30, codex/g-ffba4218fc0abd15, grok/g-639aa8e7fd631100)\"\n    },\n    {\n      \"name\": \"server\",\n      \"state\": \"ok\",\n      \"detail\": \"http://homeplane.tailab4e9b.ts.net\"\n    }\n  ],\n  \"harnesses\": [\n    {\n      \"harness\": \"claude-code\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.claude.json\",\n      \"config_path\": \"/Users/daniel/.claude.json\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-633b1d8872079fb2\"\n    },\n    {\n      \"harness\": \"codex\",\n      \"state\": \"configured\",\n      \"detail\": \"configured at /Users/daniel/.codex/config.toml\",\n      \"config_path\": \"/Users/daniel/.codex/config.toml\",\n      \"support\": \"unknown\",\n      \"grant_id\": \"g-9eabff2ce164f5ce\"\n    },\n    {\n      \"har\n…[17435 bytes truncated]",
+          "stderr_excerpt": "",
+          "at": "2026-08-15T09:18:01Z",
+          "duration": "798ms"
+        }
+      ],
+      "assertions": [
+        {
+          "claim": "status carries a grok row alongside the other harnesses",
+          "ok": true,
+          "detail": "3 harness row(s)"
+        },
+        {
+          "claim": "state 4/5 `configured`: the machine as it stands, with a live grant",
+          "ok": true,
+          "detail": "grok: state=configured grant=g-bc17b426a960c6e9 version=1.0.3"
+        },
+        {
+          "claim": "the configured row still names the compat source Homeplane cannot close",
+          "ok": true,
+          "detail": "compat_sources [project(.mcp.json)]; detail configured at /Users/daniel/.grok/config.toml; still inherits MCP servers from: project(.mcp.json)"
+        },
+        {
+          "claim": "state 2/5 `detected_unconfigured`: grok is here and Homeplane has not wired it",
+          "ok": true,
+          "detail": "grok: state=detected_unconfigured version=1.0.3 detail=grok is installed but Homeplane has not configured it — run `homeplane-agent configure-harnesses`; still inherits MCP servers from: project(.mcp.json)"
+        },
+        {
+          "claim": "state 5/5 `revoked`: a configuration whose grant the server no longer honours is not called configured",
+          "ok": true,
+          "detail": "grok: state=revoked grant=g-639aa8e7fd631100 (revoked server-side) detail=/Users/daniel/.grok/config.toml holds a configuration whose grant g-639aa8e7fd631100 is no longer live server-side — re-run `homeplane-agent configure-harnesses` to mint a new one; still inherits MCP servers from: project(.mcp.json)"
+        },
+        {
+          "claim": "state 1/5 `not_detected`: a machine without grok is reported as not having it, and is not a fault",
+          "ok": true,
+          "detail": "grok: state=not_detected detail=no grok executable on PATH and no configuration at /var/folders/y6/c9lt1pbs6lgfr_s99zb__2dm0000gn/T/TestEndToEndProofgrok-status-truth3999754963/003/grok-home-absent/config.toml"
+        },
+        {
+          "claim": "state 3/5 `detected_unsupported`: an unverified version is refused with the observed version and a reason",
+          "ok": true,
+          "detail": "grok: state=detected_unsupported version=2.0.0 support=unsupported detail=grok 2.0.0 is a different major version than the captured contract (grok 1.0.3): its configuration surface has not been observed, so Homeplane refuses to write it. Re-run scripts/capture-grok-contract.sh and re-ratify docs/decisions/fn3-grok-surfaces.md to support it; still inherits MCP servers from…"
+        },
+        {
+          "claim": "the five states are distinct and each was produced on this machine, not described",
+          "ok": true,
+          "detail": "states produced: [configured detected_unconfigured detected_unsupported not_detected revoked]"
+        }
+      ]
+    }
+  ],
+  "started_at": "2026-08-15T09:18:24Z",
+  "summary": {
+    "stages_failed": 2,
+    "stages_partial": 0,
+    "stages_passed": 5,
+    "stages_skipped": 0
+  },
+  "task": "fn-3-add-grok-as-a-third-harness.3",
+  "updated_at": "2026-08-15T09:18:36Z",
+  "what_this_is": "The record of the end-to-end walking-skeleton proof: a real machine installed, enrolled and configured against the live server, and every capability exercised from the harnesses themselves. Nothing here can be produced by `go test ./...` — it needs a deployment and, once, a human at a consent screen. Each stage carries the commands it ran with their exit codes, and each assertion carries the observation that settles it. Connector claims are settled by the server's own audit log, never by what a harness said it did."
+}

@@ -67,6 +67,17 @@ func loadEnv(t *testing.T) env {
 	}
 	if e.evidencePath == "" {
 		e.evidencePath = filepath.Join("..", "evidence", "fn-1-homeplane-walking-skeleton-install.7.live.json")
+	} else if !filepath.IsAbs(e.evidencePath) {
+		// `go test` runs in the package directory, so a caller who passed
+		// `test/evidence/…` from the repository root means the repository root.
+		// Resolving it here rather than silently writing `test/e2e/test/evidence/…`
+		// — which is what happened, and produced an artifact nobody was looking at.
+		out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+		if err != nil {
+			t.Fatalf("HOMEPLANE_E2E_EVIDENCE is relative (%s) and the repository root could not be resolved: %v",
+				e.evidencePath, err)
+		}
+		e.evidencePath = filepath.Join(strings.TrimSpace(string(out)), e.evidencePath)
 	}
 	if raw := strings.TrimSpace(os.Getenv("HOMEPLANE_E2E_STAGES")); raw != "" {
 		e.stages = map[string]bool{}

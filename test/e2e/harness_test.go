@@ -111,7 +111,17 @@ func (s *stage) grok(what, prompt string) harnessOutput {
 	// The raw text is what the assertions read, for the same reason the Codex
 	// leg reads raw text: the claim is about what came back, and re-shaping it
 	// first is a chance to lose the thing being proven.
-	return harnessOutput{ok: res.ExitCode == 0, text: res.full, res: res}
+	//
+	// A turn that fails before the model answers prints nothing on stdout and
+	// its reason on STDERR — an exhausted account balance, for instance. That
+	// reason is carried into the answer rather than dropped, because "grok
+	// said: " with nothing after it describes every possible failure equally
+	// badly, and the assertion detail is where a reader looks first.
+	text := res.full
+	if strings.TrimSpace(text) == "" {
+		text = strings.TrimSpace(res.Stderr)
+	}
+	return harnessOutput{ok: res.ExitCode == 0, text: text, res: res}
 }
 
 // grokFreshProcess asserts the fresh-process contract's other half: that no
