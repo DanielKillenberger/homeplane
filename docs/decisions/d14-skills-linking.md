@@ -16,9 +16,10 @@ FRESH process of each real CLI enumerate them.
 |---|---|---|---|---|---|
 | Claude Code | **native-link** | `$CLAUDE_CONFIG_DIR/skills`, else `~/.claude/skills` | followed, target reported unchanged | the **directory** name | first `system`/`init` event of `claude -p --output-format stream-json --verbose` carries a `skills` array |
 | Codex | **native-link** | `$CODEX_HOME/skills`, else `~/.codex/skills` | followed, locator resolves to the real path | the SKILL.md frontmatter **`name`** | `codex debug prompt-input` renders a `<skills_instructions>` block listing every skill with its resolved `(file: …)` locator |
+| grok | **native-link** | `$GROK_HOME/skills`, else `~/.grok/skills` | followed, target outside the grok home resolved | the SKILL.md frontmatter **`name`**, falling back to the **directory** when frontmatter omits it | `grok inspect` enumerates the skills it discovers, run with `--leader-socket <absent path>` |
 
-Both harnesses are **native-link**. No adapter was needed, and none was built:
-an adapter that nobody needs is a second format to keep true.
+All three harnesses are **native-link**. No adapter was needed, and none was
+built: an adapter that nobody needs is a second format to keep true.
 
 Four consequences, each load-bearing:
 
@@ -38,7 +39,7 @@ Four consequences, each load-bearing:
   inside the vault, and for `<entry>/SKILL.md` and the vault's SKILL.md to be
   the same device+inode.
 
-- **The two harnesses name a skill differently.** Claude Code uses the
+- **The harnesses name a skill differently.** Claude Code uses the
   directory it found the skill in; Codex uses the frontmatter `name`. Verified
   by linking one skill under a deliberately different directory name: Claude
   reported the directory, Codex reported the frontmatter. Homeplane therefore
@@ -52,6 +53,44 @@ Four consequences, each load-bearing:
   `~/.claude/skills`. That is what lets the whole suite run against fixture
   harness directories with the real binaries, and it is why writing to
   `~/.claude/skills` unconditionally would be wrong on a machine that sets it.
+
+### Addendum (fn-3, 2026-08-15): grok's row, probed the same way
+
+grok was added to the matrix above by the same method this document is built
+on — never invent a CLI surface, capture it. Three disposable skills were linked
+as **symlinks** into a sealed `~/.grok/skills` pointing at targets outside the
+grok home, and a fresh `grok inspect` was asked what it saw
+(`docs/decisions/fn3-grok-surfaces.md` §2):
+
+| Linked as (directory) | frontmatter `name` | grok reported |
+|---|---|---|
+| `hp-probe-alpha` | `hp-probe-alpha` | `hp-probe-alpha` |
+| `directory-beta-name` | `frontmatter-beta-name` | **`frontmatter-beta-name`** |
+| `gamma-dir-name` | *(absent)* | **`gamma-dir-name`** |
+
+So symlinks are followed, the frontmatter name wins, and the directory name is
+the fallback. **grok therefore sits on the Codex side of the naming split**, and
+`RuleNameMismatch` applies to it unchanged — no grok-specific logic was written,
+which is the outcome this matrix exists to make checkable.
+
+Two things about grok's row are not true of the other two:
+
+- **The fresh-process proof has to defeat a resident process, not coincide with
+  its absence.** grok supports a leader (`--leader-socket <PATH>`), so every
+  probe passes a socket path that does not exist: a leader cannot attach to a
+  socket that is not there. `grok leader kill` is never called — it would stop
+  the operator's own sessions.
+- **grok scans roots Homeplane does not own** — `~/.grok/commands`, project
+  `./.grok/skills`, `.agents/skills` at every tier, and the vendor-compat roots
+  (`[compat.claude] skills`, `[compat.cursor] skills`). Homeplane links into
+  none of them, and `[compat.claude] skills` is left ON deliberately: a skill
+  reaching grok twice is harmless, whereas the same inheritance for **MCP
+  servers** was not, and only that cell is closed (D4/D4b).
+
+`$GROK_HOME` relocates grok's config home and its skills root, but **not** the
+vendor-compat roots or `~/.agents/skills`, which resolve from `HOME`. Sealing a
+grok probe therefore requires overriding `HOME` as well — the same trap
+`$CLAUDE_CONFIG_DIR` sets above, one level deeper.
 
 **GNO's installer, checked and not used here.** `gno mcp install --target
 claude-code|codex` covers GNO's own MCP server and its own bundled skills. It

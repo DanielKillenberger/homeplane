@@ -45,9 +45,9 @@ enrolment  ok     machine m-… enrolled at …, credential version 14
 vault      ok     /Users/daniel/Documents/daniel-os
 sync       ok     …
 gno        ok     …
-harnesses  ok     claude-code, codex
+harnesses  ok     claude-code, codex, grok
 skills     ok     casual-writing, karpathy-guidelines, professional-writing
-grants     ok     active: claude-code, codex (revoked: …)
+grants     ok     active: claude-code, codex, grok (revoked: …)
 server     ok     http://homeplane.tailab4e9b.ts.net
 ```
 
@@ -422,14 +422,14 @@ Two operational gotchas that cost real time:
 
 `homeplane-agent configure-harnesses` is the supported path — it merges
 semantically, backs up first, and records what it wrote. These recipes are for
-**debugging the endpoint itself**, or reconfiguring one of the two supported
+**debugging the endpoint itself**, or reconfiguring one of the three supported
 harnesses by hand.
 
 Two constraints, both enforced server-side rather than by convention:
 
-- **Only `claude-code` and `codex` exist.** Server policy names exactly those
-  two harnesses (`internal/policy`), so a grant request for anything else is
-  refused. Wiring an unsupported harness is not a documentation gap you can
+- **Only `claude-code`, `codex` and `grok` exist.** Server policy names exactly
+  those three harnesses (`internal/policy`), so a grant request for anything
+  else is refused. Wiring an unsupported harness is not a documentation gap you can
   work around here — it needs the policy to name it first.
 - **Use a freshly issued grant for the harness you are wiring — never another
   harness's token.** Reusing one makes every call appear under the *original*
@@ -497,7 +497,74 @@ ssh clawniel 'cd homeplane && bin/homeplane-server admin audit -state-dir var -l
 
 No audit row at all means the call never left the client.
 
-### The local retrieval engine (both harnesses)
+### grok CLI (1.0.3)
+
+In `~/.grok/config.toml` (`$GROK_HOME` relocates the whole home; the file must
+be 0600):
+
+```toml
+[mcp_servers.homeplane]
+type = "http"
+url = "http://homeplane.tailab4e9b.ts.net/mcp"
+enabled = true
+
+[mcp_servers.homeplane.headers]
+Authorization = "Bearer <grok grant token>"
+```
+
+**Do not use `grok mcp add` to write it.** Measured against the real binary it
+does three things that disqualify it as a writer for this file: it drops every
+comment (it re-serializes the whole document instead of splicing), it resets the
+mode from 0600 to **0644**, and `-H "Authorization: Bearer …"` puts the token in
+`argv`. Homeplane writes the file itself, by byte span. If you do run
+`grok mcp add` by hand, `chmod 600` afterwards — the mode does not survive it.
+
+`${VAR}` expansion works in these strings (stored verbatim, expanded at load),
+and is deliberately **not** used, for the same reason as Codex: an environment
+indirection works only in a process that inherited the exporting shell, and
+nobody launches grok from Homeplane's shell.
+
+**Never run `grok mcp list`** while capturing output anywhere. It prints header
+values verbatim, so the bearer token lands in whatever caught stdout. Use
+`grok mcp doctor <name> --json` (well-formed JSON on stdout, a tracing line on
+stderr — read the two streams separately) or read the entry you wrote.
+
+#### grok inherits other vendors' MCP servers unless you stop it
+
+This is the one that will surprise you. `[compat.claude] mcps` and
+`[compat.cursor] mcps` default to **true**, so a grok with no Homeplane
+configuration at all still lists `homeplane`, `gno` and everything else from
+`~/.claude.json` — reaching the edge under **Claude Code's** token and grant.
+Revoking grok's grant would not have cut its access, and its calls would have
+been audited as Claude Code.
+
+`configure-harnesses` closes both cells (`mcps = false`, leaving `skills`,
+`rules`, `agents`, `hooks` and `sessions` alone) and re-asserts them on every
+run. A project-scope `.mcp.json` is a third source that **cannot** be closed
+from a user config; `homeplane-agent status` and `configure-harnesses -detect`
+list the active compat sources so it stays visible.
+
+To check what grok actually loads — the merged view, not just the TOML scopes:
+
+```bash
+grok --leader-socket /nonexistent inspect
+```
+
+#### The nuance that will waste an afternoon: `grok -p` and tool approval
+
+Headless grok (`grok -p "<prompt>"`) has no human to answer a tool-approval
+prompt, so an MCP tool call can sit unapproved. Pass `--always-approve` (before
+`-p`) for a scripted call, and bound the exposure with the prompt rather than
+the sandbox: name one tool, fix its arguments, forbid shell commands.
+
+And pass `--leader-socket <a path that does not exist>` whenever you need to be
+sure you are reading current config. grok supports a resident leader; a socket
+that is not there cannot have one attached, so the invocation is a fresh process
+by construction. **Never** run `grok leader kill` to achieve this — it stops the
+operator's live sessions, and the socket flag makes it unnecessary. `grok leader
+list` reports whether any leader exists at all.
+
+### The local retrieval engine (every harness)
 
 Generate from the descriptor rather than hand-writing it:
 
@@ -512,9 +579,15 @@ ones) visible to `status`. The engine's own template is published alongside as
 
 ### Skills need no config at all
 
-Both harnesses discover skills from a directory
-(`~/.claude/skills`, `~/.codex/skills`), so nothing in this section applies to
+Every harness discovers skills from a directory (`~/.claude/skills`,
+`~/.codex/skills`, `~/.grok/skills`), so nothing in this section applies to
 them. Use `homeplane-agent skills provision -verify`.
+
+grok additionally inherits Claude Code's skills directory through
+`[compat.claude] skills`, which is deliberately left ON — so a skill can reach
+grok twice, once through Homeplane's own link and once through Claude Code's
+root. That is harmless for skills and was not harmless for MCP servers, which is
+why only the `mcps` cell of that table is closed.
 
 ---
 

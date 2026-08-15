@@ -26,7 +26,7 @@ lives on a machine, and nothing machine-local is reported by the server.
 │        ├── retrieval engine (GNO)            ── index is machine-local     │
 │        │      └─ stdio MCP ──────────────┐      and disposable             │
 │        └── harness configs (0600)        │                                 │
-│               Claude Code · Codex ───────┤                                 │
+│        Claude Code · Codex · grok ───────┤                                 │
 └───────────────────────────────────────────┼───────────────────────────────┘
                                             │
                         tailnet, Authorization: Bearer <grant token>
@@ -65,10 +65,13 @@ Three records, and no fourth:
 | `Grant` | (machine, harness) → capability set, with its own revocable token | server; the token also in that harness's 0600 config |
 | `AuditEvent` | append-only record of every connector call and every lifecycle event | server (SQLite) |
 
-Granularity stops at machine + harness deliberately (Daniel, 2026-08-13). Two
-harnesses on one machine hold two distinct grants, and revoking one leaves the
-other working — the proof revoked Claude Code's grant and watched Codex's next
-Drive read succeed while Claude Code's was refused within seconds and audited.
+Granularity stops at machine + harness deliberately (Daniel, 2026-08-13). Every
+harness on one machine holds its own distinct grant, and revoking one leaves the
+others working — the skeleton's proof revoked Claude Code's grant and watched
+Codex's next Drive read succeed while Claude Code's was refused within seconds
+and audited, and fn-3 repeated it in both directions with grok as a third
+harness: grok revoked while Claude Code and Codex kept working, then Claude Code
+revoked while grok and Codex kept working.
 
 **Enrolment is identity-preserving.** Re-running `enrol` rotates this machine's
 credential on the same server-side record: same `machine_id`, new credential,
@@ -87,8 +90,8 @@ fresh grant plus a rewritten config.
 
 ### Threat-model honesty
 
-Both harnesses on one machine run as the same OS user. A process running as
-Daniel can read the other harness's 0600 token file. **Per-harness token
+Every harness on one machine runs as the same OS user. A process running as
+Daniel can read another harness's 0600 token file. **Per-harness token
 separation on a single machine is an operational revocation boundary, not a
 security boundary against a malicious local process.** Nothing in this design
 claims otherwise.
@@ -279,15 +282,25 @@ vault is the only original, so editing a skill in Obsidian changes what every
 harness reads.
 
 Established against the real `claude 2.1.227` and `codex-cli 0.146.0` (D14/D15,
-`docs/decisions/d14-skills-linking.md`) — both harnesses turned out to be
-native-link, so no adapter was needed or built:
+`docs/decisions/d14-skills-linking.md`), and against the real `grok 1.0.3` (D1 of
+fn-3, `docs/decisions/fn3-grok-surfaces.md`) — all three harnesses turned out to
+be native-link, so no adapter was needed or built:
 
-- Claude Code enumerates `$CLAUDE_CONFIG_DIR/skills` (else `~/.claude/skills`)
-  and names a skill after the **link directory**.
-- Codex enumerates `$CODEX_HOME/skills` (else `~/.codex/skills`) and names it
-  after the SKILL.md frontmatter **`name`**.
+| Harness | Skills root | A skill is named after | Discovery |
+|---|---|---|---|
+| Claude Code | `$CLAUDE_CONFIG_DIR/skills` (else `~/.claude/skills`) | the **link directory** | fresh process, `system`/`init` event |
+| Codex | `$CODEX_HOME/skills` (else `~/.codex/skills`) | the SKILL.md frontmatter **`name`** | fresh process, `codex debug prompt-input` |
+| grok | `$GROK_HOME/skills` (else `~/.grok/skills`) | the frontmatter **`name`**, falling back to the directory | fresh process, `grok inspect` |
+
 - Homeplane links under the vault slug and refuses a skill whose two names
   disagree rather than provisioning something that would be called two things.
+  grok sits on the **Codex side** of that split, so the rule needed no
+  grok-specific logic.
+- grok also scans roots Homeplane does not own — `~/.grok/commands`, project
+  `./.grok/skills`, `.agents/skills` at every tier, and the vendor-compat roots
+  — and Homeplane links into none of them. `[compat.claude] skills` is
+  deliberately left ON: grok discovering Claude Code's skills is a feature, and
+  only the `mcps` cell of that table is closed (below).
 
 **No harness config file is touched at all** — skills are directory-discovered,
 so R5's merge machinery is not in this path. Inside the skills directory
@@ -301,14 +314,30 @@ scheduling or service control is marked unsupported with the line that matched �
 Homeplane distributes access and instructions, not initiative.
 
 Provisioning is proved by a **fresh harness process**, not by our own record:
-Claude Code's `system`/`init` stream-json event carries a `skills` array, and
+Claude Code's `system`/`init` stream-json event carries a `skills` array,
 `codex debug prompt-input` renders `<skills_instructions>` with resolved
-locators. Neither probe makes a model request.
+locators, and `grok inspect` enumerates the skills it discovers. No probe makes
+a model request.
+
+grok's fresh-process guarantee is stronger than "no daemon was running": grok
+supports a resident leader, so every probe passes `--leader-socket <a path that
+does not exist>`. A leader cannot be attached to a socket that is not there, so
+the invocation reads config from disk **by construction** rather than by luck.
+`grok leader kill` is never called — it would stop the operator's own sessions,
+and the socket discipline is why it is never needed.
+
+The profile (`<vault>/skills/homeplane.skills.toml`) carries a harness key per
+harness, and an **unknown** harness key is refused outright rather than skipped:
+a typo like `[harness.codxe]` must not silently provision a different set than
+the author wrote. That fail-closed reject is also why adding `[harness.grok]` to
+a synced profile is gated on every machine consuming it running a grok-aware
+agent.
 
 ## Harness configuration
 
-Two harnesses (D1: Claude Code, Codex), each configured with the local retrieval
-engine (stdio) and the server connector endpoint (HTTP + its own bearer):
+Three harnesses (D1: Claude Code, Codex; fn-3: grok), each configured with the
+local retrieval engine (stdio) and the server connector endpoint (HTTP + its own
+bearer):
 
 - **Merge-only, semantically.** The parse of the file after the write, minus the
   Homeplane-managed entries, is deep-equal to the parse before. TOML writes are
@@ -322,6 +351,46 @@ engine (stdio) and the server connector endpoint (HTTP + its own bearer):
   `.mcp.json`. Codex's bearer lives inline in the 0600 `config.toml`: the
   environment-variable indirections (`bearer_token_env_var`, `env_http_headers`)
   were tested against the real binary and do not reach the HTTP request.
+- **Mint authority last.** Every local precondition — containment, entry
+  validation, renderability, the preservation dry-merge, the backup and the
+  writability check — is proven BEFORE a grant is requested, for every harness.
+  A purely local failure can therefore no longer supersede a harness's working
+  grant.
+- **Version gating.** Detection carries an observed version and a support
+  verdict. An unobservable version is `unknown` and still writable (the write is
+  verified by re-parsing); a version that positively differs from the captured
+  contract in a way that matters is `unsupported`, and it gates BEFORE any grant
+  is issued.
+
+### grok
+
+grok's configuration is `~/.grok/config.toml` (`$GROK_HOME` relocates it), and
+Homeplane writes it by **byte span**, exactly like Codex's. The `grok mcp *` CLI
+verbs are deliberately not the write path: measured against the real binary they
+drop every comment in the file, reset the mode from 0600 to 0644, and put the
+bearer token in `argv` — see `docs/decisions/fn3-grok-surfaces.md` §1.
+
+Three properties are specific to grok and each is re-asserted on every run,
+because grok's own tooling can undo them:
+
+- **0600 is not durable.** `grok mcp add` resets the mode, so configure sets it
+  every time rather than trusting the mode it left.
+- **An entry is replaced wholesale, never merged**, so the writer renders the
+  complete entry (url, enabled, headers) each run. That is also how a
+  half-written entry is repaired.
+- **Compat isolation (D4, D4b).** grok merges MCP servers
+  `config.toml > claude > cursor > .mcp.json` by default, so before fn-3 it
+  already reached the Homeplane edge through **Claude Code's** entry — Claude
+  Code's token, Claude Code's grant, Claude Code's audit identity. Configure now
+  sets `[compat.claude] mcps = false` and `[compat.cursor] mcps = false`, one
+  key per table, leaving `skills`, `rules`, `agents`, `hooks` and `sessions`
+  untouched. The project-scope `.mcp.json` source cannot be closed from a user
+  config, so it is **reported** by detection (`compat_sources`) rather than
+  claimed absent. Daniel ratified the side effect: grok stops inheriting `rize`
+  and any other Claude-configured server.
+
+`grok mcp list` is never called by Homeplane: it echoes header values verbatim,
+and that includes a bearer token.
 
 ## Audit
 
@@ -365,6 +434,16 @@ few-machines; none is a gate obligation for the skeleton:
 | Local (GNO) revocation | skeleton revocation is server-side only; D7 covers extending it |
 
 Also deferred by shape rather than by hardening: workload-granularity grants were
-dropped entirely, more than two harnesses, and every connector beyond Drive and
-Calendar — each of which is a manifest entry plus credentials, which is exactly
-what R12 exists to keep true.
+dropped entirely, and every connector beyond Drive and Calendar — each of which
+is a manifest entry plus credentials, which is exactly what R12 exists to keep
+true.
+
+**A third harness is no longer deferred, and what it cost is the point.** The
+skeleton deferred "more than two harnesses"; fn-3 added grok and measured the
+bill: detection, a config writer, a skills root, a status model, and — server
+side — one row in the policy table. The diff from the spec's branch point over
+`internal/server`, `internal/store`, `internal/cred` and `internal/secrets` is
+**empty**, and fn-3's acceptance gate computes that rather than asserting it.
+Enrolment, identity, credential custody, policy resolution, audit and revocation
+needed no change, which is the claim R12 exists to falsify. A fourth harness is
+the same shape of work again; nothing about it is deferred hardening.

@@ -40,6 +40,22 @@ type statusReport struct {
 		State        string   `json:"state"`
 		RevokedAt    string   `json:"revoked_at"`
 	} `json:"grants"`
+	// Harnesses is the per-harness reconciliation fn-3 added: one row per known
+	// harness, in one of five states. fn-1's stages do not read it; the grok
+	// stages hold it to the claim that the five states are distinct.
+	Harnesses []harnessStatusRow `json:"harnesses"`
+}
+
+// harnessStatusRow mirrors agent.HarnessStatus.
+type harnessStatusRow struct {
+	Harness       string   `json:"harness"`
+	State         string   `json:"state"`
+	Detail        string   `json:"detail"`
+	ConfigPath    string   `json:"config_path"`
+	Version       string   `json:"version"`
+	Support       string   `json:"support"`
+	GrantID       string   `json:"grant_id"`
+	CompatSources []string `json:"compat_sources"`
 }
 
 func (s *stage) status() (statusReport, result) {

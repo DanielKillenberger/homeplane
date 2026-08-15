@@ -44,10 +44,19 @@ func TestEndToEndProof(t *testing.T) {
 	e := loadEnv(t)
 	commit, _ := exec.Command("git", "rev-parse", "HEAD").Output()
 
+	// The proof runs for whichever task is driving it. fn-1 recorded the
+	// walking-skeleton run; fn-3 re-runs the same machinery with the grok
+	// stages selected and records its own artifact, so the task an artifact
+	// claims is the task that actually drove it rather than a constant.
+	task := strings.TrimSpace(os.Getenv("HOMEPLANE_E2E_TASK"))
+	if task == "" {
+		task = "fn-1-homeplane-walking-skeleton-install.7"
+	}
+
 	rec := newRecorder(t, e, map[string]any{
 		"schema_version": 1,
 		"kind":           "live_e2e_proof",
-		"task":           "fn-1-homeplane-walking-skeleton-install.7",
+		"task":           task,
 		"what_this_is": "The record of the end-to-end walking-skeleton proof: a real machine installed, " +
 			"enrolled and configured against the live server, and every capability exercised from the " +
 			"harnesses themselves. Nothing here can be produced by `go test ./...` — it needs a deployment " +
@@ -83,6 +92,24 @@ func TestEndToEndProof(t *testing.T) {
 	runStage(t, e, rec, "revocation", stageRevocation)
 	runStage(t, e, rec, "truth-table", stageTruthTable)
 	runStage(t, e, rec, "audit", stageAuditReview)
+
+	// fn-3's stages: grok as a third harness, proven on the same machine
+	// against the same server. They are additions rather than edits — the
+	// stages above are fn-1's record of the two-harness skeleton and stay as
+	// they were — and they are selected by name like any other stage.
+	//
+	// The order is load-bearing twice over: the skills stage needs the
+	// configuration the harness stage writes, and the status stage's `revoked`
+	// row is produced from a grant the revocation stage really revoked.
+	runStage(t, e, rec, "grok-harness", stageGrokHarness)
+	runStage(t, e, rec, "grok-rollout-gate", stageGrokRolloutGate)
+	runStage(t, e, rec, "grok-skills", stageGrokSkills)
+	runStage(t, e, rec, "grok-gno", stageGrokGNO)
+	runStage(t, e, rec, "grok-connector", stageGrokConnector)
+	runStage(t, e, rec, "grok-calendar", stageGrokCalendar)
+	runStage(t, e, rec, "grok-revocation", stageGrokRevocation)
+	runStage(t, e, rec, "grok-status-truth", stageGrokStatusTruth)
+	runStage(t, e, rec, "grok-audit", stageGrokAudit)
 
 	t.Logf("evidence: %s", e.evidencePath)
 }

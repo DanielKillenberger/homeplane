@@ -87,6 +87,49 @@ func (s *stage) codex(what, prompt string) harnessOutput {
 	return harnessOutput{ok: res.ExitCode == 0, text: res.full, res: res}
 }
 
+// grok runs one non-interactive grok turn, from a process that is FRESH by
+// construction.
+//
+// `--leader-socket <a path that does not exist>` is the whole fresh-process
+// contract (docs/decisions/fn3-grok-surfaces.md §4): a leader cannot be attached
+// to a socket that is not there, so the invocation reads its configuration from
+// disk because it has no alternative — rather than because no leader happened to
+// be running. `grok leader kill` is never called: it would stop Daniel's
+// sessions, and the socket discipline is exactly why the proof never needs it.
+//
+// `--always-approve` is grok's non-interactive escape hatch, the counterpart of
+// the flag the Codex turn carries and for the same reason: `grok -p` has no
+// human to answer a tool-approval prompt. As with Codex, the exposure is bounded
+// by the PROMPT rather than by a sandbox, so every prompt this proof sends names
+// one tool call with fixed arguments and forbids shell commands outright.
+func (s *stage) grok(what, prompt string) harnessOutput {
+	s.t.Helper()
+	socket := filepath.Join(s.t.TempDir(), "no-such-leader.sock")
+	args := []string{"--leader-socket", socket, "--always-approve", "-p", prompt}
+	res := s.run(what+" [grok -p]", harnessTurnTimeout, "grok", args...)
+	// grok's headless mode prints the model's reply on stdout as plain text.
+	// The raw text is what the assertions read, for the same reason the Codex
+	// leg reads raw text: the claim is about what came back, and re-shaping it
+	// first is a chance to lose the thing being proven.
+	return harnessOutput{ok: res.ExitCode == 0, text: res.full, res: res}
+}
+
+// grokFreshProcess asserts the fresh-process contract's other half: that no
+// leader is running at all on this machine, so the proof cannot be quietly
+// passing because a resident process happened to hold the right config.
+//
+// A machine that DOES run a leader fails here loudly instead of proving nothing.
+func (s *stage) grokFreshProcess() bool {
+	s.t.Helper()
+	socket := filepath.Join(s.t.TempDir(), "no-such-leader.sock")
+	res := s.run("grok leader list (there must be no resident leader to defeat)", 2*time.Minute,
+		"grok", "--leader-socket", socket, "leader", "list")
+	out := strings.ToLower(res.full + res.Stderr)
+	return s.assert("grok runs no resident leader, and every proof invocation names a socket that does not exist",
+		res.ExitCode == 0 && strings.Contains(out, "no leader"),
+		"`grok leader list` exit %d: %s; proof socket: %s", res.ExitCode, firstLine(res.full+res.Stderr), socket)
+}
+
 // harnessCall asks a harness to make ONE named tool call with exactly these
 // arguments and to report what came back.
 //

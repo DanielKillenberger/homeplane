@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -164,6 +165,36 @@ func (s *stage) run(what string, timeout time.Duration, name string, args ...str
 func (s *stage) agent(what string, timeout time.Duration, args ...string) result {
 	s.t.Helper()
 	return s.run(what, timeout, agentBin(), args...)
+}
+
+// runWithEnv is run() with named environment overrides, and it exists for one
+// job: producing the detection states a machine reaches when a harness is NOT
+// the way this machine has it.
+//
+// `not_detected` and `detected_unsupported` are real states of the product's
+// own detection path, and the only two ways to reach them are to change the
+// machine or to change what the machine looks at. Changing the machine would
+// mean uninstalling or downgrading the operator's grok, which this proof
+// refuses to do; changing what detection looks at — PATH and GROK_HOME, both
+// first-class inputs the product documents — produces the same code path with
+// the same binary. The environment used is recorded in the step, so a reader
+// sees exactly which run was doctored and how.
+func (s *stage) runWithEnv(what string, env map[string]string, timeout time.Duration, name string, args ...string) result {
+	s.t.Helper()
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	overrides := make([]string, 0, len(keys))
+	for _, k := range keys {
+		overrides = append(overrides, k+"="+env[k])
+	}
+	// `env K=V… cmd` keeps the overrides visible in the recorded command line,
+	// which is the point: an assertion about a doctored environment has to show
+	// the doctoring.
+	full := append(append([]string{}, overrides...), append([]string{name}, args...)...)
+	return s.run(what, timeout, "env", full...)
 }
 
 // ssh runs an OPERATOR command on the server host. The operator surface is

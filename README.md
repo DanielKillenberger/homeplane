@@ -76,7 +76,7 @@ homeplane-agent vault detect -record                  # or: vault retrieve -path
 GNO_BIN=$(scripts/fetch-gno.sh --prefix ~/.homeplane/gno-pkg)
 homeplane-agent gno activate -apply -bin "$GNO_BIN"   # bind the vault, supervise, publish
 
-homeplane-agent configure-harnesses                   # Claude Code + Codex, one grant each
+homeplane-agent configure-harnesses                   # Claude Code + Codex + grok, one grant each
 homeplane-agent skills provision -verify              # link vault skills, prove in a fresh process
 homeplane-agent add-credentials google                # consent here, credential stays on the server
 ```
@@ -132,7 +132,7 @@ it did.
 | `internal/agent` | Agent state directory, control-plane client, enrolment, status |
 | `internal/agent/vault` | Vault detection, retrieval, supervised continuous sync |
 | `internal/agent/gno` | Retrieval engine: install, disposable machine-local index, supervision, endpoint descriptor |
-| `internal/agent/harness` | Merge-only harness configuration writer (Claude Code, Codex) |
+| `internal/agent/harness` | Merge-only harness configuration writer (Claude Code, Codex, grok) |
 | `internal/agent/skills` | Vault skill discovery, profiles, linking, fresh-process verification |
 | `internal/agent/credflow` | Machine half of the credential flow: loopback listener, browser, relay |
 | `internal/server` | Enrolment, grant lifecycle, audit, health handlers |
