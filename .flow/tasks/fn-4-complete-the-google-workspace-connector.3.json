@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-08-15T10:30:23.856613Z",
+  "depends_on": [
+    "fn-4-complete-the-google-workspace-connector.2"
+  ],
+  "id": "fn-4-complete-the-google-workspace-connector.3",
+  "priority": null,
+  "spec": "fn-4-complete-the-google-workspace-connector",
+  "spec_path": ".flow/tasks/fn-4-complete-the-google-workspace-connector.3.md",
+  "status": "todo",
+  "title": "Live proof, scope ratification, gate, docs",
+  "updated_at": "2026-08-15T10:30:23.856613Z"
+}

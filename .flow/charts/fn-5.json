@@ -1,0 +1,142 @@
+{
+  "briefings": [],
+  "claim_events": [],
+  "created": "2026-08-15T10:43:36.777267Z",
+  "decisions": [
+    {
+      "attendance": "attended",
+      "blocked_by": [],
+      "claimed_at": null,
+      "claimed_by": null,
+      "depends_on": [],
+      "id": "fn-5.D1",
+      "record_path": ".flow/charts/fn-5/1.md",
+      "status": "open",
+      "title": "Steward placement: Hermes stays answerer vs homeplane-server absorbs vs hybrid",
+      "type": "interview"
+    },
+    {
+      "attendance": "unattended",
+      "blocked_by": [],
+      "claimed_at": null,
+      "claimed_by": null,
+      "depends_on": [],
+      "id": "fn-5.D2",
+      "record_path": ".flow/charts/fn-5/2.md",
+      "status": "open",
+      "title": "Mine phone-home v2 DESIGN.md + logs for reusable decisions and failure root causes",
+      "type": "research"
+    },
+    {
+      "attendance": "unattended",
+      "blocked_by": [],
+      "claimed_at": null,
+      "claimed_by": null,
+      "depends_on": [],
+      "id": "fn-5.D3",
+      "record_path": ".flow/charts/fn-5/3.md",
+      "status": "open",
+      "title": "Palantir bus live state and retirement blast radius",
+      "type": "probe"
+    },
+    {
+      "attendance": "attended",
+      "blocked_by": [],
+      "claimed_at": null,
+      "claimed_by": null,
+      "depends_on": [],
+      "id": "fn-5.D4",
+      "record_path": ".flow/charts/fn-5/4.md",
+      "status": "open",
+      "title": "Escalation content audit policy",
+      "type": "interview"
+    },
+    {
+      "attendance": "unattended",
+      "blocked_by": [],
+      "claimed_at": null,
+      "claimed_by": null,
+      "depends_on": [],
+      "id": "fn-5.D5",
+      "record_path": ".flow/charts/fn-5/5.md",
+      "status": "open",
+      "title": "Blocking-ask mechanics through the edge",
+      "type": "research"
+    },
+    {
+      "attendance": "attended",
+      "blocked_by": [],
+      "claimed_at": null,
+      "claimed_by": null,
+      "depends_on": [],
+      "id": "fn-5.D6",
+      "record_path": ".flow/charts/fn-5/6.md",
+      "status": "open",
+      "title": "Delivery surfaces and presence routing to Daniel",
+      "type": "interview"
+    },
+    {
+      "attendance": "unattended",
+      "blocked_by": [],
+      "claimed_at": null,
+      "claimed_by": null,
+      "depends_on": [],
+      "id": "fn-5.D7",
+      "record_path": ".flow/charts/fn-5/7.md",
+      "status": "open",
+      "title": "Clawniel enrolled as a Homeplane machine (steward identity mechanics)",
+      "type": "probe"
+    },
+    {
+      "attendance": "attended",
+      "blocked_by": [],
+      "claimed_at": null,
+      "claimed_by": null,
+      "depends_on": [],
+      "id": "fn-5.D8",
+      "record_path": ".flow/charts/fn-5/8.md",
+      "status": "open",
+      "title": "Capability taxonomy ratification",
+      "type": "interview"
+    }
+  ],
+  "id": "fn-5",
+  "outcome": "Phone-home is re-founded as Homeplane's escalation plane: a server-side escalation service reachable through the existing edge as a grantable MCP capability with tiered authority (ordinary harnesses ask the steward only; the steward alone holds ask-daniel interrupt authority), audited under a ratified content policy, replacing the palantir-era bespoke client path - captured as one or more specs ready for planning.",
+  "parked_questions": [
+    {
+      "body": "Build-handover trigger design (take over fn-N) rides escalation - separate spec atop this chart's outcome",
+      "created": "2026-08-15T10:43:36.777011Z",
+      "key": "dfc0087214bb93c6"
+    },
+    {
+      "body": "Cutover sequencing from palantir bus (migrate vs bridge vs hard retire)",
+      "created": "2026-08-15T10:43:36.777034Z",
+      "key": "36bf8b95962715f1"
+    },
+    {
+      "body": "Retention/deletion policy details for escalation records",
+      "created": "2026-08-15T10:43:36.777044Z",
+      "key": "83b133a4fd0765ef"
+    },
+    {
+      "body": "Whether notify (fire-and-forget) and ask (blocking) are one capability or two",
+      "created": "2026-08-15T10:43:36.777055Z",
+      "key": "467609640a171eb1"
+    }
+  ],
+  "produced_specs": [],
+  "status": "open",
+  "title": "Phone-home as Homeplane's escalation plane",
+  "tracker": {
+    "depRelations": [],
+    "id": null,
+    "identifier": null,
+    "linkState": "unlinked",
+    "projection": {
+      "completed_steps": [],
+      "event_markers": [],
+      "revision": null
+    },
+    "url": null
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "answer": null,
+  "assets": [],
+  "attendance": "unattended",
+  "blocked_by": [],
+  "chart": "fn-5",
+  "claim_note": null,
+  "claimed_at": null,
+  "claimed_by": null,
+  "created": "2026-08-15T10:43:36.777375Z",
+  "depends_on": [],
+  "id": "fn-5.D7",
+  "n": 7,
+  "question": "Does enrolling the server itself as a machine work (tsnet loopback, headless), and is the steward a harness-on-enrolled-machine with a special grant or a first-class server role?",
+  "record_path": ".flow/charts/fn-5/7.md",
+  "status": "open",
+  "superseded_by": null,
+  "supersedes": [],
+  "title": "Clawniel enrolled as a Homeplane machine (steward identity mechanics)",
+  "tracker": {
+    "depRelations": [],
+    "id": null,
+    "identifier": null,
+    "linkState": "unlinked",
+    "url": null
+  },
+  "transition_notes": [],
+  "type": "probe",
+  "updated_at": "2026-08-15T10:43:36.777375Z"
+}

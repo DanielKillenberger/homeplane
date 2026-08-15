@@ -1,0 +1,180 @@
+{
+  "branch_name": "fn-4-complete-the-google-workspace-connector",
+  "completion_review_status": "unknown",
+  "completion_reviewed_at": null,
+  "created_at": "2026-08-15T10:25:38.380713Z",
+  "default_impl": null,
+  "default_review": null,
+  "default_sync": null,
+  "depends_on_epics": [
+    "fn-3-add-grok-as-a-third-harness"
+  ],
+  "id": "fn-4-complete-the-google-workspace-connector",
+  "impl_review_rounds": {},
+  "next_task": 1,
+  "plan_review_rounds": 0,
+  "plan_review_status": "ship",
+  "plan_reviewed_at": "2026-08-15T11:12:23.051073Z",
+  "ready": true,
+  "review_attempts": [
+    {
+      "artifact_sha256": "9da8a86951466dca70bcc9088bec6c243c9769356c76a86f069e14e866c29954",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-44335034a8a24a048f296d4bbe5664dd",
+            "classification": "introduced",
+            "findingId": "finding-44335034a8a24a048f296d4bbe5664dd",
+            "firstSeenThisRound": true,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-c941d1e98d591ead39228b2bd452b269",
+            "classification": "introduced",
+            "findingId": "finding-c941d1e98d591ead39228b2bd452b269",
+            "firstSeenThisRound": true,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-55e21b76145a48308ccc6fd815fbb7c5",
+            "classification": "introduced",
+            "findingId": "finding-55e21b76145a48308ccc6fd815fbb7c5",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-e92b212a2ecc7480468ea53a6bb77773",
+            "classification": "introduced",
+            "findingId": "finding-e92b212a2ecc7480468ea53a6bb77773",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "0a2b47a15ca139c59dac06d5e2a60c475831daa7",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "7c4ff0f069f5032ed0a350caf5498f498c8b8cf5734af7520e6bf89839798c73",
+      "reservation_id": "ba07f2c5c8c643e5ae5062f64354c9fa",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-15T10:42:15.652806Z",
+      "verdict": "MAJOR_RETHINK"
+    },
+    {
+      "artifact_sha256": "aeaaa3c7eb0b115f99c9906b8546ea14a19ac33fb71370abdadb1179682557a3",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "0a2b47a15ca139c59dac06d5e2a60c475831daa7",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "411c2dee4da3640c28a364f6db0defd147221d6ce49b59d6ce9aac1754420d9f",
+      "reservation_id": "73595ce26b7d4d2787f6852a2ff283cb",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-15T10:55:27.213797Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "2d2ddb55f989e4520e45a510615848ff35f559f5a8c3bb715af2c1cf67dcd2a6",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "0a2b47a15ca139c59dac06d5e2a60c475831daa7",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "8da55afaa64cb89d233d80dabb9e4eac7826e631ea87be226f619934f3ca4be8",
+      "reservation_id": "c8eec163efec44da99e1a2ba5b33dbc9",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-15T10:59:33.520872Z",
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "5cf7e60189f3c441ff057a700d2429822a4c36e4400ded986f6d18fde90b3df1",
+      "backend": "codex",
+      "counter_kind": "plan",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "0a2b47a15ca139c59dac06d5e2a60c475831daa7",
+      "kind": "plan",
+      "outcome": "verdict",
+      "output_sha256": "7790c55eb3dafdc23822b01ca490685c9fd8d60a5edadcdba041deca47c4f07a",
+      "reservation_id": "5de0f759d4c5426cb8e5102ec53e09da",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-08-15T11:12:23.048928Z",
+      "verdict": "SHIP"
+    }
+  ],
+  "review_hash_epoch": {
+    "plan": 1,
+    "plan#completion": 0
+  },
+  "review_pending_rounds": {},
+  "review_reservations": {},
+  "review_transport_failures": {
+    "plan": 0
+  },
+  "spec_path": ".flow/specs/fn-4-complete-the-google-workspace-connector.md",
+  "status": "open",
+  "title": "Complete the Google Workspace connector surface",
+  "tracker": {
+    "baseHashFlow": null,
+    "baseHashTracker": null,
+    "depRelations": [],
+    "id": null,
+    "identifier": null,
+    "lastSyncedAt": null,
+    "mergeBaseFlow": null,
+    "mergeBaseTracker": null,
+    "url": null
+  },
+  "updated_at": "2026-08-15T11:12:46.169570Z"
+}

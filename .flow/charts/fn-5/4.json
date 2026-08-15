@@ -1,0 +1,30 @@
+{
+  "answer": null,
+  "assets": [],
+  "attendance": "attended",
+  "blocked_by": [],
+  "chart": "fn-5",
+  "claim_note": null,
+  "claimed_at": null,
+  "claimed_by": null,
+  "created": "2026-08-15T10:43:36.777345Z",
+  "depends_on": [],
+  "id": "fn-5.D4",
+  "n": 4,
+  "question": "Are question/answer contents audit payload (metadata-only rows) or stored transcripts, and what retention applies? D18-style policy with Daniel's name on it.",
+  "record_path": ".flow/charts/fn-5/4.md",
+  "status": "open",
+  "superseded_by": null,
+  "supersedes": [],
+  "title": "Escalation content audit policy",
+  "tracker": {
+    "depRelations": [],
+    "id": null,
+    "identifier": null,
+    "linkState": "unlinked",
+    "url": null
+  },
+  "transition_notes": [],
+  "type": "interview",
+  "updated_at": "2026-08-15T10:43:36.777345Z"
+}

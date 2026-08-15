@@ -1,0 +1,30 @@
+{
+  "answer": null,
+  "assets": [],
+  "attendance": "attended",
+  "blocked_by": [],
+  "chart": "fn-5",
+  "claim_note": null,
+  "claimed_at": null,
+  "claimed_by": null,
+  "created": "2026-08-15T10:43:36.777366Z",
+  "depends_on": [],
+  "id": "fn-5.D6",
+  "n": 6,
+  "question": "How does ask-daniel actually reach Daniel (push, terminal, Hermes-composed message), and how much presence-routing (enrolled-machine heartbeats) is wanted in v1?",
+  "record_path": ".flow/charts/fn-5/6.md",
+  "status": "open",
+  "superseded_by": null,
+  "supersedes": [],
+  "title": "Delivery surfaces and presence routing to Daniel",
+  "tracker": {
+    "depRelations": [],
+    "id": null,
+    "identifier": null,
+    "linkState": "unlinked",
+    "url": null
+  },
+  "transition_notes": [],
+  "type": "interview",
+  "updated_at": "2026-08-15T10:43:36.777366Z"
+}
