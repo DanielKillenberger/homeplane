@@ -4,10 +4,10 @@
   "setup": {
     "block_hashes": {
       "AGENTS.md": {
-        "FLOW-NEXT": "6ab083759deb8e68da8e7ceab2fa44d5a3e4f97e4e2e5fe8879e07a1b57b4884"
+        "FLOW-NEXT": "d707dbd3ecf5fb180447c27df01862ad07212489e90d0ee66de778e76d434ee4"
       },
       "CLAUDE.md": {
-        "FLOW-NEXT": "6ab083759deb8e68da8e7ceab2fa44d5a3e4f97e4e2e5fe8879e07a1b57b4884"
+        "FLOW-NEXT": "d707dbd3ecf5fb180447c27df01862ad07212489e90d0ee66de778e76d434ee4"
       }
     }
   },
