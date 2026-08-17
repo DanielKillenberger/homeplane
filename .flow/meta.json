@@ -3,11 +3,14 @@
   "schema_version": 3,
   "setup": {
     "block_hashes": {
-      "AGENTS.md": "e98ec53152b438b8424f6f7e5f2d6cd9b8283239524a2df2c71d6c1e649ee91c",
-      "CLAUDE.md": "e98ec53152b438b8424f6f7e5f2d6cd9b8283239524a2df2c71d6c1e649ee91c"
+      "AGENTS.md": {
+        "FLOW-NEXT": "6ab083759deb8e68da8e7ceab2fa44d5a3e4f97e4e2e5fe8879e07a1b57b4884"
+      },
+      "CLAUDE.md": {
+        "FLOW-NEXT": "6ab083759deb8e68da8e7ceab2fa44d5a3e4f97e4e2e5fe8879e07a1b57b4884"
+      }
     }
   },
-  "setup_date": "2026-08-13T13:11:12Z",
-  "setup_mode": "copy",
-  "setup_version": "3.15.0"
+  "setup_date": "2026-08-17",
+  "setup_version": "4.0.0"
 }
