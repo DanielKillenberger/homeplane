@@ -1,25 +1,25 @@
 <!-- BEGIN FLOW-NEXT -->
 ## Flow-Next
 
-This project uses Flow-Next. Use `.flow/bin/flowctl` for ALL task tracking. Do NOT create markdown TODOs or use TodoWrite. Cold session: `.flow/bin/flowctl brief` first — one bounded call (specs, ready tasks, memory); go deeper with `show`/`cat`/`anchor <task-id>`.
+This project uses Flow-Next. Use `flowctl` for ALL task tracking. Do NOT create markdown TODOs or use TodoWrite. Cold session: `flowctl brief` first — one bounded call (specs, ready tasks, memory); go deeper with `show`/`cat`/`anchor <task-id>`.
 
 ```bash
-.flow/bin/flowctl list                # specs + tasks
-.flow/bin/flowctl show fn-N.M         # view task
-.flow/bin/flowctl start fn-N.M        # claim -> implement -> commit
-.flow/bin/flowctl done fn-N.M --summary-file s.md --evidence-json e.json
+flowctl list                # specs + tasks
+flowctl show fn-N.M         # view task
+flowctl start fn-N.M        # claim -> implement -> commit
+flowctl done fn-N.M --summary-file s.md --evidence-json e.json
 # e.json: {"commits": ["<sha>"], "tests": ["<command>"], "prs": []}
 ```
 
 **Creating a spec:** write it directly - do NOT use `/flow-next:plan` (task breakdown only). Scaffold cascade (first match wins): `SPEC.md` -> `spec.md` -> `.flow/templates/spec.md` -> bundled template.
 
 ```bash
-.flow/bin/flowctl spec create --title "Short title" --plan-file plan.md --json
+flowctl spec create --title "Short title" --plan-file plan.md --json
 ```
 
 Then `/flow-next:plan <spec-id>`.
 
-**More:** `.flow/bin/flowctl --help` or `.flow/usage.md`
+**More:** `flowctl --help` or `flowctl usage`
 <!-- END FLOW-NEXT -->
 
 <!-- flow-next:model-routing:start -->
@@ -52,7 +52,7 @@ How to apply — defaults, not limits. Unless prompted otherwise, route work acr
 
 This project's pipeline: fable-5 (session) authors specs — capture, interview, plan — then composer-2.5 implements via the grok CLI bridge, then gpt-5.6-sol reviews plans and implementations via `review.backend codex:gpt-5.6-sol:xhigh` (cross-family vs both the planner and the implementer).
 
-flow-next wiring — roles with a MENU, not fixed pairings: pick per task. Claude tiers run natively (spawn subagents with the model parameter); other families ride the headless bridges — recipes: run `flowctl usage` § Orchestration & model steering (copy-mode repos also have it on disk at `.flow/usage.md`). Probe-marked lines are live only if their CLI is installed:
+flow-next wiring — roles with a MENU, not fixed pairings: pick per task. Claude tiers run natively (spawn subagents with the model parameter); other families ride the headless bridges — recipes: run `flowctl usage` § Orchestration & model steering (copy-mode repos also have it on disk at `flowctl usage`). Probe-marked lines are live only if their CLI is installed:
 - Implementation, native: a worker/subagent on opus-5 (quality) or sonnet-5 (speed) via the model parameter.
 Implementation via gpt-5.6-terra @ medium (the packaged delegate default): `/flow-next:work <id> delegate:codex` (consent-gated, host keeps git/review) or a direct `codex exec` bridge. Eval-matched gpt-5.6-sol correctness at ~2/3 wall-clock on strong specs; escalate work.delegateModel to gpt-5.6-sol for gnarly tasks.
 <!-- not detected on this machine — install cursor-agent, then uncomment: Implementation via composer-2.5: the `cursor-agent` bridge (`--force` to apply); host reviews + commits. -->

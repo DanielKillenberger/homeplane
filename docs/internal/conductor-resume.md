@@ -1,6 +1,6 @@
 # Conductor resume note — written 2026-08-14 before session restart
 
-Cold-start: `.flow/bin/flowctl brief`, then read this.
+Cold-start: `flowctl brief`, then read this.
 
 ## State
 - Spec fn-1-homeplane-walking-skeleton-install: 12/14 done (.1 .2 .3 .4 .5 .6 .8 .9 .11 .12 .15 .16). Plan review: SHIP. All decisions D1–D18 resolved (see spec Decision Context).
